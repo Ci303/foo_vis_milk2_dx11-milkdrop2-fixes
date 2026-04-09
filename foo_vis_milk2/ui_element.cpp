@@ -574,7 +574,7 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
     menu.AppendMenu(MF_SEPARATOR);
     menu.AppendMenu(MF_STRING, IDM_NEXT_PRESET, TEXT("Next Preset"));
     menu.AppendMenu(MF_STRING, IDM_PREVIOUS_PRESET, TEXT("Previous Preset"));
-    menu.AppendMenu(MF_STRING, IDM_SHUFFLE_PRESET, TEXT("Random Preset"));
+    menu.AppendMenu(MF_STRING, IDM_SHUFFLE_PRESET, TEXT("Shuffle Preset"));
     menu.AppendMenu(MF_STRING | (IsPresetLock() ? MF_CHECKED : 0), IDM_LOCK_PRESET, TEXT("Lock Preset"));
     menu.AppendMenu(MF_SEPARATOR);
     menu.AppendMenu(MF_STRING | (s_config.settings.m_bEnableDownmix ? MF_CHECKED : 0), IDM_ENABLE_DOWNMIX, TEXT("Downmix Channels"));
@@ -583,10 +583,10 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
     //menu.AppendMenu(MF_STRING | (g_plugin.m_show_presets ? MF_CHECKED : 0), IDM_SHOW_PRESETS, TEXT("Show Presets"));
     //menu.AppendMenu(MF_STRING | (g_plugin.m_show_menu ? MF_CHECKED : 0), IDM_SHOW_MENU, TEXT("Show Menu"));
     menu.AppendMenu(MF_STRING | (s_config.settings.m_bShowAlbum ? MF_CHECKED : 0), IDM_SHOW_ALBUM, TEXT("Show Album Art"));
-    menu.AppendMenu(MF_STRING, IDM_SHOW_TITLE, TEXT("Launch Title"));
+    menu.AppendMenu(MF_STRING, IDM_SHOW_TITLE, TEXT("Show Track Title"));
     menu.AppendMenu(MF_SEPARATOR);
-    menu.AppendMenu(MF_STRING | (g_plugin.m_show_help ? MF_CHECKED : 0), IDM_SHOW_HELP, TEXT("Show Help"));
-    menu.AppendMenu(MF_STRING, IDM_SHOW_PREFS, TEXT("Launch Preferences Page"));
+    menu.AppendMenu(MF_STRING | (g_plugin.m_show_help ? MF_CHECKED : 0), IDM_SHOW_HELP, TEXT("Show Help Overlay"));
+    menu.AppendMenu(MF_STRING, IDM_SHOW_PREFS, TEXT("Open Preferences"));
     menu.AppendMenu(MF_SEPARATOR);
     menu.AppendMenu(MF_STRING | (s_fullscreen ? MF_CHECKED : 0), IDM_TOGGLE_FULLSCREEN, TEXT("Fullscreen"));
 

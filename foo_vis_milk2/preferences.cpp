@@ -39,6 +39,25 @@ constexpr int g_font_combo_ids[] = {
     IDC_FONT1, IDC_FONT2, IDC_FONT3, IDC_FONT4, IDC_FONT5, IDC_FONT6, IDC_FONT7, IDC_FONT8, IDC_FONT9,
 };
 
+constexpr int g_hidden_pref_controls[] = {
+    IDC_CB_SCROLLON4,
+    IDC_CB_AUTOGAMMA2,
+    IDC_SHADERS_CAPTION2,
+    IDC_SHADERS,
+    IDC_TEXSIZECOMBO_CAPTION,
+    IDC_TEXSIZECOMBO,
+};
+
+constexpr int g_gamma16_controls[] = {
+    IDC_BRIGHT_SLIDER_BOX,
+    IDC_BRIGHT_SLIDER2,
+    IDC_GAMMA16_0,
+    IDC_GAMMA16_1,
+    IDC_GAMMA16_2,
+    IDC_GAMMA16_3,
+    IDC_GAMMA16_4,
+};
+
 template <typename T, size_t N>
 constexpr size_t countof(const T (&)[N]) noexcept
 {
@@ -54,6 +73,11 @@ void offset_dialog_control(HWND dialog, int control_id, int dx, int dy);
 void hide_font_dialog_row(HWND dialog, const font_dialog_row_t& row);
 void layout_font_dialog(HWND dialog);
 RECT control_rect_in_dialog(HWND dialog, HWND control);
+void set_dialog_control_visibility(HWND dialog, int control_id, bool visible);
+template <size_t N>
+void set_dialog_controls_visibility(HWND dialog, const int (&control_ids)[N], bool visible) noexcept;
+void hide_unsupported_preferences_controls(HWND dialog);
+void update_gamma16_visibility(HWND dialog, bool autoGamma);
 // clang-format off
 static cfg_bool cfg_bPresetLockOnAtStartup(guid_cfg_bPresetLockOnAtStartup, default_bPresetLockOnAtStartup);
 static cfg_bool cfg_bPreventScollLockHandling(guid_cfg_bPreventScollLockHandling, default_bPreventScollLockHandling);
@@ -198,6 +222,32 @@ RECT control_rect_in_dialog(HWND dialog, HWND control)
     ::MapWindowPoints(HWND_DESKTOP, dialog, reinterpret_cast<LPPOINT>(&rect), 2);
     return rect;
 }
+
+void set_dialog_control_visibility(HWND dialog, int control_id, bool visible)
+{
+    if (HWND control = ::GetDlgItem(dialog, control_id); control)
+        ::ShowWindow(control, visible ? SW_SHOW : SW_HIDE);
+}
+
+template <size_t N>
+void set_dialog_controls_visibility(HWND dialog, const int (&control_ids)[N], bool visible) noexcept
+{
+    for (const int control_id : control_ids)
+    {
+        set_dialog_control_visibility(dialog, control_id, visible);
+    }
+}
+
+void hide_unsupported_preferences_controls(HWND dialog)
+{
+    set_dialog_controls_visibility(dialog, g_hidden_pref_controls, false);
+}
+
+void update_gamma16_visibility(HWND dialog, bool autoGamma)
+{
+    constexpr bool showLegacyGammaControls = false;
+    set_dialog_controls_visibility(dialog, g_gamma16_controls, showLegacyGammaControls && !autoGamma);
+}
 } // namespace
 
 #pragma region Preferences Page
@@ -330,6 +380,7 @@ BOOL milk2_preferences_page::OnInitDialog(CWindow, LPARAM)
 
     CheckDlgButton(IDC_CB_AUTOGAMMA2, static_cast<UINT>(cfg_bAutoGamma));
     AutoHideGamma16();
+    hide_unsupported_preferences_controls(m_hWnd);
 
     // Image cache maximum bytes.
     ctrl = GetDlgItem(IDC_MAX_BYTES2);
@@ -503,6 +554,8 @@ BOOL milk2_preferences_page::OnInitDialog(CWindow, LPARAM)
         m_tooltip_texts.emplace_back(buf);
         auto* tipText = const_cast<LPWSTR>(m_tooltip_texts.back().c_str());
         HWND tipWnd = GetDlgItem(tip.first);
+        if (!tipWnd || !::IsWindowVisible(tipWnd))
+            continue;
         m_tooltips.AddTool(CToolInfo(TTF_IDISHWND | TTF_SUBCLASS, m_hWnd, (UINT_PTR)tipWnd, nullptr, tipText));
 
         // Disabled controls don't receive mouse tracking, so add a dialog-rect tool too.
@@ -619,14 +672,7 @@ void milk2_preferences_page::OnHScroll(UINT nSBCode, UINT nPos, CScrollBar pScro
 
 void milk2_preferences_page::AutoHideGamma16()
 {
-    bool bAutoGamma = static_cast<bool>(IsDlgButtonChecked(IDC_CB_AUTOGAMMA2));
-    ::ShowWindow(GetDlgItem(IDC_BRIGHT_SLIDER_BOX), static_cast<UINT>(!bAutoGamma));
-    ::ShowWindow(GetDlgItem(IDC_BRIGHT_SLIDER2), static_cast<UINT>(!bAutoGamma));
-    ::ShowWindow(GetDlgItem(IDC_GAMMA16_0), static_cast<UINT>(!bAutoGamma));
-    ::ShowWindow(GetDlgItem(IDC_GAMMA16_1), static_cast<UINT>(!bAutoGamma));
-    ::ShowWindow(GetDlgItem(IDC_GAMMA16_2), static_cast<UINT>(!bAutoGamma));
-    ::ShowWindow(GetDlgItem(IDC_GAMMA16_3), static_cast<UINT>(!bAutoGamma));
-    ::ShowWindow(GetDlgItem(IDC_GAMMA16_4), static_cast<UINT>(!bAutoGamma));
+    update_gamma16_visibility(m_hWnd, static_cast<bool>(IsDlgButtonChecked(IDC_CB_AUTOGAMMA2)));
 }
 
 uint32_t milk2_preferences_page::get_state()
