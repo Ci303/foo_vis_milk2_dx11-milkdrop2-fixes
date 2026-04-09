@@ -42,6 +42,7 @@ milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_ins
     m_in_sizemove = false;
     m_in_suspend = false;
     m_minimized = false;
+    m_focus_hotkeys_registered = false;
 #if defined(TIMER_TP)
     m_tpTimer = nullptr;
 #elif defined(TIMER_32)
@@ -200,6 +201,7 @@ void milk2_ui_element::OnClose()
 void milk2_ui_element::OnDestroy()
 {
     MILK2_CONSOLE_LOG("OnDestroy ", GetWnd())
+    UnregisterFocusHotkeys();
 #if defined(TIMER_TP)
     StopTimer();
     EnterCriticalSection(&s_cs);
@@ -260,6 +262,8 @@ void milk2_ui_element::OnTimer(UINT_PTR nIDEvent)
 
 void milk2_ui_element::OnPaint(CDCHandle dc)
 {
+    UNREFERENCED_PARAMETER(dc);
+
     MILK2_CONSOLE_LOG_LIMIT("OnPaint ", GetWnd())
     if (m_in_sizemove && m_milk2) // foobar2000 does not enter/exit size/move
     {
@@ -298,6 +302,8 @@ void milk2_ui_element::OnPaint(CDCHandle dc)
 
 BOOL milk2_ui_element::OnEraseBkgnd(CDCHandle dc)
 {
+    UNREFERENCED_PARAMETER(dc);
+
     MILK2_CONSOLE_LOG_LIMIT("OnEraseBkgnd ", GetWnd())
     ++s_count;
 
@@ -716,7 +722,7 @@ LRESULT milk2_ui_element::OnMilk2Message(UINT uMsg, WPARAM wParam, LPARAM lParam
     else if (lParam == IPC_GETLISTPOS)
     {
         //MILK2_CONSOLE_LOG("IPC_GETLISTPOS")
-        if (m_playback_control->is_playing())
+        if (m_playback_control->is_playing() || m_playback_control->is_paused())
         {
             size_t playing_index = NULL, playing_playlist = NULL;
             bool valid = api->get_playing_item_location(&playing_playlist, &playing_index);
@@ -725,30 +731,69 @@ LRESULT milk2_ui_element::OnMilk2Message(UINT uMsg, WPARAM wParam, LPARAM lParam
         }
         return -1;
     }
-    else if (lParam == IPC_GETPLAYLISTTITLEW || lParam == IPC_GET_PLAYING_TITLE)
+    else if (lParam == IPC_GETPLAYLISTTITLEW)
     {
-        //MILK2_CONSOLE_LOG(IPC_GETPLAYLISTTITLEW ? "IPC_GETPLAYLISTTITLEW" : "IPC_GET_PLAYING_TITLE")
-        titleformat_object::ptr title_format;
-        if (lParam == IPC_GETPLAYLISTTITLEW && m_script.is_empty())
+        //MILK2_CONSOLE_LOG("IPC_GETPLAYLISTTITLEW")
+        if (m_script.is_empty())
         {
             pfc::string8 pattern = pfc::utf8FromWide(s_config.settings.m_szTitleFormat);
             static_api_ptr_t<titleformat_compiler>()->compile_safe_ex(m_script, pattern);
         }
-        if (lParam == IPC_GET_PLAYING_TITLE && m_title.is_empty())
+
+        pfc::string_formatter state;
+        metadb_handle_list list;
+        api->activeplaylist_get_all_items(list);
+
+        const size_t index = static_cast<size_t>(wParam);
+        const bool use_playing_item = wParam == static_cast<WPARAM>(-1) || index >= list.size();
+
+        if (list.size() == 0)
+        {
+            state = ""; // no playlist
+        }
+        else if (!use_playing_item && list.get_item(index)->format_title(NULL, state, m_script, NULL))
+        {
+            // Succeeded already.
+        }
+        else if (m_playback_control->playback_format_title(NULL, state, m_script, NULL, playback_control::display_level_all))
+        {
+            // Fall back to the active playback item when the active playlist item is unavailable.
+        }
+        else if (m_playback_control->is_playing() || m_playback_control->is_paused())
+        {
+            state = "Opening...";
+        }
+        else
+        {
+            state = "Stopped.";
+        }
+
+        m_szBuffer = pfc::wideFromUTF8(state);
+        return reinterpret_cast<LRESULT>(m_szBuffer.c_str());
+    }
+    else if (lParam == IPC_GET_PLAYING_TITLE)
+    {
+        //MILK2_CONSOLE_LOG("IPC_GET_PLAYING_TITLE")
+        if (m_title.is_empty())
         {
             pfc::string8 pattern = default_szTitleFormat;
             static_api_ptr_t<titleformat_compiler>()->compile_safe_ex(m_title, pattern);
         }
+
         pfc::string_formatter state;
-        metadb_handle_list list;
-        api->activeplaylist_get_all_items(list);
-        if (list.size() == 0)
-            state = ""; // no playlist
-        else if (wParam == -1 || !(list.get_item(static_cast<size_t>(wParam)))->format_title(NULL, state, IPC_GETPLAYLISTTITLEW ? m_script : m_title, NULL))
-            if (m_playback_control->is_playing())
-                state = "Opening...";
-            else
-                state = "Stopped.";
+        if (m_playback_control->playback_format_title(NULL, state, m_title, NULL, playback_control::display_level_all))
+        {
+            // Succeeded already.
+        }
+        else if (m_playback_control->is_playing() || m_playback_control->is_paused())
+        {
+            state = "Opening...";
+        }
+        else
+        {
+            state = "Stopped.";
+        }
+
         m_szBuffer = pfc::wideFromUTF8(state);
         return reinterpret_cast<LRESULT>(m_szBuffer.c_str());
     }
@@ -757,17 +802,17 @@ LRESULT milk2_ui_element::OnMilk2Message(UINT uMsg, WPARAM wParam, LPARAM lParam
         //MILK2_CONSOLE_LOG("IPC_GETOUTPUTTIME")
         if (wParam == 0)
         {
-            if (m_playback_control->is_playing())
+            if (m_playback_control->is_playing() || m_playback_control->is_paused())
                 return static_cast<LRESULT>(m_playback_control->playback_get_position() * 1000);
         }
         else if (wParam == 1)
         {
-            if (m_playback_control->is_playing())
+            if (m_playback_control->is_playing() || m_playback_control->is_paused())
                 return static_cast<LRESULT>(m_playback_control->playback_get_length());
         }
         else if (wParam == 2)
         {
-            if (m_playback_control->is_playing())
+            if (m_playback_control->is_playing() || m_playback_control->is_paused())
                 return static_cast<LRESULT>(m_playback_control->playback_get_length() * 1000);
         }
         return -1;

@@ -921,10 +921,12 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
         switch (nChar)
         {
             case VK_F2:
-                ToggleSongTitle();
+                if (!m_focus_hotkeys_registered)
+                    ToggleSongTitle();
                 return;
             case VK_F3:
-                ToggleSongLength();
+                if (!m_focus_hotkeys_registered)
+                    ToggleSongLength();
                 return;
             case VK_F4:
                 TogglePresetInfo();
@@ -1840,11 +1842,37 @@ UINT milk2_ui_element::OnGetDlgCode(LPMSG lpMsg)
     return DLGC_WANTALLKEYS | DLGC_WANTCHARS | DLGC_WANTARROWS;
 }
 
+void milk2_ui_element::RegisterFocusHotkeys() noexcept
+{
+    if (m_focus_hotkeys_registered || !::IsWindow(get_wnd()))
+        return;
+
+    if (::RegisterHotKey(get_wnd(), IDHK_SHOW_TITLE, 0, VK_F2) && ::RegisterHotKey(get_wnd(), IDHK_SHOW_TIME, 0, VK_F3))
+    {
+        m_focus_hotkeys_registered = true;
+        return;
+    }
+
+    ::UnregisterHotKey(get_wnd(), IDHK_SHOW_TITLE);
+    ::UnregisterHotKey(get_wnd(), IDHK_SHOW_TIME);
+}
+
+void milk2_ui_element::UnregisterFocusHotkeys() noexcept
+{
+    if (!m_focus_hotkeys_registered || !::IsWindow(get_wnd()))
+        return;
+
+    ::UnregisterHotKey(get_wnd(), IDHK_SHOW_TITLE);
+    ::UnregisterHotKey(get_wnd(), IDHK_SHOW_TIME);
+    m_focus_hotkeys_registered = false;
+}
+
 void milk2_ui_element::OnSetFocus(CWindow wndOld)
 {
     UNREFERENCED_PARAMETER(wndOld);
 
     MILK2_CONSOLE_LOG("OnSetFocus ", GetWnd())
+    RegisterFocusHotkeys();
     //g_plugin.m_bOrigScrollLockState = GetKeyState(VK_SCROLL) & 1;
     //SetScrollLock(g_plugin.m_bMilkdropScrollLockState);
 }
@@ -1854,8 +1882,29 @@ void milk2_ui_element::OnKillFocus(CWindow wndFocus)
     UNREFERENCED_PARAMETER(wndFocus);
 
     MILK2_CONSOLE_LOG("OnKillFocus ", GetWnd())
+    UnregisterFocusHotkeys();
     //g_plugin.m_bMilkdropScrollLockState = GetKeyState(VK_SCROLL) & 1;
     //SetScrollLock(g_plugin.m_bOrigScrollLockState);
+}
+
+LRESULT milk2_ui_element::OnHotKey(UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    UNREFERENCED_PARAMETER(lParam);
+
+    if (uMsg != WM_HOTKEY)
+        return 0;
+
+    switch (wParam)
+    {
+        case IDHK_SHOW_TITLE:
+            ToggleSongTitle();
+            return 0;
+        case IDHK_SHOW_TIME:
+            ToggleSongLength();
+            return 0;
+        default:
+            return 0;
+    }
 }
 
 void milk2_ui_element::OnLButtonDown(UINT nFlags, CPoint point)

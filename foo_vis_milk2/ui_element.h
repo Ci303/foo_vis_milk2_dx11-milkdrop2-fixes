@@ -86,6 +86,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
         MSG_WM_CONTEXTMENU(OnContextMenu)
         MSG_WM_LBUTTONDBLCLK(OnLButtonDblClk)
         MSG_WM_POWERBROADCAST(OnPowerBroadcast)
+        MESSAGE_HANDLER_EX(WM_HOTKEY, OnHotKey)
         MESSAGE_HANDLER_EX(WM_IME_NOTIFY, OnImeNotify)
         MESSAGE_HANDLER_EX(WM_QUIT, OnQuit)
         MESSAGE_HANDLER_EX(WM_MILK2, OnMilk2Message)
@@ -141,6 +142,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     void OnLButtonDown(UINT nFlags, CPoint point);
     void OnContextMenu(CWindow wnd, CPoint point);
     void OnLButtonDblClk(UINT nFlags, CPoint point);
+    LRESULT OnHotKey(UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT OnImeNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT OnQuit(UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT OnMilk2Message(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -154,6 +156,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     bool m_in_sizemove;
     bool m_in_suspend;
     bool m_minimized;
+    bool m_focus_hotkeys_registered;
 
     DWORD m_refresh_interval;
     double m_last_time;
@@ -185,6 +188,12 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
         IDM_QUIT = ID_QUIT
     };
 
+    enum milk2_ui_hotkey_id
+    {
+        IDHK_SHOW_TITLE = 0x2000,
+        IDHK_SHOW_TIME = 0x2001
+    };
+
     // Initialization and management
     bool Initialize(HWND window, int width, int height);
     void ReadConfig();
@@ -214,6 +223,8 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     void OnDeactivated();
     void OnSuspending();
     void OnResuming();
+    void RegisterFocusHotkeys() noexcept;
+    void UnregisterFocusHotkeys() noexcept;
 
     // Properties
     void GetDefaultSize(int& width, int& height) const noexcept;
@@ -299,7 +310,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     void SetSelectionSingle(size_t idx, bool toggle, bool focus, bool single_only);
 
     // Artwork callback methods
-    void on_album_art(album_art_data::ptr aad) { /*MILK2_CONSOLE_LOG("% AlbumArt"); if (wcsnlen_s(s_config.settings.m_szArtworkFormat, 256) == 0 && aad.is_valid()) { ExtractRasterData(static_cast<const uint8_t*>(aad->data()), aad->size()); }*/ }
+    void on_album_art(album_art_data::ptr aad) { UNREFERENCED_PARAMETER(aad); /*MILK2_CONSOLE_LOG("% AlbumArt"); if (wcsnlen_s(s_config.settings.m_szArtworkFormat, 256) == 0 && aad.is_valid()) { ExtractRasterData(static_cast<const uint8_t*>(aad->data()), aad->size()); }*/ }
 
     void RegisterForArtwork();
     void ExtractRasterData(const uint8_t* data, size_t size) noexcept;
