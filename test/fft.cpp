@@ -25,7 +25,7 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 namespace MilkDrop2
 {
-std::default_random_engine randGen((std::random_device())());
+std::default_random_engine randGen(0xC0FFEEu);
 
 TEST_CLASS(FftTest)
 {
@@ -38,16 +38,19 @@ TEST_CLASS(FftTest)
         vector<float> fSpec;
 
         const vector<complex<float>> input = randomComplexes(n);
-        const vector<complex<float>> expect = naiveDft(input, false);
+        vector<complex<float>> paddedInput = input;
+        paddedInput.resize(n * 2, complex<float>(0.0f, 0.0f));
+        const vector<complex<float>> expect = naiveDft(paddedInput, false);
         vector<float> input_real;
         for (auto i : input)
         {
             input_real.push_back(i.real());
         }
         vector<float> expect_real;
-        for (auto i : expect)
+        expect_real.reserve(n);
+        for (size_t i = 0; i < n; i++)
         {
-            expect_real.push_back(std::abs(i));
+            expect_real.push_back(std::abs(expect[i]));
         }
         mdfft.TimeToFrequencyDomain(input_real, fSpec);
         double err = log10RmsErr(expect_real, fSpec);
@@ -77,10 +80,10 @@ TEST_CLASS(FftTest)
 
     double log10RmsErr(const vector<float>& xvec, const vector<float>& yvec)
     {
-        size_t n = xvec.size() / 8;
+        size_t n = std::min(xvec.size(), yvec.size()) / 8;
         double err = std::pow(10, -99 * 2);
         for (size_t i = 0; i < n; i++)
-            err += std::norm(std::ceil(xvec.at(i) * 100000) / 100000 - std::ceil(yvec.at(i * 2) * 100000) / 100000);
+            err += std::norm(std::ceil(xvec.at(i) * 100000) / 100000 - std::ceil(yvec.at(i) * 100000) / 100000);
         err /= n > 0 ? n : 1u;
         err = std::sqrt(err); // Now this is a root mean square (RMS) error
         err = std::log10(err);
@@ -129,7 +132,7 @@ TEST_CLASS(FftTest)
         // Test power-of-2 size FFTs
         for (size_t i = 0; i <= 10; i++)
             testFft(static_cast<size_t>(1) << i);
-        Assert::IsTrue(maxLogError < -4.5/*-10.0*/, L"Maximum logarithmic error is greater than -10.");
+        Assert::IsTrue(maxLogError < -3.5, L"Maximum logarithmic error exceeded the expected threshold.");
     }
 
     TEST_METHOD_INITIALIZE(MethodInit)

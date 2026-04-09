@@ -66,8 +66,31 @@ void CPluginShell::SetWinampWindow(HWND window) { m_hWndWinamp = window; }
 HINSTANCE CPluginShell::GetInstance() const { return m_hInstance; }
 wchar_t* CPluginShell::GetPluginsDirPath() { return m_szPluginsDirPath; }
 wchar_t* CPluginShell::GetConfigIniFile() { return m_szConfigIniFile; }
-TextStyle* CPluginShell::GetFont(eFontIndex idx) { if (idx >= eFontIndex::SIMPLE_FONT && idx < eFontIndex::EXTRA_5 && idx < NUM_BASIC_FONTS + NUM_EXTRA_FONTS) { return m_dwrite_font[idx].get(); } else { return NULL; } }
-int CPluginShell::GetFontHeight(eFontIndex idx) const { if (idx >= eFontIndex::SIMPLE_FONT  && idx < eFontIndex::EXTRA_5 && idx < NUM_BASIC_FONTS + NUM_EXTRA_FONTS) return m_fontinfo[idx].nSize; else return 0; }
+TextStyle* CPluginShell::GetFont(eFontIndex idx)
+{
+    const int index = static_cast<int>(idx);
+    if (index >= static_cast<int>(eFontIndex::SIMPLE_FONT) &&
+        index <= static_cast<int>(eFontIndex::EXTRA_5) &&
+        index < NUM_BASIC_FONTS + NUM_EXTRA_FONTS)
+    {
+        return m_dwrite_font[index].get();
+    }
+
+    return nullptr;
+}
+
+int CPluginShell::GetFontHeight(eFontIndex idx) const
+{
+    const int index = static_cast<int>(idx);
+    if (index >= static_cast<int>(eFontIndex::SIMPLE_FONT) &&
+        index <= static_cast<int>(eFontIndex::EXTRA_5) &&
+        index < NUM_BASIC_FONTS + NUM_EXTRA_FONTS)
+    {
+        return m_fontinfo[index].nSize;
+    }
+
+    return 0;
+}
 int CPluginShell::GetBitDepth() const { return m_lpDX->GetBitDepth(); };
 D3D11Shim* CPluginShell::GetDevice() const { return m_lpDX->m_lpDevice.get(); };
 

@@ -16,6 +16,13 @@ See [BUILDING](BUILDING.md) for a sample `foo_vis_milk2/foo_vis_milk2.vcxproj.us
 VSTest.Console.exe /Platform:x64 "$(Get-Location)\test\test.dll"
 ```
 
+The test binary also requires `foo_vis_milk2.dll` and foobar2000's `shared.dll`
+to be present beside `test.dll` at runtime.
+
+- `test.vcxproj` now stages `foo_vis_milk2.dll` automatically.
+- `shared.dll` must come from a foobar2000 installation or a local build of
+  `external/foobar2000/shared/shared.vcxproj`.
+
 ## Using VSTest in GUI
 
 Use Test Explorer via **Test > Test Explorer** (Ctrl+E, T).

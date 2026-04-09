@@ -1233,7 +1233,7 @@ BOOL milk2_preferences_page::PluginShellFontDialogProc(HWND hdlg, UINT msg, WPAR
                 InitFont(7, EXTRA_FONT_3_NAME);
 #endif
 #if (NUM_EXTRA_FONTS >= 4)
-                InitFont(5, EXTRA_FONT_4_NAME);
+                InitFont(8, EXTRA_FONT_4_NAME);
 #endif
 #if (NUM_EXTRA_FONTS >= 5)
                 InitFont(9, EXTRA_FONT_5_NAME);
@@ -1262,7 +1262,7 @@ BOOL milk2_preferences_page::PluginShellFontDialogProc(HWND hdlg, UINT msg, WPAR
                             SaveFont(7);
 #endif
 #if (NUM_EXTRA_FONTS >= 4)
-                            SaveFont(5);
+                            SaveFont(8);
 #endif
 #if (NUM_EXTRA_FONTS >= 5)
                             SaveFont(9);

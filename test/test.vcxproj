@@ -182,12 +182,12 @@
       <UseFullPaths>true</UseFullPaths>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(SolutionDir)Bin\$(Platform)\$(Configuration)\;..\external\foobar2000\shared\;$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>vis_milk2.lib;foobar2000_SDK.lib;foobar2000_SDK_helpers.lib;PFC.lib;libPPUI.lib;shared-$(Platform).lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\external\foobar2000\shared\;$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>..\external\foobar2000\shared\shared-$(Platform).lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
     </Link>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y /d "$(SolutionDir)data\shared\shared-$(Platform).dll" "$(OutDir)shared.dll"</Command>
+      <Command>echo F | xcopy /y /d "$(ProjectDir)..\foo_vis_milk2\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -209,14 +209,14 @@
       <UseFullPaths>true</UseFullPaths>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(SolutionDir)Bin\$(Platform)\$(Configuration)\;..\external\foobar2000\shared\;$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>vis_milk2.lib;foobar2000_SDK.lib;foobar2000_SDK_helpers.lib;PFC.lib;libPPUI.lib;shared-$(Platform).lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\external\foobar2000\shared\;$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>..\external\foobar2000\shared\shared-$(Platform).lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
     </Link>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y /d "$(SolutionDir)data\shared\shared-$(Platform).dll" "$(OutDir)shared.dll"</Command>
+      <Command>echo F | xcopy /y /d "$(ProjectDir)..\foo_vis_milk2\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -235,12 +235,12 @@
       <UseFullPaths>true</UseFullPaths>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(SolutionDir)Bin\$(Platform)\$(Configuration)\;..\external\foobar2000\shared\;$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>vis_milk2.lib;foobar2000_SDK.lib;foobar2000_SDK_helpers.lib;PFC.lib;libPPUI.lib;shared-$(Platform).lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\external\foobar2000\shared\;$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>..\external\foobar2000\shared\shared-$(Platform).lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
     </Link>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y /d "$(SolutionDir)data\shared\shared-$(Platform).dll" "$(OutDir)shared.dll"</Command>
+      <Command>echo F | xcopy /y /d "$(ProjectDir)..\foo_vis_milk2\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -262,14 +262,14 @@
       <UseFullPaths>true</UseFullPaths>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(SolutionDir)Bin\$(Platform)\$(Configuration)\;..\external\foobar2000\shared\;$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>vis_milk2.lib;foobar2000_SDK.lib;foobar2000_SDK_helpers.lib;PFC.lib;libPPUI.lib;shared-$(Platform).lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\external\foobar2000\shared\;$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>..\external\foobar2000\shared\shared-$(Platform).lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
     </Link>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y /d "$(SolutionDir)data\shared\shared-$(Platform).dll" "$(OutDir)shared.dll"</Command>
+      <Command>echo F | xcopy /y /d "$(ProjectDir)..\foo_vis_milk2\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
@@ -288,12 +288,12 @@
       <UseFullPaths>true</UseFullPaths>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(SolutionDir)Bin\$(Platform)\$(Configuration)\;..\external\foobar2000\shared\;$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>vis_milk2.lib;foobar2000_SDK.lib;foobar2000_SDK_helpers.lib;PFC.lib;libPPUI.lib;shared-$(Platform).lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\external\foobar2000\shared\;$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>..\external\foobar2000\shared\shared-$(Platform).lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
     </Link>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y /d "$(SolutionDir)data\shared\shared-$(Platform)EC.dll" "$(OutDir)shared.dll"</Command>
+      <Command>echo F | xcopy /y /d "$(ProjectDir)..\foo_vis_milk2\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
@@ -315,14 +315,14 @@
       <UseFullPaths>true</UseFullPaths>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(SolutionDir)Bin\$(Platform)\$(Configuration)\;..\external\foobar2000\shared\;$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>vis_milk2.lib;foobar2000_SDK.lib;foobar2000_SDK_helpers.lib;PFC.lib;libPPUI.lib;shared-$(Platform).lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\external\foobar2000\shared\;$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>..\external\foobar2000\shared\shared-$(Platform).lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
     </Link>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y /d "$(SolutionDir)data\shared\shared-$(Platform)EC.dll" "$(OutDir)shared.dll"</Command>
+      <Command>echo F | xcopy /y /d "$(ProjectDir)..\foo_vis_milk2\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64EC'">
@@ -341,12 +341,12 @@
       <UseFullPaths>true</UseFullPaths>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(SolutionDir)Bin\$(Platform)\$(Configuration)\;..\external\foobar2000\shared\;$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>vis_milk2.lib;foobar2000_SDK.lib;foobar2000_SDK_helpers.lib;PFC.lib;libPPUI.lib;shared-$(Platform).lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\external\foobar2000\shared\;$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>..\external\foobar2000\shared\shared-$(Platform).lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
     </Link>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y /d "$(SolutionDir)data\shared\shared-$(Platform).dll" "$(OutDir)shared.dll"</Command>
+      <Command>echo F | xcopy /y /d "$(ProjectDir)..\foo_vis_milk2\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64EC'">
@@ -368,14 +368,14 @@
       <UseFullPaths>true</UseFullPaths>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(SolutionDir)Bin\$(Platform)\$(Configuration)\;..\external\foobar2000\shared\;$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>vis_milk2.lib;foobar2000_SDK.lib;foobar2000_SDK_helpers.lib;PFC.lib;libPPUI.lib;shared-$(Platform).lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\external\foobar2000\shared\;$(VCInstallDir)UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>..\external\foobar2000\shared\shared-$(Platform).lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
     </Link>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y /d "$(SolutionDir)data\shared\shared-$(Platform).dll" "$(OutDir)shared.dll"</Command>
+      <Command>echo F | xcopy /y /d "$(ProjectDir)..\foo_vis_milk2\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -400,6 +400,21 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\external\foobar2000\sdk\foobar2000_sdk.vcxproj">
+      <Project>{E8091321-D79D-4575-86EF-064EA1A4A20D}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\external\foobar2000\helpers\foobar2000_sdk_helpers.vcxproj">
+      <Project>{EE47764E-A202-4F85-A767-ABDAB4AFF35F}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\external\libppui\libppui.vcxproj">
+      <Project>{7729EB82-4069-4414-964B-AD399091A03F}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\external\pfc\pfc.vcxproj">
+      <Project>{EBFFFB4E-261D-44D3-B89C-957B31A0BF9C}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\vis_milk2\vis_milk2.vcxproj">
+      <Project>{7EE6F699-4EA5-4409-B212-DCFD192C811B}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\foo_vis_milk2\foo_vis_milk2.vcxproj">
       <Project>{85FBFD09-0099-4FE9-9DB6-78DB6F60F817}</Project>
     </ProjectReference>
