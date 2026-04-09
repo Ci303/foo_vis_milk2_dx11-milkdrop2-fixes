@@ -15,6 +15,7 @@
 Win32/
 x64/
 build/
+dist/
 [Bb]in/
 [Oo]bj/
 
