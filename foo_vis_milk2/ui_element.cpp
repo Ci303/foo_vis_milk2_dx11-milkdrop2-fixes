@@ -30,6 +30,14 @@ HWND g_hWindow;
 
 namespace
 {
+DWORD get_refresh_interval_ms(uint32_t max_fps) noexcept
+{
+    if (max_fps == 0)
+        return 1;
+
+    return (std::max)(1L, lround(1000.0 / static_cast<double>(max_fps)));
+}
+
 milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_instance_callback_ptr p_callback) :
     m_callback(p_callback),
     m_bMsgHandled(TRUE),
@@ -48,7 +56,7 @@ milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_ins
 #elif defined(TIMER_32)
     m_last_time = 0.0;
 #endif
-    m_refresh_interval = 33;
+    m_refresh_interval = get_refresh_interval_ms(default_max_fps_fs);
     m_art_data = std::make_unique<artFetchData>();
 
     m_pwd = L".\\";
@@ -187,6 +195,12 @@ int milk2_ui_element::OnCreate(LPCREATESTRUCT cs)
     {
         FB2K_console_print(core_api::get_my_file_name(), ": Could not initialize MilkDrop");
     }
+#ifdef TIMER_TP
+    else
+    {
+        StartTimer();
+    }
+#endif
     MILK2_CONSOLE_LOG("OnCreate1 ", r.right, ", ", r.left, ", ", r.top, ", ", r.bottom, ", ", GetWnd())
 
     return hr;
@@ -275,9 +289,6 @@ void milk2_ui_element::OnPaint(CDCHandle dc)
         std::ignore = BeginPaint(&ps);
         EndPaint(&ps);
     }
-#ifdef TIMER_TP
-    StartTimer();
-#endif
     ValidateRect(NULL);
 #ifdef TIMER_32
     ULONGLONG now = GetTickCount64();
@@ -912,8 +923,11 @@ LRESULT milk2_ui_element::OnConfigurationChange(UINT uMsg, WPARAM wParam, LPARAM
             {
                 s_config.reset();
                 m_script.reset();
-                m_refresh_interval = static_cast<DWORD>(lround(1000.0f / s_config.settings.m_max_fps_fs));
+                m_refresh_interval = get_refresh_interval_ms(s_config.settings.m_max_fps_fs);
                 g_plugin.PanelSettings(&s_config.settings);
+#ifdef TIMER_TP
+                StartTimer();
+#endif
                 break;
             }
         case 1: // Advanced Preferences
@@ -942,6 +956,8 @@ LRESULT milk2_ui_element::OnConfigurationChange(UINT uMsg, WPARAM wParam, LPARAM
 // Initialize the Direct3D resources required to run.
 bool milk2_ui_element::Initialize(HWND window, int width, int height)
 {
+    g_hWindow = get_wnd();
+
     if (!s_milk2)
     {
         if (FALSE == g_plugin.PluginPreInitialize(window, core_api::get_my_instance()))
@@ -953,8 +969,6 @@ bool milk2_ui_element::Initialize(HWND window, int width, int height)
         //swprintf_s(g_plugin.m_szConfigIniFile, L"%ls", s_config.settings.m_szConfigIniFile);
         swprintf_s(g_plugin.m_szComponentDirPath, L"%ls", const_cast<wchar_t*>(m_pwd.c_str()));
 
-        if (!s_fullscreen)
-            g_hWindow = get_wnd();
     }
 
     g_plugin.SetWinampWindow(window);
@@ -1482,7 +1496,7 @@ void milk2_ui_element::StartTimer() noexcept
         return;
 
     FILETIME DueTime{};
-    DWORD RefreshInterval = static_cast<DWORD>(lround(1000.0f / s_config.settings.m_max_fps_fs));
+    DWORD RefreshInterval = get_refresh_interval_ms(s_config.settings.m_max_fps_fs);
     SetThreadpoolTimer(m_tpTimer, &DueTime, RefreshInterval, 0);
 }
 
@@ -1812,3 +1826,8 @@ class milk2_initquit : public initquit
 FB2K_SERVICE_FACTORY(milk2_initquit);
 #pragma endregion
 } // namespace
+
+void milk2_sync_runtime_config_from_cfg() noexcept
+{
+    s_config.reset();
+}

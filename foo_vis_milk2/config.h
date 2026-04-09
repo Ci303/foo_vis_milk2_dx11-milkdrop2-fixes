@@ -449,3 +449,5 @@ class milk2_config
     void update_fonts() const;
     void update_paths();
 };
+
+void milk2_sync_runtime_config_from_cfg() noexcept;

@@ -835,7 +835,10 @@ bool CPlugin::PanelSettings(plugin_config* settings)
     //m_multisample_w = {settings->m_multisample_w.Count, 0U};
 
     //m_start_fullscreen = settings->m_start_fullscreen;
-    m_max_fps_fs = settings->m_max_fps_fs;
+    // The foobar2000 component wrapper already paces rendering. Keeping the
+    // legacy shell limiter active here causes the requested cap to be applied
+    // twice, which undershoots badly in the embedded panel.
+    m_max_fps_fs = 0;
     m_show_press_f1_msg = settings->m_show_press_f1_msg;
     m_allow_page_tearing_fs = settings->m_allow_page_tearing_fs;
     //m_minimize_winamp = settings->m_minimize_winamp;

@@ -941,10 +941,15 @@ void milk2_preferences_page::apply()
         m_resetpage = false;
     }
 
+    // Keep the in-memory panel settings in sync with the cfg vars immediately.
+    // Otherwise, a subsequent get_configuration() can write stale values back.
+    milk2_sync_runtime_config_from_cfg();
+
     OnChanged(); // The dialog content has not changed but the flags have;
                  // the currently shown values now match the settings so the
                  // apply button can be disabled.
-    ::SendMessage(g_hWindow, WM_CONFIG_CHANGE, (WPARAM)0, (LPARAM)0);
+    if (::IsWindow(g_hWindow))
+        ::PostMessage(g_hWindow, WM_CONFIG_CHANGE, (WPARAM)0, (LPARAM)0);
 }
 
 // Returns whether the dialog content is different from the current configuration;
