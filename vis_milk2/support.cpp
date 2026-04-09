@@ -220,13 +220,19 @@ void GetWinampSongPosAsText(HWND hWndWinamp, wchar_t* szSongPos)
     {
         wchar_t tmp[16];
         float time_s = nSongPosMS * 0.001f;
-        unsigned int minutes = static_cast<unsigned int>(time_s / 60);
-        time_s -= minutes * 60;
+        unsigned int total_seconds = static_cast<unsigned int>(time_s);
+        unsigned int hours = total_seconds / 3600;
+        unsigned int minutes = (total_seconds / 60) % 60;
+        time_s -= total_seconds;
+        time_s += (total_seconds % 60);
         unsigned int seconds = static_cast<unsigned int>(time_s);
         time_s -= seconds;
         unsigned int dsec = static_cast<unsigned int>(time_s * 100);
         swprintf_s(tmp, L"%.02f", dsec / 100.0f);
-        swprintf_s(szSongPos, 64, L"%d:%02d%s", minutes, seconds, tmp + 1);
+        if (hours > 0)
+            swprintf_s(szSongPos, 64, L"%u:%02u:%02u%s", hours, minutes, seconds, tmp + 1);
+        else
+            swprintf_s(szSongPos, 64, L"%u:%02u%s", minutes, seconds, tmp + 1);
     }
 }
 
@@ -239,9 +245,13 @@ void GetWinampSongLenAsText(HWND hWndWinamp, wchar_t* szSongLen)
     if (res != 0 && static_cast<LRESULT>(nSongLenMS) > 0)
     {
         unsigned int len_s = static_cast<unsigned int>(nSongLenMS / 1000);
-        unsigned int minutes = len_s / 60;
-        unsigned int seconds = len_s - minutes * 60;
-        swprintf_s(szSongLen, 64, L"%d:%02d", minutes, seconds);
+        unsigned int hours = len_s / 3600;
+        unsigned int minutes = (len_s / 60) % 60;
+        unsigned int seconds = len_s % 60;
+        if (hours > 0)
+            swprintf_s(szSongLen, 64, L"%u:%02u:%02u", hours, minutes, seconds);
+        else
+            swprintf_s(szSongLen, 64, L"%u:%02u", minutes, seconds);
     }
 }
 

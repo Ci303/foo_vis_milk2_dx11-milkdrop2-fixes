@@ -3491,6 +3491,89 @@ void CPlugin::MilkDropRenderFrame(int redraw)
     } \
 }
 
+static void HideTextElement(CTextManager& textManager, TextElement& element)
+{
+    if (element.IsVisible())
+    {
+        element.SetVisible(false);
+        textManager.UnregisterElement(&element);
+    }
+}
+
+static int MeasureShadowTextWidth(CTextManager& textManager, DXContext* dx, TextStyle* font, TextElement& element, const wchar_t* text, int maxWidth, DWORD color)
+{
+    UNREFERENCED_PARAMETER(textManager);
+
+    if (!element.IsVisible())
+        element.Initialize(dx->GetD2DDeviceContext());
+
+    D2D1_COLOR_F fText = D2D1::ColorF(color, static_cast<FLOAT>(((color & 0xFF000000) >> 24) / 255.0f));
+    element.SetAlignment(AlignNear, AlignNear);
+    element.SetTextColor(fText);
+    element.SetTextOpacity(fText.a);
+    element.SetText(text);
+    element.SetTextStyle(font);
+    element.SetTextShadow(true);
+    element.SetContainer(D2D1::RectF(0.0f, 0.0f, static_cast<FLOAT>(maxWidth), 2048.0f));
+
+    const D2D1_RECT_F bounds = element.GetBounds(dx->GetDWriteFactory());
+    return static_cast<int>(std::ceil(bounds.right - bounds.left));
+}
+
+static void DrawShadowTextAt(CTextManager& textManager,
+                             DXContext* dx,
+                             TextStyle* font,
+                             TextElement& element,
+                             const wchar_t* text,
+                             int maxWidth,
+                             int height,
+                             int left,
+                             int top,
+                             DWORD color = 0xFFFFFFFF)
+{
+    if (!(text && text[0] != L'\0'))
+    {
+        HideTextElement(textManager, element);
+        return;
+    }
+
+    const int width = MeasureShadowTextWidth(textManager, dx, font, element, text, maxWidth, color);
+    D2D1_RECT_F rect = D2D1::RectF(static_cast<FLOAT>(left), static_cast<FLOAT>(top), static_cast<FLOAT>(left + width), static_cast<FLOAT>(top + height));
+    element.SetContainer(rect);
+    if (textManager.DrawD2DText(font, &element, const_cast<wchar_t*>(text), &rect, DT_NOPREFIX | DT_SINGLELINE | DT_WORD_ELLIPSIS, color, false, 0xFF000000) != 0)
+    {
+        if (!element.IsVisible())
+            textManager.RegisterElement(&element);
+        element.SetVisible(true);
+    }
+    else
+    {
+        HideTextElement(textManager, element);
+    }
+}
+
+static void BuildElapsedTimeSlot(const wchar_t* lengthText, wchar_t* slotText, size_t slotCount)
+{
+    if (!(lengthText && slotText && slotCount > 0))
+        return;
+
+    size_t out = 0;
+    while (*lengthText != L'\0' && out + 1 < slotCount)
+    {
+        const wchar_t ch = *lengthText++;
+        slotText[out++] = (ch >= L'0' && ch <= L'9') ? L'8' : ch;
+    }
+
+    if (out + 3 < slotCount)
+    {
+        slotText[out++] = L'.';
+        slotText[out++] = L'8';
+        slotText[out++] = L'8';
+    }
+
+    slotText[out] = L'\0';
+}
+
 #define MilkDropMenuOut_Box(top, line, font, str, r, flags, color, bDarkBox, boxColor) { \
     D2D1_RECT_F r2 = r; \
     D2D1_COLOR_F fText = D2D1::ColorF(color, GetAlpha(color)); \
@@ -3752,28 +3835,51 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
             {
                 if (m_bShowSongTime && m_bShowSongLen)
                 {
-                    // Only show playing position and track length if it is playing (buffer is valid).
                     if (buf[0])
-                        swprintf_s(buf3, L"%s / %s ", buf, buf2);
+                    {
+                        wchar_t elapsedSlot[64] = {0};
+                        wchar_t suffix[64] = {0};
+                        BuildElapsedTimeSlot(buf2, elapsedSlot, ARRAYSIZE(elapsedSlot));
+                        swprintf_s(suffix, L" / %s ", buf2);
+
+                        SelectFont(DECORATIVE_FONT);
+                        const int slotWidth = MeasureShadowTextWidth(m_text, m_lpDX.get(), pFont, m_songStats, elapsedSlot, xR - xL, 0xFFFFFFFF);
+                        const int top = static_cast<int>(*lower_left_corner_y - h);
+                        constexpr int kSongStatsGapPx = 4;
+
+                        DrawShadowTextAt(m_text, m_lpDX.get(), pFont, m_songStats, buf, xR - xL, h, xL, top);
+                        DrawShadowTextAt(m_text, m_lpDX.get(), pFont, m_songStatsSuffix, suffix, xR - xL, h, xL + slotWidth + kSongStatsGapPx, top);
+                        *lower_left_corner_y -= h;
+                    }
                     else
+                    {
                         wcsncpy_s(buf3, buf2, ARRAYSIZE(buf2));
+                    }
                 }
                 else if (m_bShowSongTime)
                     wcsncpy_s(buf3, buf, ARRAYSIZE(buf2));
                 else
                     wcsncpy_s(buf3, buf2, ARRAYSIZE(buf2));
 
-                SelectFont(DECORATIVE_FONT);
-                MilkDropTextOut_Shadow(buf3, m_songStats, 0xFFFFFFFF, MTO_LOWER_LEFT);
+                if (!(m_bShowSongTime && m_bShowSongLen && buf[0]))
+                {
+                    SelectFont(DECORATIVE_FONT);
+                    const int top = static_cast<int>(*lower_left_corner_y - h);
+                    DrawShadowTextAt(m_text, m_lpDX.get(), pFont, m_songStats, buf3, xR - xL, h, xL, top);
+                    HideTextElement(m_text, m_songStatsSuffix);
+                    *lower_left_corner_y -= h;
+                }
+            }
+            else
+            {
+                HideTextElement(m_text, m_songStats);
+                HideTextElement(m_text, m_songStatsSuffix);
             }
         }
         else
         {
-            if (m_songStats.IsVisible())
-            {
-                m_songStats.SetVisible(false);
-                m_text.UnregisterElement(&m_songStats);
-            }
+            HideTextElement(m_text, m_songStats);
+            HideTextElement(m_text, m_songStatsSuffix);
         }
     }
 
