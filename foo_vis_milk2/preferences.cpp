@@ -1202,18 +1202,7 @@ BOOL milk2_preferences_page::PluginShellFontDialogProc(HWND hdlg, UINT msg, WPAR
                 // original position. Ignores size arguments.
                 ::SetWindowPos(hdlg, HWND_TOP, rcOwner.left + (rc.right / 2), rcOwner.top + (rc.bottom / 2), 0, 0, SWP_NOSIZE);
 
-                // Finally, if not all extra fonts are in use, shrink the window size and
-                // move up any controls that were at the bottom.
-                RECT r;
-                ::GetWindowRect(hdlg, &r);
-                if constexpr (MAX_EXTRA_FONTS - NUM_EXTRA_FONTS > 0)
-                {
-                    int scoot_factor = static_cast<int>(176.0f * (MAX_EXTRA_FONTS - NUM_EXTRA_FONTS) / static_cast<float>(MAX_EXTRA_FONTS));
-                    ::SetWindowPos(hdlg, NULL, 0, 0, r.right - r.left, r.bottom - r.top - scoot_factor, SWP_NOMOVE | SWP_NOZORDER);
-                    ScootControl(hdlg, IDC_FONT_TEXT, 0, -scoot_factor);
-                    ScootControl(hdlg, IDOK, 0, -scoot_factor);
-                    ScootControl(hdlg, IDCANCEL, 0, -scoot_factor);
-                }
+                layout_font_dialog(hdlg);
 
                 // The main preferences page already opts into foobar2000 dark mode,
                 // but this modal font dialog needs its own hooks.

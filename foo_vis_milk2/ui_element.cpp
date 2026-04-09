@@ -582,10 +582,7 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
     menu.AppendMenu(MF_STRING | (g_plugin.m_show_playlist ? MF_CHECKED : 0), IDM_SHOW_PLAYLIST, TEXT("Show Playlist"));
     //menu.AppendMenu(MF_STRING | (g_plugin.m_show_presets ? MF_CHECKED : 0), IDM_SHOW_PRESETS, TEXT("Show Presets"));
     //menu.AppendMenu(MF_STRING | (g_plugin.m_show_menu ? MF_CHECKED : 0), IDM_SHOW_MENU, TEXT("Show Menu"));
-    menu.AppendMenu(MF_STRING | (s_config.settings.m_bShowAlbum && std::filesystem::exists(s_config.settings.m_szImgIniFile)
-                                     ? MF_CHECKED
-                                     : (std::filesystem::exists(s_config.settings.m_szImgIniFile) ? 0 : MF_DISABLED)), 
-                    IDM_SHOW_ALBUM, TEXT("Show Album Art"));
+    menu.AppendMenu(MF_STRING | (s_config.settings.m_bShowAlbum ? MF_CHECKED : 0), IDM_SHOW_ALBUM, TEXT("Show Album Art"));
     menu.AppendMenu(MF_STRING, IDM_SHOW_TITLE, TEXT("Launch Title"));
     menu.AppendMenu(MF_SEPARATOR);
     menu.AppendMenu(MF_STRING | (g_plugin.m_show_help ? MF_CHECKED : 0), IDM_SHOW_HELP, TEXT("Show Help"));
@@ -1398,6 +1395,10 @@ void milk2_ui_element::UpdateTrack(metadb_handle_ptr p_track)
     // Load the album art.
     if (wcsnlen_s(s_config.settings.m_szArtworkFormat, 256) != 0)
     {
+        m_art_file.clear();
+        std::vector<uint8_t> empty;
+        m_raster.swap(empty);
+
         titleformat_object::ptr script;
         pfc::string8 pattern = pfc::utf8FromWide(s_config.settings.m_szArtworkFormat);
         bool success = titleformat_compiler::get()->compile(script, pattern);
@@ -1405,12 +1406,13 @@ void milk2_ui_element::UpdateTrack(metadb_handle_ptr p_track)
         pfc::string result;
         if (success && script.is_valid() && p_track->format_title(nullptr, result, script, nullptr))
         {
-            m_art_file.clear();
-            std::vector<uint8_t> empty;
-            m_raster.swap(empty);
-            m_art_file = pfc::wideFromUTF8(result).c_str();
-            m_raster.clear();
+            if (!result.is_empty())
+            {
+                m_art_file = pfc::wideFromUTF8(result).c_str();
+            }
         }
+
+        ShowAlbumArt();
     }
     else
     {
@@ -1421,9 +1423,12 @@ void milk2_ui_element::UpdateTrack(metadb_handle_ptr p_track)
 
 void milk2_ui_element::ShowAlbumArt()
 {
-    // Kill all existing sprites.
+    // Only remove the album-art sprite; keep preset/user sprites intact.
     for (int x = 0; x < NUM_TEX; x++)
-        g_plugin.KillSprite(x);
+    {
+        if (g_plugin.m_texmgr.m_tex[x].nUserData == 100)
+            g_plugin.KillSprite(x);
+    }
 
     if (s_config.settings.m_bShowAlbum)
     {
@@ -1431,7 +1436,7 @@ void milk2_ui_element::ShowAlbumArt()
         {
             // Check if file exists.
             pfc::string8 artFile = pfc::utf8FromWide(m_art_file.c_str());
-            if (filesystem::g_exists(artFile, fb2k::noAbort))
+            if (!filesystem::g_exists(artFile, fb2k::noAbort))
             {
                 return;
             }
