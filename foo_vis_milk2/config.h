@@ -378,6 +378,7 @@ class milk2_preferences_page : public preferences_page_instance, public CDialogI
     bool m_resetpage;
 
     CToolTipCtrl m_tooltips;
+    std::vector<std::wstring> m_tooltip_texts;
 
     fb2k::CDarkModeHooks m_dark;
     fb2k::CDarkModeHooks m_font_dialog_dark;

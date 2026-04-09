@@ -89,20 +89,20 @@ BEGIN
     CONTROL         "Skip composite shader blending",IDC_CB_NOCOMPSHADER,
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,2,67,160,10
     GROUPBOX        "",IDC_STATIC,2,76,165,30
-    RTEXT           "Max. frame rate:",IDC_MAXFPS_CAPTION,14,84,53,10
-    COMBOBOX        IDC_FS_MAXFPS2,69,83,55,107,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    CONTROL         "Allow page tearing",IDC_CB_FSPT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,11,94,94,10
+    RTEXT           "Max. frame rate:",IDC_MAXFPS_CAPTION,8,84,63,10
+    COMBOBOX        IDC_FS_MAXFPS2,74,83,58,107,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "Allow page tearing",IDC_CB_FSPT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,11,94,101,10
     GROUPBOX        "Soft Cuts (regular, periodic preset transitions/fades)",IDC_STATIC,2,107,165,70
-    RTEXT           "Time between auto preset changes:",IDC_BETWEEN_TIME_LABEL,11,117,115,10
+    RTEXT           "Time between auto preset:",IDC_BETWEEN_TIME_LABEL,11,117,115,10
     EDITTEXT        IDC_BETWEEN_TIME,128,116,32,13,ES_CENTER | ES_AUTOHSCROLL
     RTEXT           "Additional random time:",IDC_BETWEEN_TIME_RANDOM_LABEL,11,132,115,10
     EDITTEXT        IDC_BETWEEN_TIME_RANDOM,128,131,32,13,ES_CENTER | ES_AUTOHSCROLL
-    RTEXT           "Auto preset blend time:",IDC_BLEND_AUTO_LABEL,11,147,115,10
+    RTEXT           "Auto preset blend:",IDC_BLEND_AUTO_LABEL,11,147,115,10
     EDITTEXT        IDC_BLEND_AUTO,128,146,32,13,ES_CENTER | ES_AUTOHSCROLL
-    RTEXT           "User-solicited preset blend time:",IDC_BLEND_USER_LABEL,11,162,115,10
+    RTEXT           "User preset blend:",IDC_BLEND_USER_LABEL,11,162,115,10
     EDITTEXT        IDC_BLEND_USER,128,161,32,13,ES_CENTER | ES_AUTOHSCROLL
     GROUPBOX        "Hard Cuts (driven by major beats)",IDC_STATIC,2,177,165,51
-    RTEXT           "Average time between hard cuts:",IDC_HARDCUT_BETWEEN_TIME_LABEL,10,186,116,10
+    RTEXT           "Time between hard cuts:",IDC_HARDCUT_BETWEEN_TIME_LABEL,10,186,116,10
     EDITTEXT        IDC_HARDCUT_BETWEEN_TIME,128,184,32,13,ES_CENTER | ES_AUTOHSCROLL
     LTEXT           "Loudness threshold:",IDC_HARDCUT_LOUDNESS_LABEL,13,202,70,9
     CONTROL         "Loudness Slider",IDC_HARDCUT_LOUDNESS,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,84,198,81,16
@@ -125,11 +125,11 @@ BEGIN
     PUSHBUTTON      "Select &Fonts",ID_FONTS,195,93,82,15
     CONTROL         "Guess 16-bit color brightness",IDC_CB_AUTOGAMMA2,"Button",BS_AUTOCHECKBOX | WS_DISABLED | WS_TABSTOP,177,108,110,10 //based on the GPU
     GROUPBOX        "Song Title Animations and Messages",IDC_STATIC,168,121,137,71
-    RTEXT           "Duration of song title animations:",IDC_SONGTITLEANIM_DURATION_LABEL,171,131,103,10
+    RTEXT           "Song title duration:",IDC_SONGTITLEANIM_DURATION_LABEL,171,131,103,10
     EDITTEXT        IDC_SONGTITLEANIM_DURATION,275,130,28,13,ES_CENTER | ES_AUTOHSCROLL
-    RTEXT           "Time between\nrandom song title anims.:",IDC_RAND_TITLE_LABEL,178,143,96,16
+    RTEXT           "Time between\nrandom title anims.:",IDC_RAND_TITLE_LABEL,178,143,96,16
     EDITTEXT        IDC_RAND_TITLE,275,147,28,13,ES_CENTER | ES_AUTOHSCROLL
-    RTEXT           "Time between\nrandom custom messages:",IDC_RAND_MSG_LABEL,178,161,96,16
+    RTEXT           "Time between\ncustom messages:",IDC_RAND_MSG_LABEL,178,161,96,16
     EDITTEXT        IDC_RAND_MSG,275,165,28,13,ES_CENTER | ES_AUTOHSCROLL
     CONTROL         "Show title anims. when song changes",IDC_CB_TITLE_ANIMS,
                     "Button",BS_AUTOCHECKBOX | BS_MULTILINE | WS_TABSTOP,172,179,131,10

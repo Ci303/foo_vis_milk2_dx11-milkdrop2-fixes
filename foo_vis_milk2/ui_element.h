@@ -82,6 +82,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
         MSG_WM_GETDLGCODE(OnGetDlgCode)
         MSG_WM_SETFOCUS(OnSetFocus)
         MSG_WM_KILLFOCUS(OnKillFocus)
+        MSG_WM_LBUTTONDOWN(OnLButtonDown)
         MSG_WM_CONTEXTMENU(OnContextMenu)
         MSG_WM_LBUTTONDBLCLK(OnLButtonDblClk)
         MSG_WM_POWERBROADCAST(OnPowerBroadcast)
@@ -137,6 +138,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     UINT OnGetDlgCode(LPMSG lpMsg);
     void OnSetFocus(CWindow wndOld);
     void OnKillFocus(CWindow wndFocus);
+    void OnLButtonDown(UINT nFlags, CPoint point);
     void OnContextMenu(CWindow wnd, CPoint point);
     void OnLButtonDblClk(UINT nFlags, CPoint point);
     LRESULT OnImeNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);

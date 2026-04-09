@@ -1837,7 +1837,7 @@ UINT milk2_ui_element::OnGetDlgCode(LPMSG lpMsg)
     //            break;
     //    }
     //}
-    return WM_GETDLGCODE;
+    return DLGC_WANTALLKEYS | DLGC_WANTCHARS | DLGC_WANTARROWS;
 }
 
 void milk2_ui_element::OnSetFocus(CWindow wndOld)
@@ -1856,6 +1856,15 @@ void milk2_ui_element::OnKillFocus(CWindow wndFocus)
     MILK2_CONSOLE_LOG("OnKillFocus ", GetWnd())
     //g_plugin.m_bMilkdropScrollLockState = GetKeyState(VK_SCROLL) & 1;
     //SetScrollLock(g_plugin.m_bOrigScrollLockState);
+}
+
+void milk2_ui_element::OnLButtonDown(UINT nFlags, CPoint point)
+{
+    UNREFERENCED_PARAMETER(nFlags);
+    UNREFERENCED_PARAMETER(point);
+
+    if (::GetFocus() != get_wnd())
+        ::SetFocus(get_wnd());
 }
 
 #undef waitstring

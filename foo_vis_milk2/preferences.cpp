@@ -14,6 +14,46 @@ extern HWND g_hWindow;
 
 namespace
 {
+using font_info_store_t = F<NUM_BASIC_FONTS + NUM_EXTRA_FONTS>;
+using font_array_t = td_fontinfo[NUM_BASIC_FONTS + NUM_EXTRA_FONTS];
+
+struct font_dialog_row_t
+{
+    int name;
+    int font;
+    int size;
+    int bold;
+    int italics;
+    int aa;
+};
+
+constexpr font_dialog_row_t g_font_dialog_rows[MAX_EXTRA_FONTS] = {
+    {IDC_FONT_NAME_5, IDC_FONT5, IDC_FONTSIZE5, IDC_FONTBOLD5, IDC_FONTITAL5, IDC_FONTAA5},
+    {IDC_FONT_NAME_6, IDC_FONT6, IDC_FONTSIZE6, IDC_FONTBOLD6, IDC_FONTITAL6, IDC_FONTAA6},
+    {IDC_FONT_NAME_7, IDC_FONT7, IDC_FONTSIZE7, IDC_FONTBOLD7, IDC_FONTITAL7, IDC_FONTAA7},
+    {IDC_FONT_NAME_8, IDC_FONT8, IDC_FONTSIZE8, IDC_FONTBOLD8, IDC_FONTITAL8, IDC_FONTAA8},
+    {IDC_FONT_NAME_9, IDC_FONT9, IDC_FONTSIZE9, IDC_FONTBOLD9, IDC_FONTITAL9, IDC_FONTAA9},
+};
+
+constexpr int g_font_combo_ids[] = {
+    IDC_FONT1, IDC_FONT2, IDC_FONT3, IDC_FONT4, IDC_FONT5, IDC_FONT6, IDC_FONT7, IDC_FONT8, IDC_FONT9,
+};
+
+template <typename T, size_t N>
+constexpr size_t countof(const T (&)[N]) noexcept
+{
+    return N;
+}
+
+font_info_store_t load_font_info_store();
+void load_font_info(font_array_t& fonts);
+void store_font_info(const font_array_t& fonts);
+void copy_wide_string(wchar_t* destination, size_t destination_count, const wchar_t* source);
+pfc::string8 get_preset_dir_setting();
+void offset_dialog_control(HWND dialog, int control_id, int dx, int dy);
+void hide_font_dialog_row(HWND dialog, const font_dialog_row_t& row);
+void layout_font_dialog(HWND dialog);
+RECT control_rect_in_dialog(HWND dialog, HWND control);
 // clang-format off
 static cfg_bool cfg_bPresetLockOnAtStartup(guid_cfg_bPresetLockOnAtStartup, default_bPresetLockOnAtStartup);
 static cfg_bool cfg_bPreventScollLockHandling(guid_cfg_bPreventScollLockHandling, default_bPreventScollLockHandling);
@@ -70,6 +110,94 @@ static advconfig_branch_factory g_advconfigBranch("MilkDrop", guid_advconfig_bra
 static advconfig_checkbox_factory cfg_bDebugOutput("Debug output", "milk2.bDebugOutput", guid_cfg_bDebugOutput, guid_advconfig_branch, order_bDebugOutput, default_bDebugOutput, 0);
 static advconfig_string_factory cfg_szPresetDir("Preset directory", "milk2.szPresetDir", guid_cfg_szPresetDir, guid_advconfig_branch, order_szPresetDir, "", advconfig_entry_string::flag_is_folder_path);
 // clang-format on
+
+font_info_store_t load_font_info_store()
+{
+    return cfg_stFontInfo.get();
+}
+
+void load_font_info(font_array_t& fonts)
+{
+    const auto store = load_font_info_store();
+    memcpy_s(fonts, sizeof(fonts), store.fontinfo, sizeof(store.fontinfo));
+}
+
+void store_font_info(const font_array_t& fonts)
+{
+    font_info_store_t store{};
+    memcpy_s(store.fontinfo, sizeof(store.fontinfo), fonts, sizeof(fonts));
+    cfg_stFontInfo = store;
+}
+
+void copy_wide_string(wchar_t* destination, size_t destination_count, const wchar_t* source)
+{
+    wcscpy_s(destination, destination_count, source);
+}
+
+pfc::string8 get_preset_dir_setting()
+{
+    pfc::string8 presetDir;
+    cfg_szPresetDir.get(presetDir);
+    return presetDir;
+}
+
+void offset_dialog_control(HWND dialog, int control_id, int dx, int dy)
+{
+    RECT rect{};
+    ::GetWindowRect(::GetDlgItem(dialog, control_id), &rect);
+    ::ScreenToClient(dialog, reinterpret_cast<LPPOINT>(&rect));
+    ::SetWindowPos(::GetDlgItem(dialog, control_id), NULL, rect.left + dx, rect.top + dy, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+}
+
+void hide_font_dialog_row(HWND dialog, const font_dialog_row_t& row)
+{
+    ::ShowWindow(::GetDlgItem(dialog, row.name), SW_HIDE);
+    ::ShowWindow(::GetDlgItem(dialog, row.font), SW_HIDE);
+    ::ShowWindow(::GetDlgItem(dialog, row.size), SW_HIDE);
+    ::ShowWindow(::GetDlgItem(dialog, row.bold), SW_HIDE);
+    ::ShowWindow(::GetDlgItem(dialog, row.italics), SW_HIDE);
+    ::ShowWindow(::GetDlgItem(dialog, row.aa), SW_HIDE);
+}
+
+void layout_font_dialog(HWND dialog)
+{
+    if constexpr (MAX_EXTRA_FONTS - NUM_EXTRA_FONTS <= 0)
+    {
+        return;
+    }
+
+    for (size_t i = NUM_EXTRA_FONTS; i < countof(g_font_dialog_rows); ++i)
+    {
+        hide_font_dialog_row(dialog, g_font_dialog_rows[i]);
+    }
+
+    RECT firstExtraRow{};
+    RECT secondExtraRow{};
+    if (!::GetWindowRect(::GetDlgItem(dialog, g_font_dialog_rows[0].name), &firstExtraRow) ||
+        !::GetWindowRect(::GetDlgItem(dialog, g_font_dialog_rows[1].name), &secondExtraRow))
+    {
+        return;
+    }
+
+    RECT dialogRect{};
+    ::GetWindowRect(dialog, &dialogRect);
+
+    const int hiddenRows = MAX_EXTRA_FONTS - NUM_EXTRA_FONTS;
+    const int rowPitch = secondExtraRow.top - firstExtraRow.top;
+    const int verticalOffset = hiddenRows * rowPitch;
+    ::SetWindowPos(dialog, NULL, 0, 0, dialogRect.right - dialogRect.left, dialogRect.bottom - dialogRect.top - verticalOffset, SWP_NOMOVE | SWP_NOZORDER);
+    offset_dialog_control(dialog, IDC_FONT_TEXT, 0, -verticalOffset);
+    offset_dialog_control(dialog, IDOK, 0, -verticalOffset);
+    offset_dialog_control(dialog, IDCANCEL, 0, -verticalOffset);
+}
+
+RECT control_rect_in_dialog(HWND dialog, HWND control)
+{
+    RECT rect{};
+    ::GetWindowRect(control, &rect);
+    ::MapWindowPoints(HWND_DESKTOP, dialog, reinterpret_cast<LPPOINT>(&rect), 2);
+    return rect;
+}
 } // namespace
 
 #pragma region Preferences Page
@@ -304,35 +432,62 @@ BOOL milk2_preferences_page::OnInitDialog(CWindow, LPARAM)
     ::EnableWindow(GetDlgItem(ID_MSG), static_cast<BOOL>(std::filesystem::exists(default_szMsgIniFile)));
 
     // clang-format off
-    const std::map<UINT16, UINT16> tips = {
+    const std::vector<std::pair<UINT16, UINT16>> tips = {
         {(UINT16)IDC_CB_SCROLLON3, (UINT16)IDS_START_WITH_PRESET_LOCK_ON_HELP},
         {(UINT16)IDC_CB_NORATING2, (UINT16)IDS_DISABLE_PRESET_RATING_HELP},
         {(UINT16)IDC_CB_NOWARN3, (UINT16)IDS_NOWARN_HELP},
         {(UINT16)IDC_CB_PRESS_F1_MSG, (UINT16)IDS_HELP_ON_F1_HELP},
         {(UINT16)IDC_CB_SCROLLON4, (UINT16)IDS_SCROLL_CTRL_HELP},
         {(UINT16)IDC_CB_NOCOMPSHADER, (UINT16)IDS_NOCOMPSHADER_HELP},
+        {(UINT16)IDC_MAXFPS_CAPTION, (UINT16)IDS_MAX_FRAMERATE_HELP},
         {(UINT16)IDC_FS_MAXFPS2, (UINT16)IDS_MAX_FRAMERATE_HELP},
         {(UINT16)IDC_CB_FSPT, (UINT16)IDS_PAGE_TEARING_HELP},
+        {(UINT16)IDC_TITLE_FORMAT_LABEL, (UINT16)IDS_TITLE_FORMAT_HELP},
         {(UINT16)IDC_TITLE_FORMAT, (UINT16)IDS_TITLE_FORMAT_HELP},
+        {(UINT16)IDC_ARTWORK_FORMAT_LABEL, (UINT16)IDS_ARTWORK_FORMAT_HELP},
         {(UINT16)IDC_ARTWORK_FORMAT, (UINT16)IDS_ARTWORK_FORMAT_HELP},
+        {(UINT16)IDC_BETWEEN_TIME_LABEL, (UINT16)IDS_BETWEEN_TIME_HELP},
         {(UINT16)IDC_BETWEEN_TIME, (UINT16)IDS_BETWEEN_TIME_HELP},
+        {(UINT16)IDC_BETWEEN_TIME_RANDOM_LABEL, (UINT16)IDS_BETWEEN_TIME_RANDOM_HELP},
         {(UINT16)IDC_BETWEEN_TIME_RANDOM, (UINT16)IDS_BETWEEN_TIME_RANDOM_HELP},
+        {(UINT16)IDC_BLEND_AUTO_LABEL, (UINT16)IDS_BLEND_AUTO_HELP},
         {(UINT16)IDC_BLEND_AUTO, (UINT16)IDS_BLEND_AUTO_HELP},
+        {(UINT16)IDC_BLEND_USER_LABEL, (UINT16)IDS_BLEND_USER_HELP},
         {(UINT16)IDC_BLEND_USER, (UINT16)IDS_BLEND_USER_HELP},
+        {(UINT16)IDC_HARDCUT_BETWEEN_TIME_LABEL, (UINT16)IDS_HARDCUT_BETWEEN_TIME_HELP},
         {(UINT16)IDC_HARDCUT_BETWEEN_TIME, (UINT16)IDS_HARDCUT_BETWEEN_TIME_HELP},
+        {(UINT16)IDC_HARDCUT_LOUDNESS_LABEL, (UINT16)IDS_HARDCUT_LOUDNESS_HELP},
         {(UINT16)IDC_HARDCUT_LOUDNESS, (UINT16)IDS_HARDCUT_LOUDNESS_HELP},
+        {(UINT16)IDC_HARDCUT_LOUDNESS_MIN, (UINT16)IDS_HARDCUT_LOUDNESS_HELP},
+        {(UINT16)IDC_HARDCUT_LOUDNESS_MAX, (UINT16)IDS_HARDCUT_LOUDNESS_HELP},
         {(UINT16)IDC_CB_HARDCUTS, (UINT16)IDS_HARDCUTS_HELP},
+        {(UINT16)IDC_BRIGHT_SLIDER_BOX, (UINT16)IDS_BRIGHT_SLIDER_HELP},
         {(UINT16)IDC_BRIGHT_SLIDER2, (UINT16)IDS_BRIGHT_SLIDER_HELP},
+        {(UINT16)IDC_GAMMA16_0, (UINT16)IDS_BRIGHT_SLIDER_HELP},
+        {(UINT16)IDC_GAMMA16_1, (UINT16)IDS_BRIGHT_SLIDER_HELP},
+        {(UINT16)IDC_GAMMA16_2, (UINT16)IDS_BRIGHT_SLIDER_HELP},
+        {(UINT16)IDC_GAMMA16_3, (UINT16)IDS_BRIGHT_SLIDER_HELP},
+        {(UINT16)IDC_GAMMA16_4, (UINT16)IDS_BRIGHT_SLIDER_HELP},
         {(UINT16)IDC_CB_AUTOGAMMA2, (UINT16)IDS_CB_AUTOGAMMA_HELP},
+        {(UINT16)IDC_SONGTITLEANIM_DURATION_LABEL, (UINT16)IDS_SONGTITLEANIM_DURATION_HELP},
         {(UINT16)IDC_SONGTITLEANIM_DURATION, (UINT16)IDS_SONGTITLEANIM_DURATION_HELP},
+        {(UINT16)IDC_RAND_TITLE_LABEL, (UINT16)IDS_RAND_TITLE_HELP},
         {(UINT16)IDC_RAND_TITLE, (UINT16)IDS_RAND_TITLE_HELP},
+        {(UINT16)IDC_RAND_MSG_LABEL, (UINT16)IDS_RAND_MSG_HELP},
         {(UINT16)IDC_RAND_MSG, (UINT16)IDS_RAND_MSG_HELP},
         {(UINT16)IDC_CB_TITLE_ANIMS, (UINT16)IDS_TITLE_ANIMS_HELP},
+        {(UINT16)IDC_IMAGE_CACHE_BOX, (UINT16)IDS_MAX_IMAGES_BYTES_HELP},
+        {(UINT16)IDC_MAX_IMAGES_CAPTION2, (UINT16)IDS_MAX_IMAGES_BYTES_HELP},
         {(UINT16)IDC_MAX_IMAGES2, (UINT16)IDS_MAX_IMAGES_BYTES_HELP},
+        {(UINT16)IDC_MAX_BYTES_CAPTION2, (UINT16)IDS_MAX_IMAGES_BYTES_HELP},
         {(UINT16)IDC_MAX_BYTES2, (UINT16)IDS_MAX_IMAGES_BYTES_HELP},
+        {(UINT16)IDC_STRETCH_CAPTION2, (UINT16)IDS_CANVAS_STRETCH_HELP},
         {(UINT16)IDC_STRETCH2, (UINT16)IDS_CANVAS_STRETCH_HELP},
+        {(UINT16)IDC_MESHSIZECOMBO_CAPTION, (UINT16)IDS_MESH_SIZE_HELP},
         {(UINT16)IDC_MESHSIZECOMBO, (UINT16)IDS_MESH_SIZE_HELP},
+        {(UINT16)IDC_SHADERS_CAPTION2, (UINT16)IDS_PIXEL_SHADERS_HELP},
         {(UINT16)IDC_SHADERS, (UINT16)IDS_PIXEL_SHADERS_HELP},
+        {(UINT16)IDC_TEXSIZECOMBO_CAPTION, (UINT16)IDS_CANVAS_SIZE_HELP},
         {(UINT16)IDC_TEXSIZECOMBO, (UINT16)IDS_CANVAS_SIZE_HELP},
         {(UINT16)ID_SPRITE, (UINT16)IDS_SPRITE},
         {(UINT16)ID_MSG, (UINT16)IDS_MSG},
@@ -340,10 +495,22 @@ BOOL milk2_preferences_page::OnInitDialog(CWindow, LPARAM)
     };
     // clang-format on
     m_tooltips.Create(get_wnd(), nullptr, nullptr, TTS_ALWAYSTIP | TTS_NOANIMATE);
+    m_tooltip_texts.clear();
+    m_tooltip_texts.reserve(tips.size());
     for (const auto& tip : tips)
     {
         LoadString(core_api::get_my_instance(), tip.second, buf, 256);
-        m_tooltips.AddTool(CToolInfo(TTF_IDISHWND | TTF_SUBCLASS, m_hWnd, (UINT_PTR)GetDlgItem(tip.first).m_hWnd, nullptr, (LPWSTR)buf));
+        m_tooltip_texts.emplace_back(buf);
+        auto* tipText = const_cast<LPWSTR>(m_tooltip_texts.back().c_str());
+        HWND tipWnd = GetDlgItem(tip.first);
+        m_tooltips.AddTool(CToolInfo(TTF_IDISHWND | TTF_SUBCLASS, m_hWnd, (UINT_PTR)tipWnd, nullptr, tipText));
+
+        // Disabled controls don't receive mouse tracking, so add a dialog-rect tool too.
+        if (!::IsWindowEnabled(tipWnd))
+        {
+            RECT rect = control_rect_in_dialog(m_hWnd, tipWnd);
+            m_tooltips.AddTool(CToolInfo(TTF_SUBCLASS, m_hWnd, tip.first, &rect, tipText));
+        }
     }
     m_tooltips.SetMaxTipWidth(200);
     SetWindowTheme(m_tooltips, m_dark ? L"DarkMode_Explorer" : nullptr, nullptr);
@@ -370,8 +537,9 @@ void milk2_preferences_page::OnClose()
 void milk2_preferences_page::OnDestroy()
 {
     PREFS_CONSOLE_LOG("OnDestroy")
-    //if (m_tooltips.IsWindow())
-    //    m_tooltips.DestroyWindow();
+    if (m_tooltips.IsWindow())
+        m_tooltips.DestroyWindow();
+    m_tooltip_texts.clear();
 }
 
 void milk2_preferences_page::OnButtonPushed(UINT uNotifyCode, int nID, CWindow wndCtl)
