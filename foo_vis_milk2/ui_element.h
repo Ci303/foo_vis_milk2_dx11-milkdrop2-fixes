@@ -191,7 +191,9 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     enum milk2_ui_hotkey_id
     {
         IDHK_SHOW_TITLE = 0x2000,
-        IDHK_SHOW_TIME = 0x2001
+        IDHK_SHOW_TIME = 0x2001,
+        IDHK_HARDCUT = 0x2002,
+        IDHK_TOGGLE_FULLSCREEN = 0x2003
     };
 
     // Initialization and management

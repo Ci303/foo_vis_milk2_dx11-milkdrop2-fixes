@@ -17,8 +17,7 @@
 //
 // PRESET LOADING
 //   BACKSPACE: return to previous preset
-//   SPACE: transition to next preset
-//   H: instant hard cut (to next preset)
+//   SPACE / H: instant hard cut (to next preset)
 //   R: toggle random (vs. sequential) preset traversal
 //   L: load a specific preset (invokes the 'Load' menu)
 //   + / -: rate current preset (better / worse)
@@ -40,7 +39,7 @@
 //
 // MUSIC PLAYBACK
 //   Z / X / C / V / B: navigate playlist (prev / play / pause / stop / next)
-//   u / U: toggle shuffle mode forward / back
+//   u / U: cycle playback order forward / back
 //   P: show playlist
 //   up / down arrow: volume up / down
 //   left / right arrow: rewind / forward 5 seconds
@@ -1483,7 +1482,10 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                 if (UI_mode == UI_LOAD)
                     goto HitEnterFromLoadMenu;
                 if (!IsPresetLock())
-                    RandomPreset(s_config.settings.m_fBlendTimeUser); // BUG!: F1 help says this should be soft `NextPreset()`.
+                {
+                    NextPreset(0.0f);
+                    g_plugin.m_fHardCutThresh *= 2.0f;
+                }
                 return;
             case VK_PRIOR:
                 if (UI_mode == UI_LOAD || UI_mode == UI_MASHUP)
@@ -1847,7 +1849,10 @@ void milk2_ui_element::RegisterFocusHotkeys() noexcept
     if (m_focus_hotkeys_registered || !::IsWindow(get_wnd()))
         return;
 
-    if (::RegisterHotKey(get_wnd(), IDHK_SHOW_TITLE, 0, VK_F2) && ::RegisterHotKey(get_wnd(), IDHK_SHOW_TIME, 0, VK_F3))
+    if (::RegisterHotKey(get_wnd(), IDHK_SHOW_TITLE, 0, VK_F2) &&
+        ::RegisterHotKey(get_wnd(), IDHK_SHOW_TIME, 0, VK_F3) &&
+        ::RegisterHotKey(get_wnd(), IDHK_HARDCUT, 0, VK_SPACE) &&
+        ::RegisterHotKey(get_wnd(), IDHK_TOGGLE_FULLSCREEN, MOD_ALT, VK_RETURN))
     {
         m_focus_hotkeys_registered = true;
         return;
@@ -1855,6 +1860,8 @@ void milk2_ui_element::RegisterFocusHotkeys() noexcept
 
     ::UnregisterHotKey(get_wnd(), IDHK_SHOW_TITLE);
     ::UnregisterHotKey(get_wnd(), IDHK_SHOW_TIME);
+    ::UnregisterHotKey(get_wnd(), IDHK_HARDCUT);
+    ::UnregisterHotKey(get_wnd(), IDHK_TOGGLE_FULLSCREEN);
 }
 
 void milk2_ui_element::UnregisterFocusHotkeys() noexcept
@@ -1864,6 +1871,8 @@ void milk2_ui_element::UnregisterFocusHotkeys() noexcept
 
     ::UnregisterHotKey(get_wnd(), IDHK_SHOW_TITLE);
     ::UnregisterHotKey(get_wnd(), IDHK_SHOW_TIME);
+    ::UnregisterHotKey(get_wnd(), IDHK_HARDCUT);
+    ::UnregisterHotKey(get_wnd(), IDHK_TOGGLE_FULLSCREEN);
     m_focus_hotkeys_registered = false;
 }
 
@@ -1901,6 +1910,17 @@ LRESULT milk2_ui_element::OnHotKey(UINT uMsg, WPARAM wParam, LPARAM lParam)
             return 0;
         case IDHK_SHOW_TIME:
             ToggleSongLength();
+            return 0;
+        case IDHK_HARDCUT:
+            if (!IsPresetLock())
+            {
+                NextPreset(0.0f);
+                g_plugin.m_fHardCutThresh *= 2.0f;
+            }
+            return 0;
+        case IDHK_TOGGLE_FULLSCREEN:
+            if (g_plugin.GetFrame() > 0)
+                ToggleFullScreen();
             return 0;
         default:
             return 0;
