@@ -1047,6 +1047,11 @@ BOOL milk2_preferences_page::PluginShellFontDialogProc(HWND hdlg, UINT msg, WPAR
                     ScootControl(hdlg, IDCANCEL, 0, -scoot_factor);
                 }
 
+                // The main preferences page already opts into foobar2000 dark mode,
+                // but this modal font dialog needs its own hooks.
+                m_font_dialog_dark.clear();
+                m_font_dialog_dark.AddDialogWithControls(hdlg);
+
                 HDC hdc = ::GetDC(hdlg);
                 if (hdc)
                 {
@@ -1118,6 +1123,7 @@ BOOL milk2_preferences_page::PluginShellFontDialogProc(HWND hdlg, UINT msg, WPAR
             }
             break;
         case WM_DESTROY:
+            m_font_dialog_dark.clear();
             return 0;
     }
 

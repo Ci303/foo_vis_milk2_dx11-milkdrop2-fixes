@@ -380,6 +380,7 @@ class milk2_preferences_page : public preferences_page_instance, public CDialogI
     CToolTipCtrl m_tooltips;
 
     fb2k::CDarkModeHooks m_dark;
+    fb2k::CDarkModeHooks m_font_dialog_dark;
 };
 
 class preferences_page_milk2 : public preferences_page_impl<milk2_preferences_page>
