@@ -10,6 +10,8 @@
 #include "pch.h"
 #include "config.h"
 
+#include <fstream>
+
 extern HWND g_hWindow;
 
 namespace
@@ -78,6 +80,9 @@ template <size_t N>
 void set_dialog_controls_visibility(HWND dialog, const int (&control_ids)[N], bool visible) noexcept;
 void hide_unsupported_preferences_controls(HWND dialog);
 void update_gamma16_visibility(HWND dialog, bool autoGamma);
+std::string_view get_default_edit_template(LPCWSTR filename) noexcept;
+bool ensure_edit_template_exists(LPCWSTR filePath, LPCWSTR filename);
+std::wstring get_tooltip_text(UINT16 controlId, UINT16 resourceId);
 // clang-format off
 static cfg_bool cfg_bPresetLockOnAtStartup(guid_cfg_bPresetLockOnAtStartup, default_bPresetLockOnAtStartup);
 static cfg_bool cfg_bPreventScollLockHandling(guid_cfg_bPreventScollLockHandling, default_bPreventScollLockHandling);
@@ -247,6 +252,98 @@ void update_gamma16_visibility(HWND dialog, bool autoGamma)
 {
     constexpr bool showLegacyGammaControls = false;
     set_dialog_controls_visibility(dialog, g_gamma16_controls, showLegacyGammaControls && !autoGamma);
+}
+
+std::string_view get_default_edit_template(LPCWSTR filename) noexcept
+{
+    using namespace std::literals;
+
+    if (wcscmp(filename, IMG_INIFILE) == 0)
+    {
+        return R"ini(; MilkDrop custom sprite definitions.
+; Place image files in the "textures" subfolder of your MilkDrop profile directory.
+; Uncomment and adjust a section such as [img00] to define a sprite for preset code.
+;
+; Example:
+; [img00]
+; img=textures\example.png
+; colorkey=0
+; init_1=x=0.5;
+; init_2=y=0.5;
+; code_1=rot=rot+0.01;
+)ini"sv;
+    }
+
+    return R"ini(; MilkDrop custom message definitions.
+; Uncomment and adjust sections such as [font00] and [message00] below.
+;
+; Example:
+; [font00]
+; face=Segoe UI
+; bold=0
+; ital=0
+; r=255
+; g=255
+; b=255
+;
+; [message00]
+; text=Hello from MilkDrop
+; font=0
+; size=40
+; x=0.5
+; y=0.5
+; randx=0
+; randy=0
+; growth=1.0
+; time=1.5
+; fade=0.2
+)ini"sv;
+}
+
+bool ensure_edit_template_exists(LPCWSTR filePath, LPCWSTR filename)
+{
+    std::error_code ec;
+    if (std::filesystem::exists(filePath, ec))
+        return !ec;
+    if (ec)
+        return false;
+
+    const auto path = std::filesystem::path(filePath);
+    const auto parent = path.parent_path();
+    if (!parent.empty())
+    {
+        std::filesystem::create_directories(parent, ec);
+        if (ec)
+            return false;
+    }
+
+    const std::string_view content = get_default_edit_template(filename);
+    std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+    if (!stream.is_open())
+        return false;
+
+    stream.write(content.data(), static_cast<std::streamsize>(content.size()));
+    return static_cast<bool>(stream);
+}
+
+std::wstring get_tooltip_text(UINT16 controlId, UINT16 resourceId)
+{
+    switch (controlId)
+    {
+        case ID_SPRITE:
+            return L"Click this button to edit 'milk2_img.ini', the file that defines custom sprites MilkDrop can invoke. If the file does not exist yet, MilkDrop will create a starter template.";
+        case ID_MSG:
+            return L"Click this button to edit 'milk2_msg.ini', the file that defines custom overlay messages. If the file does not exist yet, MilkDrop will create a starter template.";
+        case IDC_RAND_MSG_LABEL:
+        case IDC_RAND_MSG:
+            return L"The mean (average) time, in seconds, between randomly launched custom messages from 'milk2_msg.ini'. Set to a negative value to disable random launching.";
+        default:
+            break;
+    }
+
+    wchar_t buf[256] = {0};
+    LoadString(core_api::get_my_instance(), resourceId, buf, 256);
+    return buf;
 }
 } // namespace
 
@@ -479,8 +576,8 @@ BOOL milk2_preferences_page::OnInitDialog(CWindow, LPARAM)
 
     // Push buttons.
     milk2_config::initialize_paths();
-    ::EnableWindow(GetDlgItem(ID_SPRITE), static_cast<BOOL>(std::filesystem::exists(default_szImgIniFile)));
-    ::EnableWindow(GetDlgItem(ID_MSG), static_cast<BOOL>(std::filesystem::exists(default_szMsgIniFile)));
+    ::EnableWindow(GetDlgItem(ID_SPRITE), static_cast<BOOL>(default_szImgIniFile[0] != L'\0'));
+    ::EnableWindow(GetDlgItem(ID_MSG), static_cast<BOOL>(default_szMsgIniFile[0] != L'\0'));
 
     // clang-format off
     const std::vector<std::pair<UINT16, UINT16>> tips = {
@@ -550,8 +647,7 @@ BOOL milk2_preferences_page::OnInitDialog(CWindow, LPARAM)
     m_tooltip_texts.reserve(tips.size());
     for (const auto& tip : tips)
     {
-        LoadString(core_api::get_my_instance(), tip.second, buf, 256);
-        m_tooltip_texts.emplace_back(buf);
+        m_tooltip_texts.emplace_back(get_tooltip_text(tip.first, tip.second));
         auto* tipText = const_cast<LPWSTR>(m_tooltip_texts.back().c_str());
         HWND tipWnd = GetDlgItem(tip.first);
         if (!tipWnd || !::IsWindowVisible(tipWnd))
@@ -1082,6 +1178,13 @@ void milk2_preferences_page::OpenToEdit(LPWSTR szDefault, LPCWSTR szFilename)
 
     if (szDefault[0] == L'\0')
         milk2_config::initialize_paths();
+    if (!ensure_edit_template_exists(szDefault, szFilename))
+    {
+        wchar_t title[MAX_PATH] = {0};
+        swprintf_s(title, L"Error Creating \"%ls\"", szFilename);
+        MessageBox(L"MilkDrop could not create the starter configuration file in your profile folder.", title, MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST | MB_TASKMODAL);
+        return;
+    }
     wchar_t szPath[MAX_PATH]{}, szFile[MAX_PATH]{};
     wcscpy_s(szPath, szDefault);
     wchar_t* p = wcsrchr(szPath, L'\\');

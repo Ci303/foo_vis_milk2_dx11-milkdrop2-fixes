@@ -6704,6 +6704,9 @@ void CPlugin::LaunchCustomMessage(int nMsgNum)
             if (m_customMessage[nMsgNum].szText[0])
                 count++;
 
+        if (count == 0)
+            return;
+
         int sel = (warand() % count) + 1;
         count = 0;
         for (nMsgNum = 0; nMsgNum < 100; nMsgNum++)
