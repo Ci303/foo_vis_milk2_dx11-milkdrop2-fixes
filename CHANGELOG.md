@@ -1,5 +1,22 @@
 # MilkDrop 2 Visualization Library Notes
 
+## Release History
+
+### 0.2.1.0 - 2026-04-13
+
+First public standalone release from the independent maintenance repository.
+
+- Added a public x64 GitHub release package for foobar2000 v2 x64.
+- Updated component metadata and embedded project URLs to point to `Ci303/foobar2000-milkdrop2-fixes`.
+- Documented current fixes, installation steps, runtime paths, and release usage in the README.
+- Includes the recent maintenance fixes already merged into this repository:
+  - settings UI cleanup and dark mode fixes
+  - font dialog and album art fixes
+  - keyboard shortcut fixes and help overlay alignment
+  - song time display stabilisation
+  - fullscreen, resize, and settings-apply stability fixes
+  - remembered-preset startup handling improvements
+
 ## Current foobar2000 Component Status
 
 In order to complete the port from Winamp some functionality has been removed, lost, or modified:
