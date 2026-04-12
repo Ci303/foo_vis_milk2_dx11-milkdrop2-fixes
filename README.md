@@ -40,6 +40,8 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 
 ### 1. Install the component
 
+- The easiest install path is the GitHub Releases page for this repository.
+- The first published release is an x64 package intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
 - Import `foo_vis_milk2.fb2k-component` in **File > Preferences > Components > Install...**.
 - Restart foobar2000 after the component is installed.
@@ -87,6 +89,14 @@ If those files are blank or missing, normal playback still works. They are only 
 - `Alt+Enter`: toggle fullscreen
 
 The full shortcut list is also shown in the built-in help overlay.
+
+## Releases
+
+GitHub Releases are the preferred distribution point for this repository.
+
+- Release assets are named to make the target architecture obvious.
+- Current public releases are focused on x64 foobar2000 builds first.
+- If you need a different target from the solution, build it locally from source using the instructions below.
 
 ## Building
 
