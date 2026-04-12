@@ -6,8 +6,89 @@ MilkDrop 2 takes you flying through visualizations of the soundwaves you're hear
 ## Maintenance Status
 
 The original upstream project at `jecassis/foo_vis_milk2` is end-of-life.
-This repository is suitable for use as an independent continuation focused on practical foobar2000 fixes, with current work centered on foobar2000 v2 and x64 testing.
+
+This repository is an independent continuation focused on keeping the foobar2000 component usable on current systems, especially foobar2000 v2 and x64 installs. It keeps the upstream code and licensing intact, but documents and carries the practical fixes that were needed in day-to-day use.
+
+This is not a new renderer or a redesign of MilkDrop. The aim is to keep the DirectX 11 foobar2000 port working reliably, make the preferences pages easier to use, and fix regressions that showed up in real use.
+
 Existing licensing and attribution are preserved under MPL-2.0.
+
+## What Has Been Fixed Here
+
+This repository already includes the DirectX 11 foobar2000 port from upstream. On top of that, the recent maintenance work in this branch focuses on the following:
+
+- Dark mode work for the foobar2000 preferences pages, including the font selection dialog.
+- Preference page cleanup so controls fit properly, focus behaves more predictably, and broken or misleading UI elements have been corrected.
+- Restored working title and time display shortcuts.
+- Shortcut handling aligned with the on-screen help overlay so the documented keys match actual behaviour.
+- Stabilised the song time display so the elapsed and remaining time do not jump around as the timer updates.
+- Fixed album art and font dialog issues in the preferences UI.
+- Improved custom message and sprite helper behaviour so the related settings buttons work with the expected `milk2_msg.ini` and `milk2_img.ini` files.
+- Improved panel resize, fullscreen transitions, and settings-apply handling to avoid freezes and bad reinitialisation behaviour.
+- Added safer startup preset handling so the component remembers the last working preset instead of repeatedly restoring a broken one.
+- Fixed startup behaviour where some remembered presets could open in a degraded state because they required shader fallback on launch.
+
+## Current Behaviour and Limits
+
+- Default UI only. Columns UI is not supported.
+- foobar2000 preferences are used for most component settings.
+- Presets, textures, custom messages and custom sprites still use the `milkdrop2` profile directory.
+- Older presets can still fail or partially render if they depend on unsupported EEL1 syntax, old shader assumptions, or missing texture packs.
+- This is currently tested mainly on foobar2000 v2 x64, although the project can still be built for other targets present in the solution.
+
+## How To Install and Use It
+
+### 1. Install the component
+
+- Download [foobar2000](https://www.foobar2000.org/download) and install it.
+- Import `foo_vis_milk2.fb2k-component` in **File > Preferences > Components > Install...**.
+- Restart foobar2000 after the component is installed.
+
+### 2. Add presets and textures
+
+- Presets go in `<foobar2000 profile folder>\milkdrop2\presets`.
+- Texture packs go in `<foobar2000 profile folder>\milkdrop2\textures`.
+- If you use presets from large packs, install the matching texture pack as well. A lot of "blank", flat-colour, or obviously broken starts are simply missing textures.
+
+Useful preset sources:
+
+- [Cream of the Crop Pack](https://github.com/projectM-visualizer/presets-cream-of-the-crop)
+- [Base Milkdrop Texture Pack](https://github.com/projectM-visualizer/presets-milkdrop-texture-pack)
+- [Milkdrop 2 Presets](https://github.com/projectM-visualizer/presets-milkdrop-original)
+
+### 3. Open MilkDrop in foobar2000
+
+- Add the MilkDrop visualisation element to a Default UI layout, or open it from the visualisations area if your layout already includes it.
+- Open **Preferences > Visualisations > MilkDrop** to configure:
+  - max frame rate
+  - preset timing
+  - hard cuts
+  - title display
+  - image cache
+  - fonts
+
+### 4. Optional custom files
+
+- Custom messages file: `<foobar2000 profile folder>\milkdrop2\milk2_msg.ini`
+- Custom sprites file: `<foobar2000 profile folder>\milkdrop2\milk2_img.ini`
+
+If those files are blank or missing, normal playback still works. They are only used for the optional custom message and sprite features.
+
+### 5. Useful runtime shortcuts
+
+- `F1`: show help
+- `F2`: song title
+- `F3`: time display
+- `F4`: preset name
+- `F5`: frames per second
+- `F6`: preset rating
+- `Space` / `H`: soft cut or hard cut to the next preset
+- `Backspace`: previous preset
+- `Alt+Enter`: toggle fullscreen
+
+The full shortcut list is also shown in the built-in help overlay.
+
+## Building
 
 Prerequisites to build the `foo_vis_milk2.dll` component for foobar2000:
 
@@ -28,9 +109,9 @@ See [BUILDING](BUILDING.md) for solution build instructions.
 
 See [TESTING](TESTING.md) for an outline of how to run a simple unit test and collect runtime coverage.
 
-See [LICENSES](LICENSES.md) to become thoroughly confused.
+See [LICENSES](LICENSES.md) for third-party license details.
 
-## Features
+## Project Features
 
 - Uses DirectX 11.1 (Direct3D 11.1, DXGI 1.6, Direct2D 1.1, DirectWrite 1.1) for rendering.
 - Supports the Default User Interface (Default UI) only.
@@ -43,24 +124,6 @@ See [LICENSES](LICENSES.md) to become thoroughly confused.
 - Tested on foobar2000 v2.1.6 (x86 32-bit and x86 64-bit) and Microsoft Windows 11 (Build 26100.1742).
 - Intel architecture versions support Windows 7 SP1 or later and ARM architecture versions support Windows 10 or later.
   - However, some features such as hybrid graphics, high DPI displays and HDR might not work if the DXGI version required to support them is not on the system.
-
-## Run Requirements and Installation
-
-- Download [foobar2000](https://www.foobar2000.org/download) and install.
-- Import `foo_vis_milk2.fbk2-component` into foobar2000 using the **File > Preferences > Components > Install...** menu item.
-- Download and extract presets into this component's directory of foobar2000. This should be `<foobar2000 profile folder>\milkdrop2\presets`.
-- Textures can also be added to `<foobar2000 profile folder>\milkdrop2\textures` and referenced in their accompanying configuration file `<foobar2000 profile folder>\milkdrop2\milk2_img.ini`.
-- Custom messages can be entered into `<foobar2000 profile folder>\milkdrop2\milk2_msg.ini`.
-
-### Presets
-
-The preset files define the visualizations via pixel shaders, equations and parameters.
-
-The foobar2000 component is not packaged with any presets. Some presets enjoyed by Ryan Geiss (the MilkDrop 2 author) can be downloaded from his [website](https://www.geisswerks.com/milkdrop/). In addition, the projectM repository archives several preset and texture collections:
-
-- [Cream of the Crop Pack](https://github.com/projectM-visualizer/presets-cream-of-the-crop): A collection of about 10,000 presets compiled by Jason Fletcher.
-- [Base Milkdrop Texture Pack](https://github.com/projectM-visualizer/presets-milkdrop-texture-pack): Recommended for use with _any_ preset pack!
-- [Milkdrop 2 Presets](https://github.com/projectM-visualizer/presets-milkdrop-original): The original preset collection shipped with Milkdrop and Winamp.
 
 ## Repository Notes
 
@@ -95,6 +158,13 @@ The build assumes the following directory structure:
  tools\ -> contains the packaging and formatting scripts.
  vis_milk2\ -> contains the MilkDrop 2 visualization library code.
 ```
+
+Additional repository notes:
+
+- Main x64 build output: `Bin\x64\Release\foo_vis_milk2.dll`
+- Typical foobar2000 x64 deployment path: `<foobar2000 profile folder>\user-components-x64\foo_vis_milk2\`
+- Runtime presets, textures and INI files are read from: `<foobar2000 profile folder>\milkdrop2\`
+- This repository is for the stable DirectX 11 foobar2000 component. Experimental DX12 work is intentionally out of scope here.
 
 ### Build Notes
 
