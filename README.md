@@ -3,6 +3,12 @@
 Port of Winamp's MilkDrop 2 visualization library from its original DirectX 9 version to use DirectX 11.1.
 MilkDrop 2 takes you flying through visualizations of the soundwaves you're hearing, and uses beat detection to trigger myriad psychedelic effects, creating a rich visual journey through sound.
 
+## Maintenance Status
+
+The original upstream project at `jecassis/foo_vis_milk2` is end-of-life.
+This repository is suitable for use as an independent continuation focused on practical foobar2000 fixes, with current work centered on foobar2000 v2 and x64 testing.
+Existing licensing and attribution are preserved under MPL-2.0.
+
 Prerequisites to build the `foo_vis_milk2.dll` component for foobar2000:
 
 - [foobar2000 SDK](https://www.foobar2000.org/SDK): download the latest version and uncompress the contents in the `external/` folder and apply the [patch](external/fb2ksdk.patch).
