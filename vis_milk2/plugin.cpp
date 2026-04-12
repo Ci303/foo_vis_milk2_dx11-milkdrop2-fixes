@@ -483,6 +483,7 @@ void CPlugin::MilkDropPreInitialize()
 
     // CONFIG PANEL SETTINGS THAT MilkDrop ADDED (TAB #2)
     m_bInitialPresetSelected = false;
+    m_lastPresetUsedFallback = false;
     m_fBlendTimeUser = 1.7f;
     m_fBlendTimeAuto = 2.7f;
     m_fTimeBetweenPresets = 16.0f;
@@ -587,6 +588,7 @@ void CPlugin::MilkDropPreInitialize()
     m_nPresetListCurPos = 0;
     m_nCurrentPreset = -1;
     m_szCurrentPresetFile[0] = 0;
+    m_szRememberedPreset[0] = 0;
     m_szLoadingPreset[0] = 0;
     m_bPresetListReady = false;
     m_szUpdatePresetMask[0] = 0;
@@ -649,15 +651,18 @@ void CPlugin::MilkDropPreInitialize()
     g_bDebugOutput = false;
     g_bDumpFileCleared = false;
 
-    swprintf_s(m_szMilkdrop2Path, L"%ls%ls", GetPluginsDirPath(), SUBDIR);
-    swprintf_s(m_szPresetDir, L"%lspresets\\", m_szMilkdrop2Path);
-
     // Note that the configuration directory can be under "Program Files" or "Application Data"!!
     wchar_t szConfigDir[MAX_PATH] = {0};
     wcscpy_s(szConfigDir, GetConfigIniFile());
     wchar_t* p = wcsrchr(szConfigDir, L'\\');
     if (p)
         *(p + 1) = L'\0';
+#ifdef _FOOBAR
+    wcscpy_s(m_szMilkdrop2Path, szConfigDir);
+#else
+    swprintf_s(m_szMilkdrop2Path, L"%ls%ls", GetPluginsDirPath(), SUBDIR);
+#endif
+    swprintf_s(m_szPresetDir, L"%lspresets\\", m_szMilkdrop2Path);
     swprintf_s(m_szMsgIniFile, L"%ls%ls", szConfigDir, MSG_INIFILE);
     swprintf_s(m_szImgIniFile, L"%ls%ls", szConfigDir, IMG_INIFILE);
 }
@@ -736,7 +741,12 @@ void CPlugin::MilkDropReadConfig()
 
     GetPrivateProfileString(L"settings", L"szPresetDir", m_szPresetDir, m_szPresetDir, sizeof(m_szPresetDir), pIni);
 #endif
-
+#ifdef _FOOBAR
+    {
+        wchar_t* pIni = GetConfigIniFile();
+        GetPrivateProfileString(L"settings", L"szRememberedPreset", L"", m_szRememberedPreset, ARRAYSIZE(m_szRememberedPreset), pIni);
+    }
+#endif
     ReadCustomMessages();
 
     m_nTexSizeY = m_nTexSizeX;
@@ -765,7 +775,13 @@ void CPlugin::MilkDropReadConfig()
 // to the .INI file here.
 void CPlugin::MilkDropWriteConfig()
 {
-#ifndef _FOOBAR
+#ifdef _FOOBAR
+    wchar_t* pIni = GetConfigIniFile();
+    const wchar_t* remembered_preset = L"";
+    if (m_szRememberedPreset[0] && GetFileAttributes(m_szRememberedPreset) != INVALID_FILE_ATTRIBUTES)
+        remembered_preset = m_szRememberedPreset;
+    WritePrivateProfileString(L"settings", L"szRememberedPreset", remembered_preset, pIni);
+#else
     // Use this function           declared in   to write a value of this type
     // -----------------           -----------   -----------------------------
     // WritePrivateProfileInt      utility.h     int
@@ -1772,7 +1788,29 @@ int CPlugin::AllocateMilkDropDX11()
     if (!m_bInitialPresetSelected)
     {
         UpdatePresetList(true); // ...just does its initial burst!
-        LoadRandomPreset(0.0f);
+
+        bool loaded_supported_preset = false;
+        if (m_szRememberedPreset[0] && GetFileAttributes(m_szRememberedPreset) != INVALID_FILE_ATTRIBUTES)
+        {
+            SetPresetListPosition(m_szRememberedPreset);
+            LoadPreset(m_szRememberedPreset, 0.0f);
+            loaded_supported_preset = !m_lastPresetUsedFallback;
+        }
+
+        if (!loaded_supported_preset)
+        {
+            const int attempts = std::max(1, std::min(12, m_nPresets - m_nDirs));
+            for (int attempt = 0; attempt < attempts; attempt++)
+            {
+                LoadRandomPreset(0.0f);
+                if (!m_lastPresetUsedFallback)
+                {
+                    loaded_supported_preset = true;
+                    break;
+                }
+            }
+        }
+
         m_bInitialPresetSelected = true;
     }
     else
@@ -2843,6 +2881,7 @@ bool CPlugin::LoadShaders(PShaderSet* sh, CState* pState, bool bTick)
         bool bOK = RecompilePShader(pState->m_szWarpShadersText, &sh->warp, SHADER_WARP, false, pState->m_nWarpPSVersion);
         if (!bOK)
         {
+            m_lastPresetUsedFallback = true;
             // Switch to fallback shader.
             m_fallbackShaders_ps.warp.ptr->AddRef();
             m_fallbackShaders_ps.warp.CT->AddRef();
@@ -2860,6 +2899,7 @@ bool CPlugin::LoadShaders(PShaderSet* sh, CState* pState, bool bTick)
         bool bOK = RecompilePShader(pState->m_szCompShadersText, &sh->comp, SHADER_COMP, false, pState->m_nCompPSVersion);
         if (!bOK)
         {
+            m_lastPresetUsedFallback = true;
             // Switch to fallback shader.
             m_fallbackShaders_ps.comp.ptr->AddRef();
             m_fallbackShaders_ps.comp.CT->AddRef();
@@ -5557,7 +5597,13 @@ void CPlugin::LoadPreset(const wchar_t* szPresetFilename, float fBlendTime)
         m_OldShaders = m_shaders;
         ZeroMemory(&m_shaders, sizeof(PShaderSet));
 
+        m_lastPresetUsedFallback = false;
         LoadShaders(&m_shaders, m_pState, false);
+
+        if (!m_lastPresetUsedFallback)
+        {
+            wcscpy_s(m_szRememberedPreset, szPresetFilename);
+        }
 
         OnFinishedLoadingPreset();
     }

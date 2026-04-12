@@ -602,6 +602,9 @@ int CPluginShell::PluginInitialize(int iWidth, int iHeight)
 
 void CPluginShell::PluginQuit()
 {
+#ifdef _FOOBAR
+    MilkDropWriteConfig();
+#endif
     CleanUpDX11(1);
     CleanUpNonDX11();
     CleanUpDirectX();

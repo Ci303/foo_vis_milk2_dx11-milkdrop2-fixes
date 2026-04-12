@@ -441,6 +441,8 @@ class CPlugin : public CPluginShell
                              //   Note that this is NOT the same as the currently-highlighted preset! (that's m_nPresetListCurPos)
                              //   Be careful - this can be -1 if the user changed dir. & a new preset hasn't been loaded yet.
     wchar_t m_szCurrentPresetFile[512]; // w/o path.  this is always valid (unless no presets were found)
+    wchar_t m_szRememberedPreset[512];
+    bool m_lastPresetUsedFallback;
     PresetList m_presets;
     void UpdatePresetList(bool bBackground = false, bool bForce = false, bool bTryReselectCurrentPreset = true) const;
     wchar_t m_szUpdatePresetMask[MAX_PATH];
