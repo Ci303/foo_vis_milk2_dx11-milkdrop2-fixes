@@ -38,6 +38,24 @@ DWORD get_refresh_interval_ms(uint32_t max_fps) noexcept
     return (std::max)(1L, lround(1000.0 / static_cast<double>(max_fps)));
 }
 
+void normalize_render_size(int& width, int& height) noexcept
+{
+    if (width < 128)
+        width = 128;
+    if (height < 128)
+        height = 128;
+}
+
+void log_runtime_exception(const char* where, const std::exception& exc) noexcept
+{
+    FB2K_console_print(core_api::get_my_file_name(), ": ", where, " failed - ", exc.what());
+}
+
+void log_runtime_exception(const char* where) noexcept
+{
+    FB2K_console_print(core_api::get_my_file_name(), ": ", where, " failed - unknown exception");
+}
+
 milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_instance_callback_ptr p_callback) :
     m_callback(p_callback),
     m_bMsgHandled(TRUE),
@@ -361,13 +379,27 @@ void milk2_ui_element::OnMove(CPoint ptPos)
     MILK2_CONSOLE_LOG("OnMove ", GetWnd())
     if (m_milk2)
     {
+        bool lock_held = false;
+        try
+        {
 #ifdef TIMER_TP
-        if (TryEnterCriticalSection(&s_cs) == 0)
-            return;
+            if (TryEnterCriticalSection(&s_cs) == 0)
+                return;
+            lock_held = true;
 #endif
-        g_plugin.OnWindowMoved();
+            g_plugin.OnWindowMoved();
+        }
+        catch (const std::exception& exc)
+        {
+            log_runtime_exception("OnWindowMoved", exc);
+        }
+        catch (...)
+        {
+            log_runtime_exception("OnWindowMoved");
+        }
 #ifdef TIMER_TP
-        LeaveCriticalSection(&s_cs);
+        if (lock_held)
+            LeaveCriticalSection(&s_cs);
 #endif
     }
 }
@@ -399,18 +431,29 @@ void milk2_ui_element::OnSize(UINT nType, CSize size)
 
         if (!width || !height)
             return;
-        if (width < 128)
-            width = 128;
-        if (height < 128)
-            height = 128;
+        normalize_render_size(width, height);
         MILK2_CONSOLE_LOG("OnSize1 ", nType, ", ", size.cx, ", ", size.cy, ", ", GetWnd())
+        bool lock_held = false;
+        try
+        {
 #ifdef TIMER_TP
-        if (TryEnterCriticalSection(&s_cs) == 0)
-            return;
+            if (TryEnterCriticalSection(&s_cs) == 0)
+                return;
+            lock_held = true;
 #endif
-        g_plugin.OnWindowSizeChanged(size.cx, size.cy);
+            g_plugin.OnWindowSizeChanged(width, height);
+        }
+        catch (const std::exception& exc)
+        {
+            log_runtime_exception("OnWindowSizeChanged", exc);
+        }
+        catch (...)
+        {
+            log_runtime_exception("OnWindowSizeChanged");
+        }
 #ifdef TIMER_TP
-        LeaveCriticalSection(&s_cs);
+        if (lock_held)
+            LeaveCriticalSection(&s_cs);
 #endif
     }
 }
@@ -427,15 +470,34 @@ void milk2_ui_element::OnExitSizeMove()
     m_in_sizemove = false;
     if (m_milk2)
     {
-#ifdef TIMER_TP
-        if (TryEnterCriticalSection(&s_cs) == 0)
-            return;
-#endif
-        RECT rc;
+        bool lock_held = false;
+        RECT rc{};
         WIN32_OP_D(GetClientRect(&rc));
-        g_plugin.OnWindowSizeChanged(rc.right - rc.left, rc.bottom - rc.top);
+        int width = rc.right - rc.left;
+        int height = rc.bottom - rc.top;
+        if (!width || !height)
+            return;
+        normalize_render_size(width, height);
+        try
+        {
 #ifdef TIMER_TP
-        LeaveCriticalSection(&s_cs);
+            if (TryEnterCriticalSection(&s_cs) == 0)
+                return;
+            lock_held = true;
+#endif
+            g_plugin.OnWindowSizeChanged(width, height);
+        }
+        catch (const std::exception& exc)
+        {
+            log_runtime_exception("OnExitSizeMove resize", exc);
+        }
+        catch (...)
+        {
+            log_runtime_exception("OnExitSizeMove resize");
+        }
+#ifdef TIMER_TP
+        if (lock_held)
+            LeaveCriticalSection(&s_cs);
 #endif
     }
 }
@@ -485,7 +547,18 @@ void milk2_ui_element::OnDisplayChange(UINT uBitsPerPixel, CSize sizeScreen)
     MILK2_CONSOLE_LOG("OnDisplayChange ", GetWnd())
     if (m_milk2)
     {
-        g_plugin.OnDisplayChange();
+        try
+        {
+            g_plugin.OnDisplayChange();
+        }
+        catch (const std::exception& exc)
+        {
+            log_runtime_exception("OnDisplayChange", exc);
+        }
+        catch (...)
+        {
+            log_runtime_exception("OnDisplayChange");
+        }
     }
 }
 
@@ -917,37 +990,56 @@ LRESULT milk2_ui_element::OnConfigurationChange(UINT uMsg, WPARAM wParam, LPARAM
     MILK2_CONSOLE_LOG("OnConfigurationChange ", GetWnd())
     if (uMsg != WM_CONFIG_CHANGE)
         return 1;
-    switch (wParam)
+    bool lock_held = false;
+    try
     {
-        case 0: // Preferences Dialog
-            {
-                s_config.reset();
-                m_script.reset();
-                m_refresh_interval = get_refresh_interval_ms(s_config.settings.m_max_fps_fs);
-                g_plugin.PanelSettings(&s_config.settings);
+        switch (wParam)
+        {
+            case 0: // Preferences Dialog
+                {
 #ifdef TIMER_TP
-                StartTimer();
+                    EnterCriticalSection(&s_cs);
+                    lock_held = true;
 #endif
-                break;
-            }
-        case 1: // Advanced Preferences
-            {
-                break;
-            }
+                    s_config.reset();
+                    m_script.reset();
+                    m_refresh_interval = get_refresh_interval_ms(s_config.settings.m_max_fps_fs);
+                    g_plugin.PanelSettings(&s_config.settings);
+#ifdef TIMER_TP
+                    StartTimer();
+#endif
+                    if (s_milk2 && m_milk2)
+                    {
+                        RECT rect{};
+                        GetClientRect(&rect);
+                        int width = rect.right - rect.left;
+                        int height = rect.bottom - rect.top;
+                        if (width > 0 && height > 0)
+                        {
+                            normalize_render_size(width, height);
+                            g_plugin.OnWindowSizeChanged(width, height);
+                        }
+                    }
+                    break;
+                }
+            case 1: // Advanced Preferences
+                {
+                    break;
+                }
+        }
     }
-
-    if (s_milk2 && m_milk2)
+    catch (const std::exception& exc)
     {
+        log_runtime_exception("OnConfigurationChange", exc);
+    }
+    catch (...)
+    {
+        log_runtime_exception("OnConfigurationChange");
+    }
 #ifdef TIMER_TP
-        EnterCriticalSection(&s_cs);
-#endif
-        RECT rect{};
-        GetClientRect(&rect);
-        g_plugin.OnWindowSizeChanged(rect.right - rect.left, rect.bottom - rect.top);
-#ifdef TIMER_TP
+    if (lock_held)
         LeaveCriticalSection(&s_cs);
 #endif
-    }
     SetMsgHandled(TRUE);
 
     return 0;
@@ -956,49 +1048,72 @@ LRESULT milk2_ui_element::OnConfigurationChange(UINT uMsg, WPARAM wParam, LPARAM
 // Initialize the Direct3D resources required to run.
 bool milk2_ui_element::Initialize(HWND window, int width, int height)
 {
-    g_hWindow = get_wnd();
-
-    if (!s_milk2)
+    bool lock_held = false;
+    try
     {
-        if (FALSE == g_plugin.PluginPreInitialize(window, core_api::get_my_instance()))
-            return false;
-        if (!g_plugin.PanelSettings(&s_config.settings))
-            return false;
+        g_hWindow = get_wnd();
+        normalize_render_size(width, height);
 
-        //swprintf_s(g_plugin.m_szPluginsDirPath, L"%ls", s_config.settings.m_szPluginsDirPath);
-        //swprintf_s(g_plugin.m_szConfigIniFile, L"%ls", s_config.settings.m_szConfigIniFile);
-        swprintf_s(g_plugin.m_szComponentDirPath, L"%ls", const_cast<wchar_t*>(m_pwd.c_str()));
+        if (!s_milk2)
+        {
+            if (FALSE == g_plugin.PluginPreInitialize(window, core_api::get_my_instance()))
+                return false;
+            if (!g_plugin.PanelSettings(&s_config.settings))
+                return false;
 
+            //swprintf_s(g_plugin.m_szPluginsDirPath, L"%ls", s_config.settings.m_szPluginsDirPath);
+            //swprintf_s(g_plugin.m_szConfigIniFile, L"%ls", s_config.settings.m_szConfigIniFile);
+            swprintf_s(g_plugin.m_szComponentDirPath, L"%ls", const_cast<wchar_t*>(m_pwd.c_str()));
+        }
+
+        g_plugin.SetWinampWindow(window);
+
+        if (!s_milk2)
+        {
+            if (FALSE == g_plugin.PluginInitialize(width, height))
+                return false;
+
+            HICON hIcon = ::LoadIcon(_AtlBaseModule.GetResourceInstance(), MAKEINTRESOURCE(IDI_MILK2_ICON));
+            HWND parent = GetRealParent(get_wnd());
+            ::SetClassLongPtr(parent, GCLP_HICON, (LONG_PTR)hIcon);
+            ::SetClassLongPtr(parent, GCLP_HICONSM, (LONG_PTR)hIcon);
+
+            s_milk2 = true;
+        }
+        else
+        {
+#ifdef TIMER_TP
+            EnterCriticalSection(&s_cs);
+            lock_held = true;
+#endif
+            g_plugin.OnWindowSwap(window, width, height);
+#ifdef TIMER_TP
+            if (lock_held)
+                LeaveCriticalSection(&s_cs);
+#endif
+        }
+
+        m_milk2 = true;
+        return true;
     }
-
-    g_plugin.SetWinampWindow(window);
-
-    if (!s_milk2)
-    {
-        if (FALSE == g_plugin.PluginInitialize(width, height))
-            return false;
-
-        HICON hIcon = ::LoadIcon(_AtlBaseModule.GetResourceInstance(), MAKEINTRESOURCE(IDI_MILK2_ICON));
-        HWND parent = GetRealParent(get_wnd());
-        ::SetClassLongPtr(parent, GCLP_HICON, (LONG_PTR)hIcon);
-        ::SetClassLongPtr(parent, GCLP_HICONSM, (LONG_PTR)hIcon);
-
-        s_milk2 = true;
-    }
-    else
+    catch (const std::exception& exc)
     {
 #ifdef TIMER_TP
-        EnterCriticalSection(&s_cs);
+        if (lock_held)
+            LeaveCriticalSection(&s_cs);
 #endif
-        g_plugin.OnWindowSwap(window, width, height);
-#ifdef TIMER_TP
-        LeaveCriticalSection(&s_cs);
-#endif
+        log_runtime_exception("Initialize", exc);
+        return false;
     }
-
-    m_milk2 = true;
-
-    return true;
+    catch (...)
+    {
+#ifdef TIMER_TP
+        if (lock_held)
+            LeaveCriticalSection(&s_cs);
+#endif
+        log_runtime_exception("Initialize");
+        return false;
+    }
 }
 
 #pragma region Frame Update
@@ -1014,7 +1129,18 @@ void milk2_ui_element::Tick()
     m_timer.Tick([&]() { Update(m_timer); });
 #endif
 
-    Render();
+    try
+    {
+        Render();
+    }
+    catch (const std::exception& exc)
+    {
+        log_runtime_exception("Render tick", exc);
+    }
+    catch (...)
+    {
+        log_runtime_exception("Render tick");
+    }
 
 #ifdef TIMER_TP
     LeaveCriticalSection(&s_cs);
@@ -1047,9 +1173,38 @@ HRESULT milk2_ui_element::Render()
     }
 #endif
 
-    Clear();
+    try
+    {
+        RECT rect{};
+        if (m_milk2 && GetClientRect(&rect))
+        {
+            int width = rect.right - rect.left;
+            int height = rect.bottom - rect.top;
+            if (width > 0 && height > 0)
+            {
+                normalize_render_size(width, height);
+                const int current_width = g_plugin.m_lpDX ? g_plugin.m_lpDX->m_client_width : 0;
+                const int current_height = g_plugin.m_lpDX ? g_plugin.m_lpDX->m_client_height : 0;
+                if (width != current_width || height != current_height)
+                {
+                    g_plugin.OnWindowSizeChanged(width, height);
+                }
+            }
+        }
 
-    return g_plugin.PluginRender(waves[0].data(), waves[1].data());
+        Clear();
+        return g_plugin.PluginRender(waves[0].data(), waves[1].data());
+    }
+    catch (const std::exception& exc)
+    {
+        log_runtime_exception("PluginRender", exc);
+        return E_FAIL;
+    }
+    catch (...)
+    {
+        log_runtime_exception("PluginRender");
+        return E_FAIL;
+    }
 }
 
 // Clears the back buffers and the window contents.
@@ -1154,39 +1309,50 @@ void milk2_ui_element::ToggleFullScreen()
     MILK2_CONSOLE_LOG("ToggleFullScreen0 ", GetWnd())
     if (m_milk2)
     {
-        if (!s_fullscreen)
+        try
         {
-            g_hWindow = get_wnd();
-            m_milk2 = false;
-        }
+            if (!s_fullscreen)
+            {
+                g_hWindow = get_wnd();
+                m_milk2 = false;
+            }
 #if 0
-        if (s_fullscreen)
-        {
-            SetWindowLongPtr(GWL_STYLE, WS_OVERLAPPEDWINDOW);
-            SetWindowLongPtr(GWL_EXSTYLE, 0);
+            if (s_fullscreen)
+            {
+                SetWindowLongPtr(GWL_STYLE, WS_OVERLAPPEDWINDOW);
+                SetWindowLongPtr(GWL_EXSTYLE, 0);
 
-            int width = 800;
-            int height = 600;
+                int width = 800;
+                int height = 600;
 
-            ShowWindow(SW_SHOWNORMAL);
+                ShowWindow(SW_SHOWNORMAL);
 
-            SetWindowPos(HWND_TOP, 0, 0, width, height, SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED);
-        }
-        else
-        {
-            SetWindowLongPtr(GWL_STYLE, WS_POPUP);
-            SetWindowLongPtr(GWL_EXSTYLE, WS_EX_TOPMOST);
+                SetWindowPos(HWND_TOP, 0, 0, width, height, SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED);
+            }
+            else
+            {
+                SetWindowLongPtr(GWL_STYLE, WS_POPUP);
+                SetWindowLongPtr(GWL_EXSTYLE, WS_EX_TOPMOST);
 
-            SetWindowPos(HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+                SetWindowPos(HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
 
-            ShowWindow(SW_SHOWMAXIMIZED);
-        }
+                ShowWindow(SW_SHOWMAXIMIZED);
+            }
 #endif
-        s_fullscreen = !s_fullscreen;
-        s_in_toggle = true;
-        SetTopMost();
-        static_api_ptr_t<ui_element_common_methods_v2>()->toggle_fullscreen(g_get_guid(), core_api::get_main_window());
-        MILK2_CONSOLE_LOG("ToggleFullScreen1 ", GetWnd())
+            s_fullscreen = !s_fullscreen;
+            s_in_toggle = true;
+            SetTopMost();
+            static_api_ptr_t<ui_element_common_methods_v2>()->toggle_fullscreen(g_get_guid(), core_api::get_main_window());
+            MILK2_CONSOLE_LOG("ToggleFullScreen1 ", GetWnd())
+        }
+        catch (const std::exception& exc)
+        {
+            log_runtime_exception("ToggleFullScreen", exc);
+        }
+        catch (...)
+        {
+            log_runtime_exception("ToggleFullScreen");
+        }
     }
 }
 
