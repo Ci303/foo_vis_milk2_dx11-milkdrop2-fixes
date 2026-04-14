@@ -2,6 +2,14 @@
 
 ## Release History
 
+### 0.2.1.1 - 2026-04-14
+
+Small hotfix release for the independent x64 maintenance branch.
+
+- Stopped song title and song time overlays from appearing on startup.
+- Kept `F2` / `F3` as runtime-only toggles instead of persisted startup state.
+- Fixed the local Visual Studio project reference for the foobar2000 component client so the x64 build works from the current repo layout.
+
 ### 0.2.1.0 - 2026-04-13
 
 First public standalone release from the independent maintenance repository.
