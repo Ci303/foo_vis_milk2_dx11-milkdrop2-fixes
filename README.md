@@ -55,12 +55,19 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Presets go in `<foobar2000 profile folder>\milkdrop2\presets`.
 - Texture packs go in `<foobar2000 profile folder>\milkdrop2\textures`.
 - If you use presets from large packs, install the matching texture pack as well. A lot of "blank", flat-colour, or obviously broken starts are simply missing textures.
+- If you want to bootstrap the recommended packs automatically, run [tools/install-milkdrop-resources.ps1](tools/install-milkdrop-resources.ps1). By default it targets `%AppData%\foobar2000-v2` and installs the recommended preset and texture repositories into the correct `milkdrop2` folders.
 
 Useful preset sources:
 
 - [Cream of the Crop Pack](https://github.com/projectM-visualizer/presets-cream-of-the-crop)
 - [Base Milkdrop Texture Pack](https://github.com/projectM-visualizer/presets-milkdrop-texture-pack)
 - [Milkdrop 2 Presets](https://github.com/projectM-visualizer/presets-milkdrop-original)
+
+Example:
+
+```powershell
+.\tools\install-milkdrop-resources.ps1
+```
 
 ### 3. Open MilkDrop in foobar2000
 
