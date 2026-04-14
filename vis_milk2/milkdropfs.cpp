@@ -343,36 +343,31 @@ bool CPlugin::RenderStringToTitleTexture()
     else // Song title
     {
         D2D1_RECT_F temp{};
-        std::unique_ptr<TextStyle> m_gdi_title_font_doublesize;
-        wchar_t* str = m_supertext.szText;
+        std::unique_ptr<TextStyle> gdi_font;
+        wchar_t clippedText[256];
+        wcscpy_s(clippedText, m_supertext.szText);
+        const wchar_t* str = clippedText;
 
-        // Create `m_gdi_title_font_doublesize`.
-        int songtitle_font_size = m_fontinfo[SONGTITLE_FONT].nSize * m_nTitleTexSizeX / 256;
-        if (songtitle_font_size < 6)
-            songtitle_font_size = 6;
+        const int requested_font_size = (std::max)(6, static_cast<int>(m_fontinfo[SONGTITLE_FONT].nSize * m_nTitleTexSizeX / 256));
+        const int font_count = sizeof(g_title_font_sizes) / sizeof(int);
 
-        m_gdi_title_font_doublesize = std::make_unique<TextStyle>(
-            m_fontinfo[SONGTITLE_FONT].szFace,
-            static_cast<float>(songtitle_font_size),
-            m_fontinfo[SONGTITLE_FONT].bBold ? DWRITE_FONT_WEIGHT_BLACK : DWRITE_FONT_WEIGHT_REGULAR,
-            m_fontinfo[SONGTITLE_FONT].bItalic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_TEXT_ALIGNMENT_CENTER,
-            DWRITE_TRIMMING_GRANULARITY_NONE
-        );
-        //if (!m_gdi_title_font_doublesize)
-        //{
-        //    MessageBox(NULL, WASABI_API_LNGSTRINGW(IDS_ERROR_CREATING_DOUBLE_SIZED_GDI_TITLE_FONT), WASABI_API_LNGSTRINGW_BUF(IDS_MILKDROP_ERROR, title, sizeof(title)), MB_OK | MB_SETFOREGROUND | MB_TOPMOST);
-        //    return false;
-        //}
+        int hi = 0;
+        while (hi + 1 < font_count && g_title_font_sizes[hi + 1] <= requested_font_size)
+            hi++;
 
-        // Clip the text manually...
-        // NOTE: DT_END_ELLIPSIS CAUSES NOTHING TO DRAW.
-        int h = 0;
-        int max_its = 6;
-        int it = 0;
-        while (it < max_its)
+        int lo = 0;
+        while (lo < hi)
         {
-            it++;
+            int mid = (lo + hi + 1) / 2;
+
+            gdi_font = std::make_unique<TextStyle>(
+                m_fontinfo[SONGTITLE_FONT].szFace,
+                static_cast<float>(g_title_font_sizes[mid]),
+                m_fontinfo[SONGTITLE_FONT].bBold ? DWRITE_FONT_WEIGHT_BLACK : DWRITE_FONT_WEIGHT_REGULAR,
+                m_fontinfo[SONGTITLE_FONT].bItalic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_TEXT_ALIGNMENT_CENTER,
+                DWRITE_TRIMMING_GRANULARITY_NONE
+            );
 
             temp = rect;
             if (!m_ddsTitle.IsVisible())
@@ -384,26 +379,58 @@ bool CPlugin::RenderStringToTitleTexture()
             m_ddsTitle.SetTextOpacity(fTextColor.a);
             m_ddsTitle.SetContainer(temp);
             m_ddsTitle.SetText(str);
-            m_ddsTitle.SetTextStyle(m_gdi_title_font_doublesize.get());
+            m_ddsTitle.SetTextStyle(gdi_font.get());
             m_ddsTitle.SetTextShadow(true);
-            h = m_text.DrawD2DText(m_gdi_title_font_doublesize.get(), &m_ddsTitle, str, &temp, /*DT_NOPREFIX | DT_END_ELLIPSIS*/ DT_SINGLELINE | DT_CALCRECT, textColor, false);
-            if (static_cast<int>(temp.right - temp.left) <= m_nTitleTexSizeX)
+
+            temp = m_ddsTitle.GetBounds(m_lpDX->GetDWriteFactory());
+            const float width = temp.right - temp.left;
+            const float height = temp.bottom - temp.top;
+            if (width <= rect.right - rect.left && height <= rect.bottom - rect.top)
+                lo = mid;
+            else
+                hi = mid - 1;
+        }
+
+        gdi_font = std::make_unique<TextStyle>(
+            m_fontinfo[SONGTITLE_FONT].szFace,
+            static_cast<float>(g_title_font_sizes[lo]),
+            m_fontinfo[SONGTITLE_FONT].bBold ? DWRITE_FONT_WEIGHT_BLACK : DWRITE_FONT_WEIGHT_REGULAR,
+            m_fontinfo[SONGTITLE_FONT].bItalic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_TEXT_ALIGNMENT_CENTER,
+            DWRITE_TRIMMING_GRANULARITY_NONE
+        );
+
+        // Measure once at the fitted size; if the title is still too wide even at the
+        // minimum allowed font, clip the tail as a last resort instead of rendering nothing.
+        int h = 0;
+        for (int it = 0; it < 6; it++)
+        {
+            temp = rect;
+            if (!m_ddsTitle.IsVisible())
+            {
+                m_ddsTitle.Initialize(pRenderTarget.Get() /*m_lpDX->GetD2DDeviceContext()*/);
+            }
+            m_ddsTitle.SetAlignment(AlignCenter, AlignCenter);
+            m_ddsTitle.SetTextColor(fTextColor);
+            m_ddsTitle.SetTextOpacity(fTextColor.a);
+            m_ddsTitle.SetContainer(temp);
+            m_ddsTitle.SetText(str);
+            m_ddsTitle.SetTextStyle(gdi_font.get());
+            m_ddsTitle.SetTextShadow(true);
+            h = m_text.DrawD2DText(gdi_font.get(), &m_ddsTitle, str, &temp, DT_SINGLELINE | DT_CALCRECT, textColor, false);
+
+            const float width = temp.right - temp.left;
+            if (width <= rect.right - rect.left)
                 break;
 
-            // Manually clip the text... chop segments off the front.
-            /*wchar_t* p = wcsstr(str, L" - ");
-            if (p)
-            {
-                str = p + 3;
-                continue;
-            }*/
+            size_t len = wcsnlen_s(clippedText, _countof(clippedText));
+            if (len <= 8)
+                break;
 
-            // No more stuff to chop off the front; chop off the end with "...".
-            size_t len = wcsnlen_s(str, 256);
-            float fPercentToKeep = 0.91f * m_nTitleTexSizeX / (temp.right - temp.left);
-            if (len > 8)
-                lstrcpy(&str[(int)(len * fPercentToKeep)], L"...");
-            break;
+            const float keep_ratio = 0.91f * (rect.right - rect.left) / width;
+            size_t clip_at = static_cast<size_t>(len * keep_ratio);
+            clip_at = std::min(len - 3, std::max<size_t>(5, clip_at));
+            wcscpy_s(&clippedText[clip_at], _countof(clippedText) - clip_at, L"...");
         }
 
         // Now actually draw it.
@@ -415,7 +442,7 @@ bool CPlugin::RenderStringToTitleTexture()
         pRenderTarget->BeginDraw();
         m_ddsTitle.Render(pRenderTarget.Get(), m_lpDX->GetDWriteFactory());
         hr = pRenderTarget->EndDraw();
-        m_supertext.nFontSizeUsed = m_text.DrawD2DText(m_gdi_title_font_doublesize.get(), &m_ddsTitle, str, &temp, DT_SINGLELINE | DT_CENTER /*| DT_NOPREFIX | DT_END_ELLIPSIS*/, textColor, false);
+        m_supertext.nFontSizeUsed = m_text.DrawD2DText(gdi_font.get(), &m_ddsTitle, str, &temp, DT_SINGLELINE | DT_CENTER, textColor, false);
         m_ddsTitle.ReleaseDeviceDependentResources();
 
         ret = true;

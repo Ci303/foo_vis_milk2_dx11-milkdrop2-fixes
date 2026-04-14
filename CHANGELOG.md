@@ -2,6 +2,13 @@
 
 ## Release History
 
+### 0.2.1.5 - 2026-04-14
+
+Hotfix release for song title rendering in the foobar2000 x64 component.
+
+- Scaled song titles down to the largest size that fits the title texture instead of relying on a fixed oversize render.
+- Kept `...` clipping as a last-resort fallback when a title is still too wide at the minimum allowed size.
+
 ### 0.2.1.4 - 2026-04-14
 
 Follow-up hotfix release for wait-string rendering and cursor safety in the foobar2000 x64 component.
