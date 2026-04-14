@@ -890,6 +890,8 @@
 #define IDC_FONTAA9                     1092
 //#define IDC_FONT1b                      1093
 #define IDC_FONT1                       1093
+#define IDC_CB_MOUSE_WHEEL_VOLUME       1094
+#define IDC_CB_MOUSE_CLICK_PLAYPAUSE    1095
 #define ID_SHOWHELP                     40007
 #define ID_SHOWPLAYLIST                 40008
 #define ID_QUIT                         40009
@@ -902,7 +904,7 @@
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        103
 #define _APS_NEXT_COMMAND_VALUE         40011
-#define _APS_NEXT_CONTROL_VALUE         1094
+#define _APS_NEXT_CONTROL_VALUE         1096
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

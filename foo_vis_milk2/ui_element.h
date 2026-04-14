@@ -83,6 +83,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
         MSG_WM_SETFOCUS(OnSetFocus)
         MSG_WM_KILLFOCUS(OnKillFocus)
         MSG_WM_LBUTTONDOWN(OnLButtonDown)
+        MSG_WM_MOUSEWHEEL(OnMouseWheel)
         MSG_WM_CONTEXTMENU(OnContextMenu)
         MSG_WM_LBUTTONDBLCLK(OnLButtonDblClk)
         MSG_WM_POWERBROADCAST(OnPowerBroadcast)
@@ -140,6 +141,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     void OnSetFocus(CWindow wndOld);
     void OnKillFocus(CWindow wndFocus);
     void OnLButtonDown(UINT nFlags, CPoint point);
+    BOOL OnMouseWheel(UINT nFlags, short zDelta, CPoint point);
     void OnContextMenu(CWindow wnd, CPoint point);
     void OnLButtonDblClk(UINT nFlags, CPoint point);
     LRESULT OnHotKey(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -157,6 +159,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     bool m_in_suspend;
     bool m_minimized;
     bool m_focus_hotkeys_registered;
+    bool m_pending_single_click;
 
     DWORD m_refresh_interval;
     double m_last_time;
@@ -169,6 +172,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
         ID_REFRESH_TIMER = 1
     };
 #endif
+    static constexpr UINT_PTR ID_CLICK_TIMER = 2;
 
     enum milk2_ui_menu_id
     {
@@ -321,6 +325,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     // clang-format on
 
     // Text
+    void LaunchStatusText(const wchar_t* text);
     void LaunchSongTitle();
 };
 

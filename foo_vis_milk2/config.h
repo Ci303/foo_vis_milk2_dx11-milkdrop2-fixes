@@ -167,6 +167,12 @@ static constexpr GUID guid_cfg_bEnableDownmix = {
 static constexpr GUID guid_cfg_bShowAlbum = {
     0x2caa50c, 0x6910, 0x42c6, {0x9a, 0xff, 0xa5, 0xa5, 0x52, 0xb5, 0xd2, 0x6b}
 }; // {02CAA50C-6910-42C6-9AFF-A5A552B5D26B}
+static constexpr GUID guid_cfg_bEnableMouseWheelVolume = {
+    0x29db2053, 0xa548, 0x4ae8, {0xa4, 0x72, 0x35, 0xca, 0x41, 0xdb, 0xf4, 0x7b}
+}; // {29DB2053-A548-4AE8-A472-35CA41DBF47B}
+static constexpr GUID guid_cfg_bEnableMouseClickPlayPause = {
+    0x1b4f7e91, 0x6c31, 0x44eb, {0x91, 0x1f, 0xeb, 0x4c, 0x65, 0xee, 0x3b, 0xf8}
+}; // {1B4F7E91-6C31-44EB-911F-EB4C65EE3BF8}
 
 // Preferences derived from other settings or hidden.
 static constexpr GUID guid_cfg_bTexSizeWasAutoPow2 = {
@@ -250,6 +256,8 @@ static constexpr float default_fTimeBetweenRandomSongTitles = -1.0f;
 static constexpr float default_fTimeBetweenRandomCustomMsgs = -1.0f;
 static constexpr bool default_bEnableDownmix = false;
 static constexpr bool default_bShowAlbum = false;
+static constexpr bool default_bEnableMouseWheelVolume = true;
+static constexpr bool default_bEnableMouseClickPlayPause = true;
 static constexpr bool default_bEnableHDR = false;
 static constexpr int default_nBackBufferFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
 static constexpr int default_nDepthBufferFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
@@ -313,6 +321,8 @@ class milk2_preferences_page : public preferences_page_instance, public CDialogI
         COMMAND_HANDLER_EX(IDC_CB_NORATING2, BN_CLICKED, OnButtonClick)
         COMMAND_HANDLER_EX(IDC_CB_PRESS_F1_MSG, BN_CLICKED, OnButtonClick)
         COMMAND_HANDLER_EX(IDC_CB_NOCOMPSHADER, BN_CLICKED, OnButtonClick)
+        COMMAND_HANDLER_EX(IDC_CB_MOUSE_WHEEL_VOLUME, BN_CLICKED, OnButtonClick)
+        COMMAND_HANDLER_EX(IDC_CB_MOUSE_CLICK_PLAYPAUSE, BN_CLICKED, OnButtonClick)
         COMMAND_HANDLER_EX(IDC_W_MAXFPS2, CBN_SELCHANGE, OnComboChange)
         COMMAND_HANDLER_EX(IDC_FS_MAXFPS2, CBN_SELCHANGE, OnComboChange)
         COMMAND_HANDLER_EX(IDC_CB_WPT, BN_CLICKED, OnButtonClick)

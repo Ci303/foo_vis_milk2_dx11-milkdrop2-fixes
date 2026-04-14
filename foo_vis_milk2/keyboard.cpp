@@ -1937,6 +1937,45 @@ void milk2_ui_element::OnLButtonDown(UINT nFlags, CPoint point)
 
     if (::GetFocus() != get_wnd())
         ::SetFocus(get_wnd());
+
+    if (!s_config.settings.m_bEnableMouseClickPlayPause)
+        return;
+
+    m_pending_single_click = true;
+    SetTimer(ID_CLICK_TIMER, GetDoubleClickTime(), nullptr);
+}
+
+BOOL milk2_ui_element::OnMouseWheel(UINT nFlags, short zDelta, CPoint point)
+{
+    UNREFERENCED_PARAMETER(nFlags);
+    UNREFERENCED_PARAMETER(point);
+
+    if (!s_config.settings.m_bEnableMouseWheelVolume)
+        return FALSE;
+
+    if (zDelta == 0)
+        return FALSE;
+
+    if (::GetFocus() != get_wnd())
+        ::SetFocus(get_wnd());
+
+    // Match the existing arrow-key bindings: one wheel detent maps to one volume step.
+    int steps = zDelta / WHEEL_DELTA;
+    if (steps == 0)
+        steps = (zDelta > 0) ? 1 : -1;
+
+    if (steps > 0)
+    {
+        for (int i = 0; i < steps; ++i)
+            m_playback_control->volume_up();
+    }
+    else
+    {
+        for (int i = 0; i < -steps; ++i)
+            m_playback_control->volume_down();
+    }
+
+    return TRUE;
 }
 
 #undef waitstring

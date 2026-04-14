@@ -69,6 +69,7 @@ milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_ins
     m_in_suspend = false;
     m_minimized = false;
     m_focus_hotkeys_registered = false;
+    m_pending_single_click = false;
 #if defined(TIMER_TP)
     m_tpTimer = nullptr;
 #elif defined(TIMER_32)
@@ -283,7 +284,18 @@ void milk2_ui_element::OnDestroy()
 
 void milk2_ui_element::OnTimer(UINT_PTR nIDEvent)
 {
-    UNREFERENCED_PARAMETER(nIDEvent);
+    if (nIDEvent == ID_CLICK_TIMER)
+    {
+        KillTimer(ID_CLICK_TIMER);
+        if (m_pending_single_click)
+        {
+            m_pending_single_click = false;
+            const bool was_playing = m_playback_control->is_playing() && !m_playback_control->is_paused();
+            m_playback_control->toggle_pause();
+            LaunchStatusText(was_playing ? L"Paused" : L"Playing");
+        }
+        return;
+    }
 
     MILK2_CONSOLE_LOG_LIMIT("OnTimer ", GetWnd())
 #ifdef TIMER_32
@@ -624,6 +636,9 @@ void milk2_ui_element::OnLButtonDblClk(UINT nFlags, CPoint point)
 {
     UNREFERENCED_PARAMETER(nFlags);
     UNREFERENCED_PARAMETER(point);
+
+    KillTimer(ID_CLICK_TIMER);
+    m_pending_single_click = false;
 
     MILK2_CONSOLE_LOG("OnLButtonDblClk ", GetWnd())
     ToggleFullScreen();
@@ -1650,6 +1665,11 @@ void milk2_ui_element::UpdatePlaylist()
 void milk2_ui_element::LaunchSongTitle()
 {
     g_plugin.LaunchSongTitleAnim();
+}
+
+void milk2_ui_element::LaunchStatusText(const wchar_t* text)
+{
+    g_plugin.LaunchStatusText(text);
 }
 
 #ifdef TIMER_TP

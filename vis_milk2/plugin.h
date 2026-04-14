@@ -593,6 +593,7 @@ class CPlugin : public CPluginShell
     void LaunchCustomMessage(int nMsgNum);
     void ReadCustomMessages();
     void LaunchSongTitleAnim();
+    void LaunchStatusText(const wchar_t* text, float duration = 0.9f, float fadeTime = 0.25f);
 
     bool RenderStringToTitleTexture();
     void ShowSongTitleAnim(int w, int h, float fProgress);

@@ -6855,6 +6855,29 @@ void CPlugin::LaunchSongTitleAnim()
     m_supertext.fStartTime = GetTime();
 }
 
+void CPlugin::LaunchStatusText(const wchar_t* text, float duration, float fadeTime)
+{
+    if (!text || text[0] == L'\0')
+        return;
+
+    m_supertext.bRedrawSuperText = true;
+    m_supertext.bIsSongTitle = false;
+    wcscpy_s(m_supertext.szText, text);
+    wcscpy_s(m_supertext.nFontFace, m_fontinfo[SONGTITLE_FONT].szFace);
+    m_supertext.fFontSize = static_cast<float>(m_fontinfo[SONGTITLE_FONT].nSize);
+    m_supertext.bBold = m_fontinfo[SONGTITLE_FONT].bBold;
+    m_supertext.bItal = m_fontinfo[SONGTITLE_FONT].bItalic;
+    m_supertext.fX = 0.5f;
+    m_supertext.fY = 0.5f;
+    m_supertext.fGrowth = 1.0f;
+    m_supertext.fDuration = duration;
+    m_supertext.fFadeTime = fadeTime;
+    m_supertext.nColorR = 255;
+    m_supertext.nColorG = 255;
+    m_supertext.nColorB = 255;
+    m_supertext.fStartTime = GetTime();
+}
+
 bool CPlugin::LaunchSprite(int nSpriteNum, int nSlot, const std::wstring& filename, const std::vector<uint8_t>& data)
 {
     char initcode[8192], code[8192], sectionA[64];
