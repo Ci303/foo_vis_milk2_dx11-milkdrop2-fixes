@@ -1686,7 +1686,12 @@ void milk2_config::parse(ui_element_config_parser& parser)
                 parser >> settings.m_bTexSizeWasAutoExact;
                 parser >> settings.m_nGridY;
 
-                parser >> settings.m_bPresetLockedByCode;
+                {
+                    // Code-driven preset lock is derived from the current UI
+                    // mode and should not be restored from saved panel state.
+                    bool unusedPresetLockedByCode = false;
+                    parser >> unusedPresetLockedByCode;
+                }
 
                 parser >> settings.m_bEnableDownmix;
                 parser >> settings.m_bEnableHDR;
@@ -1786,7 +1791,9 @@ void milk2_config::build(ui_element_config_builder& builder, const bool full_res
         cfg_fTimeBetweenRandomSongTitles = settings.m_fTimeBetweenRandomSongTitles;
         cfg_fTimeBetweenRandomCustomMsgs = settings.m_fTimeBetweenRandomCustomMsgs;
 
-        cfg_bPresetLockedByCode = settings.m_bPresetLockedByCode;
+        // Code-driven preset lock is runtime-only. Clear any older persisted
+        // value instead of saving the current derived state.
+        cfg_bPresetLockedByCode = default_bPresetLockedByCode;
         //builder << settings.m_bPresetLockedByUser;
         //builder << settings.m_bMilkdropScrollLockState;
         //builder << settings.m_nFpsLimit;

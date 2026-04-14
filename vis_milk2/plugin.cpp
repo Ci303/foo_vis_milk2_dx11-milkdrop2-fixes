@@ -695,9 +695,11 @@ void CPlugin::MilkDropReadConfig()
     m_bShowRating = GetPrivateProfileBool(L"settings", L"bShowRating", m_bShowRating, pIni);
     m_bShowPresetInfo = GetPrivateProfileBool(L"settings", L"bShowPresetInfo", m_bShowPresetInfo, pIni);
     //m_bShowDebugInfo = GetPrivateProfileBool(L"settings", L"bShowDebugInfo", m_bShowDebugInfo, pIni);
+#ifndef _FOOBAR
     m_bShowSongTitle = GetPrivateProfileBool(L"settings", L"bShowSongTitle", m_bShowSongTitle, pIni);
     m_bShowSongTime = GetPrivateProfileBool(L"settings", L"bShowSongTime", m_bShowSongTime, pIni);
     m_bShowSongLen = GetPrivateProfileBool(L"settings", L"bShowSongLen", m_bShowSongLen, pIni);
+#endif
 
     //m_bFixPinkBug = GetPrivateProfileBool(L"settings", L"bFixPinkBug", m_bFixPinkBug, pIni);
     int nTemp = GetPrivateProfileBool(L"settings", L"bFixPinkBug", -1, pIni);
