@@ -74,6 +74,8 @@ Useful preset sources:
   - fonts
   - optional mouse wheel volume and single-click play/pause controls
 
+For refresh rates above 60 FPS, use `Unlimited`. The other higher frame-rate settings are not currently working correctly in this fork and fixing them is outside the current scope of this project.
+
 ### 4. Optional custom files
 
 - Custom messages file: `<foobar2000 profile folder>\milkdrop2\milk2_msg.ini`
@@ -197,6 +199,7 @@ Additional repository notes:
 - Typical foobar2000 x64 deployment path: `<foobar2000 profile folder>\user-components-x64\foo_vis_milk2\`
 - Runtime presets, textures and INI files are read from: `<foobar2000 profile folder>\milkdrop2\`
 - This repository is for the stable DirectX 11 foobar2000 component. Experimental DX12 work is intentionally out of scope here.
+- Higher-than-60 FPS fixed-rate options in the preferences UI are not currently considered supported here; `Unlimited` is the intended setting for high-refresh displays.
 
 ### Build Notes
 
