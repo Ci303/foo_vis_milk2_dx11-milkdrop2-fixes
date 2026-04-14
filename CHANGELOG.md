@@ -2,6 +2,14 @@
 
 ## Release History
 
+### 0.2.1.2 - 2026-04-14
+
+Follow-up hotfix release for state and preference consistency in the foobar2000 x64 component.
+
+- Stopped code-driven preset lock state from being serialized as if it were a user preference.
+- Removed the remaining foobar-side read path for legacy INI-backed song title and song time overlay state.
+- Reduced the chance of stale runtime state reappearing across restarts or UI state changes.
+
 ### 0.2.1.1 - 2026-04-14
 
 Small hotfix release for the independent x64 maintenance branch.
