@@ -2,6 +2,15 @@
 
 ## Release History
 
+### 0.2.1.3 - 2026-04-14
+
+Hotfix release for the foobar2000 x64 component focused on editor safety and album art persistence.
+
+- Fixed the foobar-side album art toggle so it now persists correctly across restart.
+- Fixed MilkDrop code-string writeback to use the correct destination capacity when accepting edits.
+- Reworked the wait-string editor to use explicit narrow code storage instead of aliasing preset code through a `wchar_t` buffer.
+- Kept the previous startup-state consistency fixes, including the runtime-only handling for transient preset lock and overlay state.
+
 ### 0.2.1.2 - 2026-04-14
 
 Follow-up hotfix release for state and preference consistency in the foobar2000 x64 component.

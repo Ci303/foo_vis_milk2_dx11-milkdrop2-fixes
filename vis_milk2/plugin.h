@@ -77,16 +77,17 @@ typedef struct
 {
     int bActive;
     int bFilterBadChars;  // if true, it will filter out any characters that don't belong in a filename, plus the & symbol (because it doesn't display properly with DrawText)
-    int bDisplayAsCode;   // if true, semicolons will be followed by a newline, for display
+    int bDisplayAsCode;   // if true, edit `szCodeText`; otherwise edit `szText`
     size_t nMaxLen;       // cannot be more than 511
     size_t nCursorPos;
     int nSelAnchorPos;    // -1 if no selection made
     int bOvertypeMode;
     wchar_t szText[48000];
+    char szCodeText[48000];
     wchar_t szPrompt[512];
     wchar_t szToolTip[512];
-    char szClipboardA[48000];
     wchar_t szClipboard[48000];
+    char szCodeClipboard[48000];
 } td_waitstr;
 
 typedef struct

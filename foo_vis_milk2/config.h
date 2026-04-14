@@ -435,6 +435,7 @@ class milk2_config
     void reset();
     void parse(ui_element_config_parser& parser);
     void build(ui_element_config_builder& builder, const bool full_restore) const;
+    void persist_runtime_settings() const;
 
     static void resolve_profile();
     static void initialize_paths();

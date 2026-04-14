@@ -418,7 +418,7 @@ void CMilkMenu::UndrawMenus()
     }
 }
 
-void CMilkMenu::OnWaitStringAccept(wchar_t* szNewString)
+void CMilkMenu::OnWaitStringAcceptCode(const char* szNewCode)
 {
     m_bEditingCurSel = false;
 
@@ -430,8 +430,17 @@ void CMilkMenu::OnWaitStringAccept(wchar_t* szNewString)
 
     assert(pItem->m_type == MENUITEMTYPE_STRING);
 
-    // Apply the edited string.
-    wcscpy_s(reinterpret_cast<wchar_t*>(addr), wcslen(szNewString) + 1, szNewString); // BUG!!
+    // Apply the edited string into the original narrow preset buffer using
+    // the destination capacity supplied when the menu item was created.
+    size_t dest_capacity = static_cast<size_t>(pItem->m_wParam);
+    if (dest_capacity > 0)
+    {
+        strcpy_s(reinterpret_cast<char*>(addr), dest_capacity, szNewCode);
+    }
+    else
+    {
+        reinterpret_cast<char*>(addr)[0] = '\0';
+    }
 
     // If user provided a callback function pointer, call it now.
     if (pItem->m_pCallbackFn)
@@ -546,6 +555,7 @@ LRESULT CMilkMenu::HandleKeydown(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
                                 g_plugin.m_waitstring.nSelAnchorPos = -1;
                                 g_plugin.m_waitstring.nMaxLen = std::min(sizeof(g_plugin.m_waitstring.szText) - 1, MAX_PATH - wcslen(g_plugin.GetPresetDir()) - 6); // 6 for the extension and null character because Win32 `LoadFile()`, `MoveFile()`, etc. fail if "path+filename+ext" is greater than `MAX_PATH` characters.
                                 swprintf_s(g_plugin.m_waitstring.szText, L"%sfile.dat", g_plugin.m_szPresetDir);
+                                g_plugin.m_waitstring.szCodeText[0] = '\0';
                                 if (g_plugin.m_UI_mode == UI_IMPORT_WAVE || g_plugin.m_UI_mode == UI_IMPORT_SHAPE)
                                     WASABI_API_LNGSTRINGW_BUF(IDS_LOAD_FROM_FILE, g_plugin.m_waitstring.szPrompt, 512);
                                 else
@@ -585,11 +595,12 @@ LRESULT CMilkMenu::HandleKeydown(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
                             g_plugin.m_waitstring.bDisplayAsCode = true;
                             g_plugin.m_waitstring.nSelAnchorPos = -1;
                             g_plugin.m_waitstring.nMaxLen = pItem->m_wParam ? pItem->m_wParam : 8190;
-                            g_plugin.m_waitstring.nMaxLen = std::min(g_plugin.m_waitstring.nMaxLen, sizeof(g_plugin.m_waitstring.szText) - 16);
-                            strcpy_s(reinterpret_cast<char*>(g_plugin.m_waitstring.szText), sizeof(g_plugin.m_waitstring.szText), reinterpret_cast<char*>(addr));
+                            g_plugin.m_waitstring.nMaxLen = std::min(g_plugin.m_waitstring.nMaxLen, sizeof(g_plugin.m_waitstring.szCodeText) - 16);
+                            g_plugin.m_waitstring.szText[0] = L'\0';
+                            strcpy_s(g_plugin.m_waitstring.szCodeText, sizeof(g_plugin.m_waitstring.szCodeText), reinterpret_cast<char*>(addr));
                             swprintf_s(g_plugin.m_waitstring.szPrompt, WASABI_API_LNGSTRINGW(IDS_ENTER_THE_NEW_STRING), pItem->m_szName);
                             wcscpy_s(g_plugin.m_waitstring.szToolTip, pItem->m_szToolTip);
-                            g_plugin.m_waitstring.nCursorPos = strnlen_s(reinterpret_cast<char*>(g_plugin.m_waitstring.szText), ARRAYSIZE(g_plugin.m_waitstring.szText));
+                            g_plugin.m_waitstring.nCursorPos = strnlen_s(g_plugin.m_waitstring.szCodeText, ARRAYSIZE(g_plugin.m_waitstring.szCodeText));
                             if (pItem->m_nLastCursorPos < g_plugin.m_waitstring.nCursorPos)
                                 g_plugin.m_waitstring.nCursorPos = pItem->m_nLastCursorPos;
                             ClearText();
@@ -651,7 +662,7 @@ LRESULT CMilkMenu::HandleKeydown(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
                 return FALSE;
             case VK_RETURN:
                 //if (pItem->m_type == MENUITEMTYPE_STRING)
-                //    ... will not ever happen - see `OnWaitStringAccept()`.
+                //    ... will not ever happen - see `OnWaitStringAcceptCode()`.
                 m_bEditingCurSel = false;
                 return FALSE;
             case VK_NEXT:

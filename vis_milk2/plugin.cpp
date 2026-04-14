@@ -581,7 +581,9 @@ void CPlugin::MilkDropPreInitialize()
 
     m_waitstring.bActive = false;
     m_waitstring.bOvertypeMode = false;
+    m_waitstring.szCodeText[0] = 0;
     m_waitstring.szClipboard[0] = 0;
+    m_waitstring.szCodeClipboard[0] = 0;
 
     m_nPresets = 0;
     m_nDirs = 0;
@@ -4029,7 +4031,7 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
             int bCursorBlink = (!bBrackets && ((int)(GetTime() * 270.0f) % 100 > 50)); //((GetFrame() % 3) >= 2)
 
             wcscpy_s(buf0, m_waitstring.szText);
-            strcpy_s(buf0A, reinterpret_cast<char*>(m_waitstring.szText));
+            strcpy_s(buf0A, m_waitstring.szCodeText);
 
             size_t temp_cursor_pos = m_waitstring.nCursorPos;
             size_t temp_anchor_pos = m_waitstring.nSelAnchorPos;
@@ -6226,13 +6228,13 @@ void CPlugin::WaitString_NukeSelection()
         // Nuke selection. Note: Start and end are INCLUSIVE.
         size_t start = (m_waitstring.nCursorPos < static_cast<unsigned int>(m_waitstring.nSelAnchorPos)) ? m_waitstring.nCursorPos : m_waitstring.nSelAnchorPos;
         size_t end = (m_waitstring.nCursorPos > static_cast<unsigned int>(m_waitstring.nSelAnchorPos)) ? m_waitstring.nCursorPos - 1 : static_cast<size_t>(m_waitstring.nSelAnchorPos) - 1;
-        size_t len = (m_waitstring.bDisplayAsCode ? strlen(reinterpret_cast<char*>(m_waitstring.szText)) : wcslen(m_waitstring.szText));
+        size_t len = (m_waitstring.bDisplayAsCode ? strlen(m_waitstring.szCodeText) : wcslen(m_waitstring.szText));
         size_t how_far_to_shift = end - start + 1;
         size_t num_chars_to_shift = len - end; // includes NULL character
 
         if (m_waitstring.bDisplayAsCode)
         {
-            char* ptr = reinterpret_cast<char*>(m_waitstring.szText);
+            char* ptr = m_waitstring.szCodeText;
             for (unsigned int i = 0; i < num_chars_to_shift; i++)
                 *(ptr + start + i) = *(ptr + start + i + how_far_to_shift);
         }
@@ -6268,14 +6270,14 @@ void CPlugin::WaitString_Copy()
 
         if (m_waitstring.bDisplayAsCode)
         {
-            char* ptr = reinterpret_cast<char*>(m_waitstring.szText);
+            char* ptr = m_waitstring.szCodeText;
             for (unsigned int i = 0; i < chars_to_copy; i++)
-                m_waitstring.szClipboardA[i] = *(ptr + start + i);
-            m_waitstring.szClipboardA[chars_to_copy] = 0;
+                m_waitstring.szCodeClipboard[i] = *(ptr + start + i);
+            m_waitstring.szCodeClipboard[chars_to_copy] = 0;
 
             std::vector<char> tmp;
             tmp.resize(65536);
-            ConvertLFCToCRsA(m_waitstring.szClipboardA, tmp.data());
+            ConvertLFCToCRsA(m_waitstring.szCodeClipboard, tmp.data());
             copyStringToClipboardA(tmp.data());
         }
         else
@@ -6305,7 +6307,7 @@ void CPlugin::WaitString_Paste()
             std::vector<char> tmp;
             tmp.resize(65536);
             strcpy_s(tmp.data(), 65536, getStringFromClipboardA());
-            ConvertCRsToLFCA(tmp.data(), m_waitstring.szClipboardA);
+            ConvertCRsToLFCA(tmp.data(), m_waitstring.szCodeClipboard);
         }
         else
         {
@@ -6319,8 +6321,8 @@ void CPlugin::WaitString_Paste()
         size_t chars_to_insert;
         if (m_waitstring.bDisplayAsCode)
         {
-            len = strlen(reinterpret_cast<char*>(m_waitstring.szText));
-            chars_to_insert = strlen(m_waitstring.szClipboardA);
+            len = strlen(m_waitstring.szCodeText);
+            chars_to_insert = strlen(m_waitstring.szCodeClipboard);
         }
         else
         {
@@ -6343,11 +6345,11 @@ void CPlugin::WaitString_Paste()
         size_t i;
         if (m_waitstring.bDisplayAsCode)
         {
-            char* ptr = reinterpret_cast<char*>(m_waitstring.szText);
+            char* ptr = m_waitstring.szCodeText;
             for (i = len; i >= m_waitstring.nCursorPos; i--)
                 *(ptr + i + chars_to_insert) = *(ptr + i);
             for (i = 0; i < chars_to_insert; i++)
-                *(ptr + i + m_waitstring.nCursorPos) = m_waitstring.szClipboardA[i];
+                *(ptr + i + m_waitstring.nCursorPos) = m_waitstring.szCodeClipboard[i];
         }
         else
         {
@@ -6365,7 +6367,7 @@ void CPlugin::WaitString_SeekLeftWord()
 {
     if (m_waitstring.bDisplayAsCode)
     {
-        char* ptr = reinterpret_cast<char*>(m_waitstring.szText);
+        char* ptr = m_waitstring.szCodeText;
         while (m_waitstring.nCursorPos > 0 && !IsAlphanumericChar(*(ptr + m_waitstring.nCursorPos - 1)))
             m_waitstring.nCursorPos--;
 
@@ -6388,9 +6390,9 @@ void CPlugin::WaitString_SeekRightWord()
     // Testing lots ofstuff.
     if (m_waitstring.bDisplayAsCode)
     {
-        size_t len = strlen(reinterpret_cast<char*>(m_waitstring.szText));
+        size_t len = strlen(m_waitstring.szCodeText);
 
-        char* ptr = reinterpret_cast<char*>(m_waitstring.szText);
+        char* ptr = m_waitstring.szCodeText;
         while (m_waitstring.nCursorPos < len && IsAlphanumericChar(*(ptr + m_waitstring.nCursorPos)))
             m_waitstring.nCursorPos++;
 
@@ -6414,7 +6416,7 @@ size_t CPlugin::WaitString_GetCursorColumn() const
     if (m_waitstring.bDisplayAsCode)
     {
         int column = 0;
-        char* ptr = reinterpret_cast<char*>(const_cast<wchar_t*>(m_waitstring.szText));
+        const char* ptr = m_waitstring.szCodeText;
         while (/*m_waitstring.nCursorPos - column - 1 >= 0 &&*/ *(ptr + m_waitstring.nCursorPos - column - 1) != LINEFEED_CONTROL_CHAR)
             column++;
 
@@ -6433,7 +6435,7 @@ int CPlugin::WaitString_GetLineLength() const
 
     if (m_waitstring.bDisplayAsCode)
     {
-        char* ptr = reinterpret_cast<char*>(const_cast<wchar_t*>(m_waitstring.szText));
+        const char* ptr = m_waitstring.szCodeText;
         while (*(ptr + line_start + line_length) != 0 && *(ptr + line_start + line_length) != LINEFEED_CONTROL_CHAR)
             line_length++;
     }
@@ -6467,7 +6469,7 @@ void CPlugin::WaitString_SeekDownOneLine()
     size_t column = g_plugin.WaitString_GetCursorColumn();
     size_t newpos = m_waitstring.nCursorPos;
 
-    char* ptr = reinterpret_cast<char*>(m_waitstring.szText);
+    char* ptr = m_waitstring.szCodeText;
     while (*(ptr + newpos) != 0 && *(ptr + newpos) != LINEFEED_CONTROL_CHAR)
         newpos++;
 

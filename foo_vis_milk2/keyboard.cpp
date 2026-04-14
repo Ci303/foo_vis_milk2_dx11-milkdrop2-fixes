@@ -240,7 +240,7 @@ void milk2_ui_element::OnChar(TCHAR chChar, UINT nRepCnt, UINT nFlags)
         {
             size_t len = 0;
             if (waitstring.bDisplayAsCode)
-                len = strnlen_s(reinterpret_cast<char*>(waitstring.szText), ARRAYSIZE(waitstring.szText) * sizeof(wchar_t) / sizeof(char));
+                len = strnlen_s(waitstring.szCodeText, ARRAYSIZE(waitstring.szCodeText));
             else
                 len = wcsnlen_s(waitstring.szText, ARRAYSIZE(waitstring.szText));
 
@@ -274,12 +274,12 @@ void milk2_ui_element::OnChar(TCHAR chChar, UINT nRepCnt, UINT nFlags)
                         {
                             if (waitstring.nCursorPos == len)
                             {
-                                strcat_s(reinterpret_cast<char*>(waitstring.szText), sizeof(waitstring.szText), buff);
+                                strcat_s(waitstring.szCodeText, sizeof(waitstring.szCodeText), buff);
                                 len++;
                             }
                             else
                             {
-                                char* ptr = reinterpret_cast<char*>(waitstring.szText);
+                                char* ptr = waitstring.szCodeText;
                                 *(ptr + waitstring.nCursorPos) = buff[0];
                             }
                             waitstring.nCursorPos++;
@@ -288,7 +288,7 @@ void milk2_ui_element::OnChar(TCHAR chChar, UINT nRepCnt, UINT nFlags)
                     else
                     {
                         // Insert mode.
-                        char* ptr = reinterpret_cast<char*>(waitstring.szText);
+                        char* ptr = waitstring.szCodeText;
                         for (UINT rep = 0; rep < nRepCnt; rep++)
                         {
                             for (size_t i = len + 1; i-- > waitstring.nCursorPos;)
@@ -734,6 +734,7 @@ void milk2_ui_element::OnChar(TCHAR chChar, UINT nRepCnt, UINT nFlags)
                     waitstring.nSelAnchorPos = -1;
                     waitstring.nMaxLen = std::min(sizeof(waitstring.szText) - 1, static_cast<size_t>(MAX_PATH - wcsnlen_s(g_plugin.GetPresetDir(), MAX_PATH) - 6)); // 6 for the extension + null character because Win32 barfs if the path+filename+ext are greater than MAX_PATH characters
                     wcscpy_s(waitstring.szText, g_plugin.m_pState->m_szDesc); // initial string is the filename, minus the extension
+                    waitstring.szCodeText[0] = '\0';
                     LoadString(core_api::get_my_instance(), IDS_SAVE_AS, waitstring.szPrompt, 512);
                     waitstring.szToolTip[0] = L'\0';
                     waitstring.nCursorPos = wcsnlen_s(waitstring.szText, ARRAYSIZE(waitstring.szText)); // set the starting edit position
@@ -951,6 +952,7 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                     waitstring.nSelAnchorPos = -1;
                     waitstring.nMaxLen = std::min(sizeof(waitstring.szText) - 1, static_cast<size_t>(MAX_PATH - 1));
                     wcscpy_s(waitstring.szText, g_plugin.GetPresetDir());
+                    waitstring.szCodeText[0] = '\0';
                     {
                         // For subtle beauty, remove the trailing '\' from the directory name (if it's not just "x:\").
                         size_t len = wcsnlen_s(waitstring.szText, ARRAYSIZE(waitstring.szText));
@@ -1021,7 +1023,7 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                 case VK_END:
                     if (waitstring.bDisplayAsCode)
                     {
-                        waitstring.nCursorPos = strnlen_s(reinterpret_cast<char*>(waitstring.szText), ARRAYSIZE(waitstring.szText) * sizeof(wchar_t) / sizeof(char));
+                        waitstring.nCursorPos = strnlen_s(waitstring.szCodeText, ARRAYSIZE(waitstring.szCodeText));
                     }
                     else
                     {
@@ -1034,10 +1036,10 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                         //assert(g_plugin.m_pCurMenu);
 
                         // CTRL+ENTER accepts the string -> finished editing.
-                        // `OnWaitStringAccept()` calls the callback function.
+                        // `OnWaitStringAcceptCode()` calls the callback function.
                         // See the calls to `CMenu::AddItem` from "milkdrop.cpp"
                         // to find the callback functions for different "WaitStrings".
-                        g_plugin.m_pCurMenu->OnWaitStringAccept(waitstring.szText);
+                        g_plugin.m_pCurMenu->OnWaitStringAcceptCode(waitstring.szCodeText);
                         UI_mode = UI_MENU;
                         waitstring.bActive = false;
                         RemoveText();
@@ -1062,7 +1064,7 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                     {
                         if (waitstring.bDisplayAsCode)
                         {
-                            if (waitstring.nCursorPos < strnlen_s(reinterpret_cast<char*>(waitstring.szText), ARRAYSIZE(waitstring.szText) * sizeof(wchar_t) / sizeof(char)))
+                            if (waitstring.nCursorPos < strnlen_s(waitstring.szCodeText, ARRAYSIZE(waitstring.szCodeText)))
                                 waitstring.nCursorPos++;
                         }
                         else
@@ -1096,7 +1098,7 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                         size_t len;
                         if (waitstring.bDisplayAsCode)
                         {
-                            len = strnlen_s(reinterpret_cast<char*>(waitstring.szText), ARRAYSIZE(waitstring.szText) * sizeof(wchar_t) / sizeof(char));
+                            len = strnlen_s(waitstring.szCodeText, ARRAYSIZE(waitstring.szCodeText));
                         }
                         else
                         {
@@ -1115,7 +1117,7 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 
                         if (waitstring.bDisplayAsCode)
                         {
-                            char* ptr = reinterpret_cast<char*>(waitstring.szText);
+                            char* ptr = waitstring.szCodeText;
                             for (unsigned int i = 0; i < copy_chars; i++)
                                 *(ptr + dst_pos + i) = *(ptr + src_pos + i);
                         }
@@ -1136,8 +1138,8 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                     {
                         if (waitstring.bDisplayAsCode)
                         {
-                            int len = static_cast<int>(strnlen_s(reinterpret_cast<char*>(waitstring.szText), ARRAYSIZE(waitstring.szText) * sizeof(wchar_t) / sizeof(char)));
-                            char* ptr = reinterpret_cast<char*>(waitstring.szText);
+                            int len = static_cast<int>(strnlen_s(waitstring.szCodeText, ARRAYSIZE(waitstring.szCodeText)));
+                            char* ptr = waitstring.szCodeText;
                             for (int i = static_cast<int>(waitstring.nCursorPos); i <= std::abs(static_cast<int>(len - nRepCnt)); i++)
                                 *(ptr + i) = *(ptr + i + nRepCnt);
                         }
@@ -1237,8 +1239,8 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                             if (waitstring.nSelAnchorPos != -1)
                                 g_plugin.WaitString_NukeSelection();
 
-                            size_t len = strnlen_s(reinterpret_cast<char*>(waitstring.szText), ARRAYSIZE(waitstring.szText) * sizeof(wchar_t) / sizeof(char));
-                            char* ptr = reinterpret_cast<char*>(waitstring.szText);
+                            size_t len = strnlen_s(waitstring.szCodeText, ARRAYSIZE(waitstring.szCodeText));
+                            char* ptr = waitstring.szCodeText;
                             if (len + 1 < waitstring.nMaxLen)
                             {
                                 // Insert a line feed. Use CTRL+RETURN to accept changes in this case.
@@ -1250,7 +1252,7 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                             }
                             else
                             {
-                                // `m_waitstring.szText` has reached its limit.
+                                // `m_waitstring.szCodeText` has reached its limit.
                                 /*g_plugin.AddError(WASABI_API_LNGSTRINGW(IDS_STRING_TOO_LONG), 2.5f, ERR_MISC, true);*/
                             }
                         }
@@ -1258,8 +1260,8 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                         {
                             // Finished editing.
                             //assert(m_pCurMenu);
-                            g_plugin.m_pCurMenu->OnWaitStringAccept(waitstring.szText);
-                            // OnWaitStringAccept calls the callback function.  See the
+                            g_plugin.m_pCurMenu->OnWaitStringAcceptCode(waitstring.szCodeText);
+                            // OnWaitStringAcceptCode calls the callback function.  See the
                             // calls to `CMenu::AddItem()` from "milkdrop.cpp" to find the
                             // callback functions for different "WaitStrings".
                             UI_mode = UI_MENU;
@@ -1596,6 +1598,7 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 
                         // Initial string is the filename, minus the extension.
                         wcscpy_s(waitstring.szText, g_plugin.m_presets[g_plugin.m_nPresetListCurPos].szFilename.c_str());
+                        waitstring.szCodeText[0] = '\0';
                         RemoveExtension(waitstring.szText);
 
                         // Set the prompt and tooltip.

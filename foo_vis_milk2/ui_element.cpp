@@ -700,6 +700,7 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
             break;
         case IDM_ENABLE_DOWNMIX:
             s_config.settings.m_bEnableDownmix = !s_config.settings.m_bEnableDownmix;
+            s_config.persist_runtime_settings();
             UpdateChannelMode();
             break;
         case IDM_SHOW_PREFS:
@@ -716,6 +717,7 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
             break;
         case IDM_SHOW_ALBUM:
             s_config.settings.m_bShowAlbum = !s_config.settings.m_bShowAlbum;
+            s_config.persist_runtime_settings();
             ShowAlbumArt();
             break;
         case IDM_QUIT:

@@ -95,7 +95,7 @@ class CMilkMenu
     LRESULT HandleKeydown(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
     void DrawMenu(D2D1_RECT_F rect, int xR, int yB, int bCalcRect = 0, D2D1_RECT_F* pCalcRect = nullptr);
     void UndrawMenus();
-    void OnWaitStringAccept(wchar_t* szNewString);
+    void OnWaitStringAcceptCode(const char* szNewCode);
     void EnableItem(wchar_t* szName, bool bEnable);
     CMilkMenuItem* GetCurItem() // NOTE: only works if an "item" is highlighted, not a child menu
     {

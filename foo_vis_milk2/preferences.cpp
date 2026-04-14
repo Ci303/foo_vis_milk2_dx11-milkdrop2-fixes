@@ -1540,7 +1540,7 @@ void milk2_config::reset()
 
     //--- Extras
     settings.m_bEnableDownmix = default_bEnableDownmix;
-    settings.m_bShowAlbum = default_bShowAlbum;
+    settings.m_bShowAlbum = cfg_bShowAlbum;
     settings.m_bEnableHDR = default_bEnableHDR;
     settings.m_bSkipCompShader = static_cast<uint32_t>(cfg_bSkipCompShader);
     settings.m_nBackBufferFormat = default_nBackBufferFormat;
@@ -1811,5 +1811,11 @@ void milk2_config::build(ui_element_config_builder& builder, const bool full_res
 
         cfg_szPresetDir.set(pfc::utf8FromWide(settings.m_szPresetDir));
     }
+}
+
+void milk2_config::persist_runtime_settings() const
+{
+    cfg_bEnableDownmix = settings.m_bEnableDownmix;
+    cfg_bShowAlbum = settings.m_bShowAlbum;
 }
 #pragma endregion
