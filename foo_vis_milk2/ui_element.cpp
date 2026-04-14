@@ -1368,28 +1368,25 @@ void milk2_ui_element::TogglePlaylist()
 
 void milk2_ui_element::ToggleSongTitle()
 {
-    s_config.settings.m_bShowSongTitle = !s_config.settings.m_bShowSongTitle;
-    g_plugin.m_bShowSongTitle = s_config.settings.m_bShowSongTitle;
+    g_plugin.m_bShowSongTitle = !g_plugin.m_bShowSongTitle;
 }
 
 void milk2_ui_element::ToggleSongLength()
 {
-    if (s_config.settings.m_bShowSongTime && s_config.settings.m_bShowSongLen)
+    if (g_plugin.m_bShowSongTime && g_plugin.m_bShowSongLen)
     {
-        s_config.settings.m_bShowSongTime = false;
-        s_config.settings.m_bShowSongLen = false;
+        g_plugin.m_bShowSongTime = false;
+        g_plugin.m_bShowSongLen = false;
     }
-    else if (s_config.settings.m_bShowSongTime && !s_config.settings.m_bShowSongLen)
+    else if (g_plugin.m_bShowSongTime && !g_plugin.m_bShowSongLen)
     {
-        s_config.settings.m_bShowSongLen = true;
+        g_plugin.m_bShowSongLen = true;
     }
     else
     {
-        s_config.settings.m_bShowSongTime = true;
-        s_config.settings.m_bShowSongLen = false;
+        g_plugin.m_bShowSongTime = true;
+        g_plugin.m_bShowSongLen = false;
     }
-    g_plugin.m_bShowSongTime = s_config.settings.m_bShowSongTime;
-    g_plugin.m_bShowSongLen = s_config.settings.m_bShowSongLen;
 }
 
 void milk2_ui_element::TogglePresetInfo()

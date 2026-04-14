@@ -1488,9 +1488,11 @@ void milk2_config::reset()
     settings.m_bShowRating = cfg_bShowRating;
     settings.m_bShowPresetInfo = cfg_bShowPresetInfo;
     //settings.m_bShowDebugInfo = cfg_bShowDebugInfo;
-    settings.m_bShowSongTitle = cfg_bShowSongTitle;
-    settings.m_bShowSongTime = cfg_bShowSongTime;
-    settings.m_bShowSongLen = cfg_bShowSongLen;
+    // Song title/time overlays are runtime toggles controlled by F2/F3.
+    // Do not restore them on startup.
+    settings.m_bShowSongTitle = default_bShowSongTitle;
+    settings.m_bShowSongTime = default_bShowSongTime;
+    settings.m_bShowSongLen = default_bShowSongLen;
     settings.m_bShowShaderHelp = cfg_bShowShaderHelp;
 
     //settings.m_bFixPinkBug = default_bFixPinkBug;
@@ -1667,9 +1669,16 @@ void milk2_config::parse(ui_element_config_parser& parser)
                 parser >> settings.m_bShowRating;
                 parser >> settings.m_bShowPresetInfo;
                 //parser >> settings.m_bShowDebugInfo;
-                parser >> settings.m_bShowSongTitle;
-                parser >> settings.m_bShowSongTime;
-                parser >> settings.m_bShowSongLen;
+                {
+                    // F2/F3 control runtime overlays only. Consume older saved
+                    // panel-state values for compatibility, but do not restore them.
+                    bool unusedShowSongTitle = false;
+                    bool unusedShowSongTime = false;
+                    bool unusedShowSongLen = false;
+                    parser >> unusedShowSongTitle;
+                    parser >> unusedShowSongTime;
+                    parser >> unusedShowSongLen;
+                }
                 parser >> settings.m_bShowShaderHelp;
 
                 parser >> settings.m_nTexSizeY;
@@ -1735,9 +1744,11 @@ void milk2_config::build(ui_element_config_builder& builder, const bool full_res
         cfg_bShowRating = settings.m_bShowRating;
         cfg_bShowPresetInfo = settings.m_bShowPresetInfo;
         //cfg_bShowDebugInfo = settings.m_bShowDebugInfo;
-        cfg_bShowSongTitle = settings.m_bShowSongTitle;
-        cfg_bShowSongTime = settings.m_bShowSongTime;
-        cfg_bShowSongLen = settings.m_bShowSongLen;
+        // Song title/time overlays are runtime-only toggles. Clear any older
+        // persisted values instead of saving the current transient state.
+        cfg_bShowSongTitle = default_bShowSongTitle;
+        cfg_bShowSongTime = default_bShowSongTime;
+        cfg_bShowSongLen = default_bShowSongLen;
         cfg_bShowShaderHelp = settings.m_bShowShaderHelp;
 
         //builder << settings.m_bFixPinkBug;

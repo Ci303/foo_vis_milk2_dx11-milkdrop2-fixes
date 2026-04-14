@@ -843,7 +843,7 @@
     <ProjectReference Include="..\external\foobar2000\helpers\foobar2000_sdk_helpers.vcxproj">
       <Project>{EE47764E-A202-4F85-A767-ABDAB4AFF35F}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\external\foobar2000\component_client\foobar2000_component_client.vcxproj">
+    <ProjectReference Include="..\external\foobar2000\foobar2000_component_client\foobar2000_component_client.vcxproj">
       <Project>{71AD2674-065B-48F5-B8B0-E1F9D3892081}</Project>
     </ProjectReference>
     <ProjectReference Include="..\external\libppui\libppui.vcxproj">
