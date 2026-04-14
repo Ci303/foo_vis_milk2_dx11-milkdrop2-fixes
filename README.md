@@ -18,14 +18,19 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 
 - Dark mode work for the foobar2000 preferences pages, including the font selection dialog.
 - Preference page cleanup so controls fit properly, focus behaves more predictably, and broken or misleading UI elements have been corrected.
+- Preference page layout updates for the new mouse control options so the right-hand settings column renders cleanly on current foobar2000 builds.
 - Restored working title and time display shortcuts.
 - Shortcut handling aligned with the on-screen help overlay so the documented keys match actual behaviour.
 - Stabilised the song time display so the elapsed and remaining time do not jump around as the timer updates.
 - Fixed album art and font dialog issues in the preferences UI.
+- Fixed album artwork toggle persistence so it now remembers the selected state across restarts.
 - Improved custom message and sprite helper behaviour so the related settings buttons work with the expected `milk2_msg.ini` and `milk2_img.ini` files.
 - Improved panel resize, fullscreen transitions, and settings-apply handling to avoid freezes and bad reinitialisation behaviour.
 - Added safer startup preset handling so the component remembers the last working preset instead of repeatedly restoring a broken one.
 - Fixed startup behaviour where some remembered presets could open in a degraded state because they required shader fallback on launch.
+- Reworked the legacy wait-string editor path used by preset, wave and shape code editing to avoid unsafe buffer aliasing and cursor/render edge-case bugs.
+- Improved long song title rendering so oversized titles scale down to fit and fall back to ellipsis clipping instead of disappearing.
+- Added optional mouse wheel volume control and optional single-click play/pause, with a short `Playing` / `Paused` overlay that follows the current animated song-title font settings.
 
 ## Current Behaviour and Limits
 
@@ -67,6 +72,7 @@ Useful preset sources:
   - title display
   - image cache
   - fonts
+  - optional mouse wheel volume and single-click play/pause controls
 
 ### 4. Optional custom files
 
@@ -88,6 +94,23 @@ If those files are blank or missing, normal playback still works. They are only 
 - `Alt+Enter`: toggle fullscreen
 
 The full shortcut list is also shown in the built-in help overlay.
+
+### 6. Optional mouse controls
+
+- Mouse wheel can adjust foobar2000 volume when **Enable mouse wheel volume control** is turned on in MilkDrop preferences.
+- Single left click can toggle play/pause when **Enable single-click play/pause** is turned on.
+- Double click still toggles fullscreen.
+- When single-click play/pause is enabled, MilkDrop shows a short `Playing` or `Paused` overlay using the current animated song-title font settings.
+
+## Current Release State
+
+The current public release line includes the following user-visible behaviour changes beyond the original DirectX 11 foobar2000 port:
+
+- Safer preset, wave and shape code editing in the built-in text editor path.
+- Persisted album artwork display state.
+- Song titles that scale down to fit before falling back to ellipsis clipping.
+- Optional mouse controls for volume and play/pause.
+- Preferences dialog layout fixes for the newer settings.
 
 ## Releases
 
