@@ -2,6 +2,14 @@
 
 ## Release History
 
+### 0.2.1.4 - 2026-04-14
+
+Follow-up hotfix release for wait-string rendering and cursor safety in the foobar2000 x64 component.
+
+- Fixed wide-text wait-string selection rendering writing the closing bracket into the wrong display buffer.
+- Fixed wait-string display helper loops that could underflow when the cursor or selection started at position 0.
+- Fixed code-mode cursor column calculation reading before the start of the edit buffer.
+
 ### 0.2.1.3 - 2026-04-14
 
 Hotfix release for the foobar2000 x64 component focused on editor safety and album art persistence.

@@ -4051,7 +4051,7 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
                     buf0A[end + 1] = ']';
                     len++;
 
-                    for (i = len; i >= start; i--)
+                    for (i = len + 1; i-- > start;)
                         buf0A[i + 1] = buf0A[i];
                     buf0A[start] = '[';
                     len++;
@@ -4066,10 +4066,10 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
 
                     for (i = len; i > end; i--)
                         buf0[i + 1] = buf0[i];
-                    buf[end + 1] = L']';
+                    buf0[end + 1] = L']';
                     len++;
 
-                    for (i = len; i >= start; i--)
+                    for (i = len + 1; i-- > start;)
                         buf0[i + 1] = buf0[i];
                     buf0[start] = L'[';
                     len++;
@@ -4089,7 +4089,7 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
                         }
                         else if (buf0A[temp_cursor_pos] == LINEFEED_CONTROL_CHAR)
                         {
-                            for (size_t i = strnlen_s(buf0A, 65536); i >= temp_cursor_pos; i--)
+                            for (size_t i = strnlen_s(buf0A, 65536) + 1; i-- > temp_cursor_pos;)
                                 buf0A[i + 1] = buf0A[i];
                             buf0A[temp_cursor_pos] = '_';
                         }
@@ -4107,7 +4107,7 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
                         }
                         else if (buf0A[temp_cursor_pos] == LINEFEED_CONTROL_CHAR)
                         {
-                            for (size_t i = strnlen_s(buf0A, 65536); i >= temp_cursor_pos; i--)
+                            for (size_t i = strnlen_s(buf0A, 65536) + 1; i-- > temp_cursor_pos;)
                                 buf0A[i + 1] = buf0A[i];
                             buf0A[temp_cursor_pos] = ' ';
                         }
@@ -4128,7 +4128,7 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
                         }
                         else if (buf0[temp_cursor_pos] == LINEFEED_CONTROL_CHAR)
                         {
-                            for (size_t i = wcsnlen_s(buf0, 65536); i >= temp_cursor_pos; i--)
+                            for (size_t i = wcsnlen_s(buf0, 65536) + 1; i-- > temp_cursor_pos;)
                                 buf0[i + 1] = buf0[i];
                             buf0[temp_cursor_pos] = L'_';
                         }
@@ -4146,7 +4146,7 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
                         }
                         else if (buf0[temp_cursor_pos] == LINEFEED_CONTROL_CHAR)
                         {
-                            for (size_t i = wcsnlen_s(buf0, 65536); i >= temp_cursor_pos; i--)
+                            for (size_t i = wcsnlen_s(buf0, 65536) + 1; i-- > temp_cursor_pos;)
                                 buf0[i + 1] = buf0[i];
                             buf0[temp_cursor_pos] = L' ';
                         }
@@ -6417,7 +6417,8 @@ size_t CPlugin::WaitString_GetCursorColumn() const
     {
         int column = 0;
         const char* ptr = m_waitstring.szCodeText;
-        while (/*m_waitstring.nCursorPos - column - 1 >= 0 &&*/ *(ptr + m_waitstring.nCursorPos - column - 1) != LINEFEED_CONTROL_CHAR)
+        while (m_waitstring.nCursorPos > static_cast<size_t>(column) &&
+               *(ptr + m_waitstring.nCursorPos - column - 1) != LINEFEED_CONTROL_CHAR)
             column++;
 
         return column;
