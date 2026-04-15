@@ -160,6 +160,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     bool m_minimized;
     bool m_focus_hotkeys_registered;
     bool m_pending_single_click;
+    bool m_require_explicit_click_for_play_pause;
 
     DWORD m_refresh_interval;
     double m_last_time;
@@ -173,11 +174,12 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     };
 #endif
     static constexpr UINT_PTR ID_CLICK_TIMER = 2;
+    static constexpr UINT_PTR ID_BLACKLIST_TIMER = 3;
 
     enum milk2_ui_menu_id
     {
         IDM_TOGGLE_FULLSCREEN = ID_VIS_FS,
-        IDM_CURRENT_PRESET = 1,
+        IDM_OPEN_PRESET_LOCATION = 1,
         IDM_NEXT_PRESET = ID_VIS_NEXT,
         IDM_PREVIOUS_PRESET = ID_VIS_PREV,
         IDM_LOCK_PRESET = 2,
@@ -185,6 +187,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
         IDM_ENABLE_DOWNMIX = 3,
         IDM_SHOW_TITLE = 4,
         IDM_SHOW_ALBUM = 5,
+        IDM_BLACKLIST_PRESET = 6,
         IDM_SHOW_MENU = ID_VIS_MENU,
         IDM_SHOW_PREFS = ID_VIS_CFG,
         IDM_SHOW_HELP = ID_SHOWHELP,
@@ -221,6 +224,8 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     void LockPreset(bool lockUnlock);
     bool IsPresetLock();
     std::wstring GetCurrentPreset();
+    void OpenCurrentPresetLocation();
+    void BlacklistCurrentPreset();
     void SetPresetRating(float inc_dec);
     void Seek(UINT nRepCnt, bool bShiftHeldDown, double seekDelta);
 
@@ -267,6 +272,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
 
     // Topmost setting
     bool SetTopMost() noexcept;
+    void ApplyFullscreenWindowOrder() noexcept;
 
     // Preferences page
     void ShowPreferencesPage();
@@ -325,7 +331,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     // clang-format on
 
     // Text
-    void LaunchStatusText(const wchar_t* text);
+    void LaunchStatusText(const wchar_t* text, float duration = 0.9f, float fadeTime = 0.25f);
     void LaunchSongTitle();
 };
 

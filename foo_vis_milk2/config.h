@@ -173,6 +173,9 @@ static constexpr GUID guid_cfg_bEnableMouseWheelVolume = {
 static constexpr GUID guid_cfg_bEnableMouseClickPlayPause = {
     0x1b4f7e91, 0x6c31, 0x44eb, {0x91, 0x1f, 0xeb, 0x4c, 0x65, 0xee, 0x3b, 0xf8}
 }; // {1B4F7E91-6C31-44EB-911F-EB4C65EE3BF8}
+static constexpr GUID guid_cfg_bPersistRuntimeOverlayStates = {
+    0x9111ce0c, 0x7ae2, 0x4de5, {0x97, 0x65, 0xbe, 0x73, 0x4a, 0x58, 0x20, 0x71}
+}; // {9111CE0C-7AE2-4DE5-9765-BE734A582071}
 
 // Preferences derived from other settings or hidden.
 static constexpr GUID guid_cfg_bTexSizeWasAutoPow2 = {
@@ -258,6 +261,7 @@ static constexpr bool default_bEnableDownmix = false;
 static constexpr bool default_bShowAlbum = false;
 static constexpr bool default_bEnableMouseWheelVolume = true;
 static constexpr bool default_bEnableMouseClickPlayPause = true;
+static constexpr bool default_bPersistRuntimeOverlayStates = false;
 static constexpr bool default_bEnableHDR = false;
 static constexpr int default_nBackBufferFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
 static constexpr int default_nDepthBufferFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
@@ -323,6 +327,7 @@ class milk2_preferences_page : public preferences_page_instance, public CDialogI
         COMMAND_HANDLER_EX(IDC_CB_NOCOMPSHADER, BN_CLICKED, OnButtonClick)
         COMMAND_HANDLER_EX(IDC_CB_MOUSE_WHEEL_VOLUME, BN_CLICKED, OnButtonClick)
         COMMAND_HANDLER_EX(IDC_CB_MOUSE_CLICK_PLAYPAUSE, BN_CLICKED, OnButtonClick)
+        COMMAND_HANDLER_EX(IDC_CB_PERSIST_RUNTIME_STATES, BN_CLICKED, OnButtonClick)
         COMMAND_HANDLER_EX(IDC_W_MAXFPS2, CBN_SELCHANGE, OnComboChange)
         COMMAND_HANDLER_EX(IDC_FS_MAXFPS2, CBN_SELCHANGE, OnComboChange)
         COMMAND_HANDLER_EX(IDC_CB_WPT, BN_CLICKED, OnButtonClick)
@@ -351,6 +356,7 @@ class milk2_preferences_page : public preferences_page_instance, public CDialogI
         COMMAND_HANDLER_EX(ID_SPRITE, BN_CLICKED, OnButtonPushed)
         COMMAND_HANDLER_EX(ID_MSG, BN_CLICKED, OnButtonPushed)
         COMMAND_HANDLER_EX(ID_FONTS, BN_CLICKED, OnButtonPushed)
+        COMMAND_HANDLER_EX(ID_BLACKLIST, BN_CLICKED, OnButtonPushed)
     END_MSG_MAP()
     // clang-format on
 
@@ -432,6 +438,44 @@ class FontDlg : public CDialogImpl<FontDlg>
 
     BEGIN_MSG_MAP(FontDlg)
     END_MSG_MAP()
+};
+
+class PresetBlacklistDlg : public CDialogImpl<PresetBlacklistDlg>
+{
+  public:
+    enum preset_blacklist_dialog_id
+    {
+        IDD = IDD_PRESET_BLACKLIST
+    };
+
+    bool HasChanges() const noexcept { return m_changed; }
+
+    BEGIN_MSG_MAP(PresetBlacklistDlg)
+        MSG_WM_INITDIALOG(OnInitDialog)
+        COMMAND_ID_HANDLER_EX(IDOK, OnCloseCmd)
+        COMMAND_ID_HANDLER_EX(IDCANCEL, OnCloseCmd)
+        COMMAND_HANDLER_EX(IDC_BLACKLIST_ADD, BN_CLICKED, OnAdd)
+        COMMAND_HANDLER_EX(IDC_BLACKLIST_REMOVE, BN_CLICKED, OnRemove)
+        COMMAND_HANDLER_EX(IDC_BLACKLIST_OPEN, BN_CLICKED, OnOpenLocation)
+        COMMAND_HANDLER_EX(IDC_BLACKLIST_PRESET_DIR, BN_CLICKED, OnOpenPresetDirectory)
+        COMMAND_HANDLER_EX(IDC_BLACKLIST_ENTRY, EN_CHANGE, OnEntryChanged)
+        COMMAND_HANDLER_EX(IDC_BLACKLIST_LIST, LBN_SELCHANGE, OnListSelectionChanged)
+        COMMAND_HANDLER_EX(IDC_BLACKLIST_LIST, LBN_DBLCLK, OnOpenLocation)
+    END_MSG_MAP()
+
+  private:
+    BOOL OnInitDialog(CWindow, LPARAM);
+    void OnCloseCmd(UINT, int nID, CWindow);
+    void OnAdd(UINT, int, CWindow);
+    void OnRemove(UINT, int, CWindow);
+    void OnOpenLocation(UINT, int, CWindow);
+    void OnOpenPresetDirectory(UINT, int, CWindow);
+    void OnEntryChanged(UINT, int, CWindow);
+    void OnListSelectionChanged(UINT, int, CWindow);
+    void RefreshList();
+    void UpdateButtons();
+
+    bool m_changed = false;
 };
 
 class milk2_config

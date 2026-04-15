@@ -1319,17 +1319,23 @@ void CPluginShell::RenderBuiltInTextMsgs()
 
             //int y = m_upper_left_corner_y;
 
-            r = D2D1::RectF(0.0f, 0.0f, static_cast<FLOAT>(GetWidth()), static_cast<FLOAT>(GetHeight()));
-            m_helpManual.SetContainer(r);
+            D2D1_RECT_F measured = D2D1::RectF(0.0f, 0.0f, static_cast<FLOAT>(GetWidth()), static_cast<FLOAT>(GetHeight()));
+            m_helpManual.SetContainer(measured);
             m_helpManual.SetVisible(true);
 
             m_helpManual.SetText(AutoWide(reinterpret_cast<char*>(g_szHelp)));
-            m_text.DrawD2DText(GetFont(HELPSCREEN_FONT), &m_helpManual, AutoWide(reinterpret_cast<char*>(g_szHelp)), &r, DT_CALCRECT, textColor, false);
+            m_text.DrawD2DText(GetFont(HELPSCREEN_FONT), &m_helpManual, AutoWide(reinterpret_cast<char*>(g_szHelp)), &measured, DT_CALCRECT, textColor, false);
 
-            r.top += static_cast<FLOAT>(m_upper_left_corner_y);
-            r.left += static_cast<FLOAT>(m_left_edge);
-            r.right += static_cast<FLOAT>(m_left_edge + PLAYLIST_INNER_MARGIN * 2.0f);
-            r.bottom += static_cast<FLOAT>(m_upper_left_corner_y + PLAYLIST_INNER_MARGIN * 2.0f);
+            const FLOAT measuredWidth = (std::max)(0.0f, measured.right - measured.left);
+            const FLOAT measuredHeight = (std::max)(0.0f, measured.bottom - measured.top);
+            const FLOAT boxWidth = (std::min)(measuredWidth + PLAYLIST_INNER_MARGIN * 2.0f,
+                                              static_cast<FLOAT>(GetWidth()) - PLAYLIST_INNER_MARGIN * 4.0f);
+            const FLOAT boxHeight = (std::min)(measuredHeight + PLAYLIST_INNER_MARGIN * 2.0f,
+                                               static_cast<FLOAT>(GetHeight() - m_upper_left_corner_y) - PLAYLIST_INNER_MARGIN * 2.0f);
+            const FLOAT left = (std::max)(static_cast<FLOAT>(m_left_edge + PLAYLIST_INNER_MARGIN),
+                                          static_cast<FLOAT>(m_right_edge) - boxWidth - PLAYLIST_INNER_MARGIN);
+            const FLOAT top = static_cast<FLOAT>(m_upper_left_corner_y);
+            r = D2D1::RectF(left, top, left + boxWidth, top + boxHeight);
             DrawDarkTranslucentBox(&r);
 
             r.top += PLAYLIST_INNER_MARGIN;
@@ -1341,8 +1347,6 @@ void CPluginShell::RenderBuiltInTextMsgs()
             m_text.DrawD2DText(GetFont(HELPSCREEN_FONT), &m_helpManual, AutoWide(reinterpret_cast<char*>(g_szHelp)), &r, 0, textColor, false);
 
             m_text.RegisterElement(&m_helpManual);
-
-            m_upper_left_corner_y += static_cast<int>(r.bottom - r.top + PLAYLIST_INNER_MARGIN * 3.0f);
         }
         else
         {

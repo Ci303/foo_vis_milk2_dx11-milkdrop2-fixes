@@ -70,6 +70,7 @@ milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_ins
     m_minimized = false;
     m_focus_hotkeys_registered = false;
     m_pending_single_click = false;
+    m_require_explicit_click_for_play_pause = false;
 #if defined(TIMER_TP)
     m_tpTimer = nullptr;
 #elif defined(TIMER_32)
@@ -294,6 +295,13 @@ void milk2_ui_element::OnTimer(UINT_PTR nIDEvent)
             m_playback_control->toggle_pause();
             LaunchStatusText(was_playing ? L"Paused" : L"Playing");
         }
+        return;
+    }
+
+    if (nIDEvent == ID_BLACKLIST_TIMER)
+    {
+        KillTimer(ID_BLACKLIST_TIMER);
+        RandomPreset(0.0f);
         return;
     }
 
@@ -669,12 +677,19 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
     //CMenu original;
     //b = menu.LoadMenu(IDR_WINDOWED_CONTEXT_MENU);
     //menu.AppendMenu(MF_STRING, menu.GetSubMenu(0), TEXT("Winamp"));
-    menu.AppendMenu(MF_GRAYED, IDM_CURRENT_PRESET, GetCurrentPreset().c_str());
+    KillTimer(ID_CLICK_TIMER);
+    m_pending_single_click = false;
+    m_require_explicit_click_for_play_pause = true;
+
+    const std::wstring currentPreset = g_plugin.GetCurrentPresetFilename();
+    const UINT presetItemFlags = currentPreset.empty() ? (MF_STRING | MF_GRAYED) : MF_STRING;
+    menu.AppendMenu(presetItemFlags, IDM_OPEN_PRESET_LOCATION, currentPreset.empty() ? TEXT("(No preset loaded)") : currentPreset.c_str());
     menu.AppendMenu(MF_SEPARATOR);
     menu.AppendMenu(MF_STRING, IDM_NEXT_PRESET, TEXT("Next Preset"));
     menu.AppendMenu(MF_STRING, IDM_PREVIOUS_PRESET, TEXT("Previous Preset"));
     menu.AppendMenu(MF_STRING, IDM_SHUFFLE_PRESET, TEXT("Shuffle Preset"));
     menu.AppendMenu(MF_STRING | (IsPresetLock() ? MF_CHECKED : 0), IDM_LOCK_PRESET, TEXT("Lock Preset"));
+    menu.AppendMenu(currentPreset.empty() ? (MF_STRING | MF_GRAYED) : MF_STRING, IDM_BLACKLIST_PRESET, TEXT("Never Show Again"));
     menu.AppendMenu(MF_SEPARATOR);
     menu.AppendMenu(MF_STRING | (s_config.settings.m_bEnableDownmix ? MF_CHECKED : 0), IDM_ENABLE_DOWNMIX, TEXT("Downmix Channels"));
     menu.AppendMenu(MF_SEPARATOR);
@@ -697,6 +712,9 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
 
     switch (cmd)
     {
+        case IDM_OPEN_PRESET_LOCATION:
+            OpenCurrentPresetLocation();
+            break;
         case IDM_TOGGLE_FULLSCREEN:
             if (g_plugin.GetFrame() > 0)
                 ToggleFullScreen();
@@ -709,6 +727,9 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
             break;
         case IDM_LOCK_PRESET:
             LockPreset(!IsPresetLock());
+            break;
+        case IDM_BLACKLIST_PRESET:
+            BlacklistCurrentPreset();
             break;
         case IDM_SHUFFLE_PRESET:
             RandomPreset();
@@ -773,6 +794,12 @@ LRESULT milk2_ui_element::OnMilk2Message(UINT uMsg, WPARAM wParam, LPARAM lParam
 {
     if (uMsg != WM_MILK2)
         return -1;
+
+    if (wParam == MILK2_WPARAM_REFRESH_PRESET_LIST)
+    {
+        g_plugin.UpdatePresetList(false, true, true);
+        return 0;
+    }
 
     auto api = playlist_manager::get();
     if (LOBYTE(wParam) == 0x21 && HIBYTE(wParam) == 0x09)
@@ -1291,6 +1318,8 @@ void milk2_ui_element::BuildWaves()
 #pragma region Message Handlers
 void milk2_ui_element::OnActivated()
 {
+    if (s_fullscreen)
+        ApplyFullscreenWindowOrder();
 }
 
 void milk2_ui_element::OnDeactivated()
@@ -1360,6 +1389,7 @@ void milk2_ui_element::ToggleFullScreen()
             s_in_toggle = true;
             SetTopMost();
             static_api_ptr_t<ui_element_common_methods_v2>()->toggle_fullscreen(g_get_guid(), core_api::get_main_window());
+            ApplyFullscreenWindowOrder();
             MILK2_CONSOLE_LOG("ToggleFullScreen1 ", GetWnd())
         }
         catch (const std::exception& exc)
@@ -1481,7 +1511,30 @@ std::wstring milk2_ui_element::GetCurrentPreset()
         MILK2_CONSOLE_LOG("GetCurrentPreset Mismatch --> ", buf, " != ", g_plugin.m_presets[g_plugin.m_nCurrentPreset].szFilename.c_str())
     }
 #endif
-    return g_plugin.m_nCurrentPreset != -1 ? g_plugin.m_presets[g_plugin.m_nCurrentPreset].szFilename : std::wstring();
+    return g_plugin.GetCurrentPresetFilename();
+}
+
+void milk2_ui_element::OpenCurrentPresetLocation()
+{
+    const std::wstring presetPath = g_plugin.GetCurrentPresetPath();
+    if (presetPath.empty())
+        return;
+
+    std::wstring arguments = L"/select,\"" + presetPath + L"\"";
+    ShellExecute(m_hWnd, L"open", L"explorer.exe", arguments.c_str(), nullptr, SW_SHOWNORMAL);
+}
+
+void milk2_ui_element::BlacklistCurrentPreset()
+{
+    const std::wstring presetName = g_plugin.GetCurrentPresetFilename();
+    if (presetName.empty())
+        return;
+
+    if (!g_plugin.AddPresetToBlacklist(presetName))
+        return;
+
+    KillTimer(ID_BLACKLIST_TIMER);
+    SetTimer(ID_BLACKLIST_TIMER, 1, nullptr);
 }
 
 void milk2_ui_element::LockPreset(bool lockUnlock)
@@ -1667,9 +1720,9 @@ void milk2_ui_element::LaunchSongTitle()
     g_plugin.LaunchSongTitleAnim();
 }
 
-void milk2_ui_element::LaunchStatusText(const wchar_t* text)
+void milk2_ui_element::LaunchStatusText(const wchar_t* text, float duration, float fadeTime)
 {
-    g_plugin.LaunchStatusText(text);
+    g_plugin.LaunchStatusText(text, duration, fadeTime);
 }
 
 #ifdef TIMER_TP
@@ -1747,6 +1800,15 @@ bool milk2_ui_element::SetTopMost() noexcept
         }
     }
     return false;
+}
+
+void milk2_ui_element::ApplyFullscreenWindowOrder() noexcept
+{
+    if (!::IsWindow(get_wnd()))
+        return;
+
+    ::SetWindowPos(get_wnd(), s_fullscreen ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 }
 
 void milk2_ui_element::ShowPreferencesPage()

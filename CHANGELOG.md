@@ -2,6 +2,18 @@
 
 ## Release History
 
+### 0.2.1.8 - 2026-04-15
+
+Blacklist and mouse-control usability release for the foobar2000 x64 component.
+
+- Added persistent preset blacklist support to the foobar context menu with `Never Show Again`.
+- Added a blacklist manager in preferences with direct file opening and preset-folder browsing for adding entries.
+- Fixed the blacklist manager lifetime/ownership issues that could crash or hang foobar when closing preferences.
+- Added a startup option to restore F-key overlay states, while keeping the default startup state reset for transient overlays.
+- Updated the built-in help overlay text/layout for the newer mouse controls and clearer playback shortcut guidance.
+- Refined single-click play/pause so the first click after focus regain or a context menu shows `Click Again for Play/Pause` instead of pausing immediately.
+- Improved fullscreen topmost handling so fullscreen mode reapplies window ordering more reliably.
+
 ### 0.2.1.5 - 2026-04-14
 
 Hotfix release for song title rendering in the foobar2000 x64 component.

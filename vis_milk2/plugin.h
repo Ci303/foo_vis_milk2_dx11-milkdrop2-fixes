@@ -445,6 +445,9 @@ class CPlugin : public CPluginShell
     wchar_t m_szRememberedPreset[512];
     bool m_lastPresetUsedFallback;
     PresetList m_presets;
+    std::vector<std::wstring> m_presetBlacklist;
+    bool m_bPresetBlacklistLoaded;
+    mutable SRWLOCK m_presetBlacklistLock = SRWLOCK_INIT;
     void UpdatePresetList(bool bBackground = false, bool bForce = false, bool bTryReselectCurrentPreset = true) const;
     wchar_t m_szUpdatePresetMask[MAX_PATH];
     volatile bool m_bPresetListReady;
@@ -583,6 +586,14 @@ class CPlugin : public CPluginShell
     void FindValidPresetDir();
     wchar_t* GetPresetDir() const { return const_cast<wchar_t*>(m_szPresetDir); };
     td_fontinfo* GetFontInfo() const {return const_cast<td_fontinfo*>(m_fontinfo); };
+    std::wstring GetCurrentPresetFilename() const;
+    std::wstring GetCurrentPresetPath() const;
+    std::wstring GetPresetBlacklistPath() const;
+    std::vector<std::wstring> GetPresetBlacklist() const;
+    bool IsPresetBlacklisted(const std::wstring& presetFilename) const;
+    bool AddPresetToBlacklist(const std::wstring& presetFilename);
+    bool RemovePresetFromBlacklist(const std::wstring& presetFilename);
+    bool SetPresetBlacklist(const std::vector<std::wstring>& presetFilenames);
     void SavePresetAs(wchar_t* szNewFile); // overwrites the file if it was already there.
     void DeletePresetFile(wchar_t* szDelFile);
     void RenamePresetFile(wchar_t* szOldFile, wchar_t* szNewFile);
@@ -609,6 +620,10 @@ class CPlugin : public CPluginShell
     void ShowToUser_NoShaders();
     void BlurPasses();
     void GetSafeBlurMinMax(CState* pState, float* blur_min, float* blur_max);
+
+    bool LoadPresetBlacklist();
+    bool SavePresetBlacklist() const;
+    static std::wstring NormalizePresetBlacklistEntry(const std::wstring& presetFilename);
     void RunPerFrameEquations(int code);
     void DrawUserSprites();
     void MergeSortPresets(int left, int right);
@@ -697,5 +712,7 @@ class CPlugin : public CPluginShell
     TextElement m_loadPresetItem[MAX_PRESETS_PER_PAGE];
     TextElement m_ddsTitle;
 };
+
+extern CPlugin g_plugin;
 
 #endif

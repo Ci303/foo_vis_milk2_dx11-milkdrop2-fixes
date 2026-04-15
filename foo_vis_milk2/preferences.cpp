@@ -9,6 +9,7 @@
 
 #include "pch.h"
 #include "config.h"
+#include <vis_milk2/plugin.h>
 
 #include <fstream>
 
@@ -109,6 +110,7 @@ static cfg_bool cfg_bEnableDownmix(guid_cfg_bEnableDownmix, default_bEnableDownm
 static cfg_bool cfg_bShowAlbum(guid_cfg_bShowAlbum, default_bShowAlbum);
 static cfg_bool cfg_bEnableMouseWheelVolume(guid_cfg_bEnableMouseWheelVolume, default_bEnableMouseWheelVolume);
 static cfg_bool cfg_bEnableMouseClickPlayPause(guid_cfg_bEnableMouseClickPlayPause, default_bEnableMouseClickPlayPause);
+static cfg_bool cfg_bPersistRuntimeOverlayStates(guid_cfg_bPersistRuntimeOverlayStates, default_bPersistRuntimeOverlayStates);
 static cfg_bool cfg_bEnableHDR(guid_cfg_bEnableHDR, default_bEnableHDR);
 static cfg_int cfg_max_fps_fs(guid_cfg_max_fps_fs, static_cast<int64_t>(default_max_fps_fs));
 static cfg_int cfg_n16BitGamma(guid_cfg_n16BitGamma, static_cast<int64_t>(default_n16BitGamma));
@@ -368,6 +370,7 @@ BOOL milk2_preferences_page::OnInitDialog(CWindow, LPARAM)
     CheckDlgButton(IDC_CB_NOCOMPSHADER, static_cast<UINT>(cfg_bSkipCompShader));
     CheckDlgButton(IDC_CB_MOUSE_WHEEL_VOLUME, static_cast<UINT>(cfg_bEnableMouseWheelVolume));
     CheckDlgButton(IDC_CB_MOUSE_CLICK_PLAYPAUSE, static_cast<UINT>(cfg_bEnableMouseClickPlayPause));
+    CheckDlgButton(IDC_CB_PERSIST_RUNTIME_STATES, static_cast<UINT>(cfg_bPersistRuntimeOverlayStates));
 
     // Maximum FPS.
     CheckDlgButton(IDC_CB_FSPT, static_cast<UINT>(cfg_allow_page_tearing_fs));
@@ -714,7 +717,118 @@ void milk2_preferences_page::OnButtonPushed(UINT uNotifyCode, int nID, CWindow w
                 if (ret == IDOK/* && HasChanged()*/) {}
             }
             break;
+        case ID_BLACKLIST:
+            {
+                PresetBlacklistDlg dlg; dlg.DoModal(core_api::get_main_window());
+            }
+            break;
     }
+}
+
+BOOL PresetBlacklistDlg::OnInitDialog(CWindow, LPARAM)
+{
+    RefreshList();
+    UpdateButtons();
+    CenterWindow(GetParent());
+    return TRUE;
+}
+
+void PresetBlacklistDlg::OnCloseCmd(UINT, int nID, CWindow)
+{
+    EndDialog(nID);
+}
+
+void PresetBlacklistDlg::OnAdd(UINT, int, CWindow)
+{
+    wchar_t selectedPath[MAX_PATH] = {0};
+    OPENFILENAME ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = *this;
+    ofn.lpstrFilter = L"MilkDrop Presets (*.milk)\0*.milk\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFile = selectedPath;
+    ofn.nMaxFile = static_cast<DWORD>(std::size(selectedPath));
+    ofn.lpstrInitialDir = g_plugin.GetPresetDir();
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+    ofn.lpstrDefExt = L"milk";
+
+    if (!GetOpenFileName(&ofn))
+        return;
+
+    const wchar_t* filename = wcsrchr(selectedPath, L'\\');
+    filename = filename ? (filename + 1) : selectedPath;
+    wchar_t entry[512] = {0};
+    wcscpy_s(entry, filename);
+    if (!g_plugin.AddPresetToBlacklist(entry))
+        return;
+
+    if (g_plugin.IsPresetBlacklisted(g_plugin.GetCurrentPresetFilename()))
+        g_plugin.LoadRandomPreset(0.0f);
+
+    m_changed = true;
+    SetDlgItemText(IDC_BLACKLIST_ENTRY, L"");
+    RefreshList();
+    UpdateButtons();
+}
+
+void PresetBlacklistDlg::OnRemove(UINT, int, CWindow)
+{
+    const int index = static_cast<int>(SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETCURSEL, 0, 0));
+    if (index == LB_ERR)
+        return;
+
+    wchar_t entry[512] = {0};
+    SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETTEXT, index, reinterpret_cast<LPARAM>(entry));
+    if (!g_plugin.RemovePresetFromBlacklist(entry))
+        return;
+
+    m_changed = true;
+    RefreshList();
+    UpdateButtons();
+}
+
+void PresetBlacklistDlg::OnOpenLocation(UINT, int, CWindow)
+{
+    const int index = static_cast<int>(SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETCURSEL, 0, 0));
+    if (index == LB_ERR)
+        return;
+
+    wchar_t entry[512] = {0};
+    SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETTEXT, index, reinterpret_cast<LPARAM>(entry));
+    std::wstring presetPath = g_plugin.GetPresetDir();
+    presetPath += entry;
+    std::wstring arguments = L"/select,\"" + presetPath + L"\"";
+    ShellExecute(*this, L"open", L"explorer.exe", arguments.c_str(), nullptr, SW_SHOWNORMAL);
+}
+
+void PresetBlacklistDlg::OnOpenPresetDirectory(UINT, int, CWindow)
+{
+    ShellExecute(*this, L"open", g_plugin.GetPresetDir(), nullptr, g_plugin.GetPresetDir(), SW_SHOWNORMAL);
+}
+
+void PresetBlacklistDlg::OnEntryChanged(UINT, int, CWindow)
+{
+    UpdateButtons();
+}
+
+void PresetBlacklistDlg::OnListSelectionChanged(UINT, int, CWindow)
+{
+    UpdateButtons();
+}
+
+void PresetBlacklistDlg::RefreshList()
+{
+    const auto blacklist = g_plugin.GetPresetBlacklist();
+    SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_RESETCONTENT, 0, 0);
+    for (const auto& entry : blacklist)
+        SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(entry.c_str()));
+}
+
+void PresetBlacklistDlg::UpdateButtons()
+{
+    const bool hasSelection = static_cast<int>(SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETCURSEL, 0, 0)) != LB_ERR;
+    ::EnableWindow(GetDlgItem(IDC_BLACKLIST_ADD), TRUE);
+    ::EnableWindow(GetDlgItem(IDC_BLACKLIST_REMOVE), static_cast<BOOL>(hasSelection));
+    ::EnableWindow(GetDlgItem(IDC_BLACKLIST_OPEN), static_cast<BOOL>(hasSelection));
 }
 
 void milk2_preferences_page::OnEditNotification(UINT uNotifyCode, int nID, CWindow wndCtl)
@@ -797,6 +911,7 @@ void milk2_preferences_page::reset()
     CheckDlgButton(IDC_CB_NOCOMPSHADER, static_cast<UINT>(default_bSkipCompShader));
     CheckDlgButton(IDC_CB_MOUSE_WHEEL_VOLUME, static_cast<UINT>(default_bEnableMouseWheelVolume));
     CheckDlgButton(IDC_CB_MOUSE_CLICK_PLAYPAUSE, static_cast<UINT>(default_bEnableMouseClickPlayPause));
+    CheckDlgButton(IDC_CB_PERSIST_RUNTIME_STATES, static_cast<UINT>(default_bPersistRuntimeOverlayStates));
 
     CheckDlgButton(IDC_CB_FSPT, static_cast<UINT>(default_allow_page_tearing_fs));
     UpdateMaxFps(FULLSCREEN);
@@ -869,6 +984,7 @@ void milk2_preferences_page::apply()
     cfg_bSkipCompShader = static_cast<bool>(IsDlgButtonChecked(IDC_CB_NOCOMPSHADER));
     cfg_bEnableMouseWheelVolume = static_cast<bool>(IsDlgButtonChecked(IDC_CB_MOUSE_WHEEL_VOLUME));
     cfg_bEnableMouseClickPlayPause = static_cast<bool>(IsDlgButtonChecked(IDC_CB_MOUSE_CLICK_PLAYPAUSE));
+    cfg_bPersistRuntimeOverlayStates = static_cast<bool>(IsDlgButtonChecked(IDC_CB_PERSIST_RUNTIME_STATES));
 
     cfg_allow_page_tearing_fs = static_cast<bool>(IsDlgButtonChecked(IDC_CB_FSPT));
     SaveMaxFps(FULLSCREEN);
@@ -972,6 +1088,7 @@ bool milk2_preferences_page::HasChanged() const
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_NOCOMPSHADER)) != cfg_bSkipCompShader) ||
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_MOUSE_WHEEL_VOLUME)) != cfg_bEnableMouseWheelVolume) ||
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_MOUSE_CLICK_PLAYPAUSE)) != cfg_bEnableMouseClickPlayPause) ||
+                            (static_cast<bool>(IsDlgButtonChecked(IDC_CB_PERSIST_RUNTIME_STATES)) != cfg_bPersistRuntimeOverlayStates) ||
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_FSPT)) != cfg_allow_page_tearing_fs) ||
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_HARDCUTS)) != cfg_bHardCutsDisabled) ||
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_AUTOGAMMA2)) != cfg_bAutoGamma) ||
@@ -1494,16 +1611,16 @@ void milk2_config::reset()
     //settings.m_bShowMenuToolTips;
     settings.m_bSongTitleAnims = cfg_bSongTitleAnims;
 
-    settings.m_bShowFPS = cfg_bShowFPS;
-    settings.m_bShowRating = cfg_bShowRating;
-    settings.m_bShowPresetInfo = cfg_bShowPresetInfo;
+    settings.m_bShowFPS = cfg_bPersistRuntimeOverlayStates ? static_cast<bool>(cfg_bShowFPS) : default_bShowFPS;
+    settings.m_bShowRating = cfg_bPersistRuntimeOverlayStates ? static_cast<bool>(cfg_bShowRating) : default_bShowRating;
+    settings.m_bShowPresetInfo = cfg_bPersistRuntimeOverlayStates ? static_cast<bool>(cfg_bShowPresetInfo) : default_bShowPresetInfo;
     //settings.m_bShowDebugInfo = cfg_bShowDebugInfo;
     // Song title/time overlays are runtime toggles controlled by F2/F3.
     // Do not restore them on startup.
-    settings.m_bShowSongTitle = default_bShowSongTitle;
-    settings.m_bShowSongTime = default_bShowSongTime;
-    settings.m_bShowSongLen = default_bShowSongLen;
-    settings.m_bShowShaderHelp = cfg_bShowShaderHelp;
+    settings.m_bShowSongTitle = cfg_bPersistRuntimeOverlayStates ? static_cast<bool>(cfg_bShowSongTitle) : default_bShowSongTitle;
+    settings.m_bShowSongTime = cfg_bPersistRuntimeOverlayStates ? static_cast<bool>(cfg_bShowSongTime) : default_bShowSongTime;
+    settings.m_bShowSongLen = cfg_bPersistRuntimeOverlayStates ? static_cast<bool>(cfg_bShowSongLen) : default_bShowSongLen;
+    settings.m_bShowShaderHelp = cfg_bPersistRuntimeOverlayStates ? static_cast<bool>(cfg_bShowShaderHelp) : default_bShowShaderHelp;
 
     //settings.m_bFixPinkBug = default_bFixPinkBug;
     settings.m_n16BitGamma = static_cast<uint32_t>(cfg_n16BitGamma);
@@ -1553,6 +1670,7 @@ void milk2_config::reset()
     settings.m_bShowAlbum = cfg_bShowAlbum;
     settings.m_bEnableMouseWheelVolume = cfg_bEnableMouseWheelVolume;
     settings.m_bEnableMouseClickPlayPause = cfg_bEnableMouseClickPlayPause;
+    settings.m_bPersistRuntimeOverlayStates = cfg_bPersistRuntimeOverlayStates;
     settings.m_bEnableHDR = default_bEnableHDR;
     settings.m_bSkipCompShader = static_cast<uint32_t>(cfg_bSkipCompShader);
     settings.m_nBackBufferFormat = default_nBackBufferFormat;
@@ -1757,16 +1875,14 @@ void milk2_config::build(ui_element_config_builder& builder, const bool full_res
         cfg_bSongTitleAnims = settings.m_bSongTitleAnims;
         cfg_bSkipCompShader = settings.m_bSkipCompShader;
 
-        cfg_bShowFPS = settings.m_bShowFPS;
-        cfg_bShowRating = settings.m_bShowRating;
-        cfg_bShowPresetInfo = settings.m_bShowPresetInfo;
+        cfg_bShowFPS = cfg_bPersistRuntimeOverlayStates ? settings.m_bShowFPS : default_bShowFPS;
+        cfg_bShowRating = cfg_bPersistRuntimeOverlayStates ? settings.m_bShowRating : default_bShowRating;
+        cfg_bShowPresetInfo = cfg_bPersistRuntimeOverlayStates ? settings.m_bShowPresetInfo : default_bShowPresetInfo;
         //cfg_bShowDebugInfo = settings.m_bShowDebugInfo;
-        // Song title/time overlays are runtime-only toggles. Clear any older
-        // persisted values instead of saving the current transient state.
-        cfg_bShowSongTitle = default_bShowSongTitle;
-        cfg_bShowSongTime = default_bShowSongTime;
-        cfg_bShowSongLen = default_bShowSongLen;
-        cfg_bShowShaderHelp = settings.m_bShowShaderHelp;
+        cfg_bShowSongTitle = cfg_bPersistRuntimeOverlayStates ? settings.m_bShowSongTitle : default_bShowSongTitle;
+        cfg_bShowSongTime = cfg_bPersistRuntimeOverlayStates ? settings.m_bShowSongTime : default_bShowSongTime;
+        cfg_bShowSongLen = cfg_bPersistRuntimeOverlayStates ? settings.m_bShowSongLen : default_bShowSongLen;
+        cfg_bShowShaderHelp = cfg_bPersistRuntimeOverlayStates ? settings.m_bShowShaderHelp : default_bShowShaderHelp;
 
         //builder << settings.m_bFixPinkBug;
         cfg_n16BitGamma = settings.m_n16BitGamma;
@@ -1818,6 +1934,7 @@ void milk2_config::build(ui_element_config_builder& builder, const bool full_res
         cfg_bShowAlbum = settings.m_bShowAlbum;
         cfg_bEnableMouseWheelVolume = settings.m_bEnableMouseWheelVolume;
         cfg_bEnableMouseClickPlayPause = settings.m_bEnableMouseClickPlayPause;
+        cfg_bPersistRuntimeOverlayStates = settings.m_bPersistRuntimeOverlayStates;
         cfg_bEnableHDR = settings.m_bEnableHDR;
 
         cfg_szTitleFormat = pfc::utf8FromWide(settings.m_szTitleFormat);
@@ -1833,5 +1950,6 @@ void milk2_config::persist_runtime_settings() const
     cfg_bShowAlbum = settings.m_bShowAlbum;
     cfg_bEnableMouseWheelVolume = settings.m_bEnableMouseWheelVolume;
     cfg_bEnableMouseClickPlayPause = settings.m_bEnableMouseClickPlayPause;
+    cfg_bPersistRuntimeOverlayStates = settings.m_bPersistRuntimeOverlayStates;
 }
 #pragma endregion

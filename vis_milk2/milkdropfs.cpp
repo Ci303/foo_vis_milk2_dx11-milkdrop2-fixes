@@ -3832,9 +3832,11 @@ void CPlugin::ShowToUser_NoShaders() //int bRedraw, int nPassOverride)
     lpDevice->SetPixelShader(NULL, NULL);
     //lpDevice->SetFVF(SPRITEVERTEX_FORMAT);
 
-    // Stages 0 and 1 always just use bilinear filtering.
-    lpDevice->SetSamplerState(0, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_WRAP);
-    lpDevice->SetSamplerState(1, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_WRAP);
+    // This pass presents the already-rendered scene to the backbuffer.
+    // Clamp here so sampling at the outermost edge never wraps in a stray
+    // row or column from the opposite side of the source texture.
+    lpDevice->SetSamplerState(0, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_CLAMP);
+    lpDevice->SetSamplerState(1, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_CLAMP);
 
     // Note: This texture stage state setup works for 0 or 1 texture.
     //       If a texture is set, it will be modulated with the current diffuse color.
@@ -3845,11 +3847,13 @@ void CPlugin::ShowToUser_NoShaders() //int bRedraw, int nPassOverride)
     SPRITEVERTEX v3[4];
     ZeroMemory(v3, sizeof(SPRITEVERTEX) * 4);
 
-    // Extend the polygon drawn by 1 pixel around the viewable image area,
-    // in case the video card wraps u/v coordinates with a +0.5-texel offset
-    // (otherwise, a 1-pixel-wide line of the image would wrap at the top and left edges).
-    float fOnePlusInvWidth = 1.0f + 1.0f / static_cast<float>(std::max(1, GetWidth()));
-    float fOnePlusInvHeight = 1.0f + 1.0f / static_cast<float>(std::max(1, GetHeight()));
+    // Present exactly to the viewport edges. The UVs are already inset by half
+    // a texel, so overscanning the quad here just stretches the outermost texel
+    // into a visible frame on some presets.
+    constexpr float fOnePlusInvWidth = 1.0f;
+    constexpr float fOnePlusInvHeight = 1.0f;
+    const float halfTexelU = 0.5f / static_cast<float>(std::max(1, GetWidth()));
+    const float halfTexelV = 0.5f / static_cast<float>(std::max(1, GetHeight()));
     v3[0].x = -fOnePlusInvWidth;
     v3[1].x = fOnePlusInvWidth;
     v3[2].x = -fOnePlusInvWidth;
@@ -3942,14 +3946,14 @@ void CPlugin::ShowToUser_NoShaders() //int bRedraw, int nPassOverride)
 
                 float temp_lo = 0.5f - 0.5f / fZoom;
                 float temp_hi = 0.5f + 0.5f / fZoom;
-                v3[0].tu = temp_lo;
-                v3[0].tv = temp_hi;
-                v3[1].tu = temp_hi;
-                v3[1].tv = temp_hi;
-                v3[2].tu = temp_lo;
-                v3[2].tv = temp_lo;
-                v3[3].tu = temp_hi;
-                v3[3].tv = temp_lo;
+                v3[0].tu = (std::max)(halfTexelU, temp_lo);
+                v3[0].tv = (std::min)(1.0f - halfTexelV, temp_hi);
+                v3[1].tu = (std::min)(1.0f - halfTexelU, temp_hi);
+                v3[1].tv = (std::min)(1.0f - halfTexelV, temp_hi);
+                v3[2].tu = (std::max)(halfTexelU, temp_lo);
+                v3[2].tv = (std::max)(halfTexelV, temp_lo);
+                v3[3].tu = (std::min)(1.0f - halfTexelU, temp_hi);
+                v3[3].tv = (std::max)(halfTexelV, temp_lo);
 
                 // Flipping.
                 if (i == 1)
@@ -4007,14 +4011,14 @@ void CPlugin::ShowToUser_NoShaders() //int bRedraw, int nPassOverride)
         else
         {
             // No video echo.
-            v3[0].tu = 0.0f;
-            v3[1].tu = 1.0f;
-            v3[2].tu = 0.0f;
-            v3[3].tu = 1.0f;
-            v3[0].tv = 1.0f;
-            v3[1].tv = 1.0f;
-            v3[2].tv = 0.0f;
-            v3[3].tv = 0.0f;
+            v3[0].tu = halfTexelU;
+            v3[1].tu = 1.0f - halfTexelU;
+            v3[2].tu = halfTexelU;
+            v3[3].tu = 1.0f - halfTexelU;
+            v3[0].tv = 1.0f - halfTexelV;
+            v3[1].tv = 1.0f - halfTexelV;
+            v3[2].tv = halfTexelV;
+            v3[3].tv = halfTexelV;
 
             lpDevice->SetBlendState(false, D3D11_BLEND_ONE, D3D11_BLEND_ZERO);
 

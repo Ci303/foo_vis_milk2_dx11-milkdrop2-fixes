@@ -21,6 +21,7 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Preference page layout updates for the new mouse control options so the right-hand settings column renders cleanly on current foobar2000 builds.
 - Restored working title and time display shortcuts.
 - Shortcut handling aligned with the on-screen help overlay so the documented keys match actual behaviour.
+- Reworked the built-in help overlay so it lays out on-screen more cleanly and includes the newer mouse controls and clearer playback shortcut guidance.
 - Stabilised the song time display so the elapsed and remaining time do not jump around as the timer updates.
 - Fixed album art and font dialog issues in the preferences UI.
 - Fixed album artwork toggle persistence so it now remembers the selected state across restarts.
@@ -31,6 +32,8 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Reworked the legacy wait-string editor path used by preset, wave and shape code editing to avoid unsafe buffer aliasing and cursor/render edge-case bugs.
 - Improved long song title rendering so oversized titles scale down to fit and fall back to ellipsis clipping instead of disappearing.
 - Added optional mouse wheel volume control and optional single-click play/pause, with a short `Playing` / `Paused` overlay that follows the current animated song-title font settings.
+- Added preset blacklisting, including a `Never Show Again` runtime action, a blacklist manager dialog, and persistent blacklist storage in the `milkdrop2` profile folder.
+- Refined the mouse focus/playback interaction so accidental first-click pauses are less likely when MilkDrop has just regained focus.
 
 ## Current Behaviour and Limits
 
@@ -80,6 +83,8 @@ Example:
   - image cache
   - fonts
   - optional mouse wheel volume and single-click play/pause controls
+  - whether F-key overlay states should be restored on startup
+  - preset blacklist editing
 
 For refresh rates above 60 FPS, use `Unlimited`. The other higher frame-rate settings are not currently working correctly in this fork and fixing them is outside the current scope of this project.
 
@@ -108,8 +113,17 @@ The full shortcut list is also shown in the built-in help overlay.
 
 - Mouse wheel can adjust foobar2000 volume when **Enable mouse wheel volume control** is turned on in MilkDrop preferences.
 - Single left click can toggle play/pause when **Enable single-click play/pause** is turned on.
+- To avoid accidental pauses, the first click after focus is regained or after the context menu closes only arms MilkDrop and shows `Click Again for Play/Pause`.
 - Double click still toggles fullscreen.
 - When single-click play/pause is enabled, MilkDrop shows a short `Playing` or `Paused` overlay using the current animated song-title font settings.
+
+### 7. Preset blacklist
+
+- Right click the visualiser and choose `Never Show Again` to blacklist the current preset immediately.
+- The current preset name at the top of the context menu can open the preset file location in Explorer.
+- Blacklisted presets are skipped permanently until they are removed from the blacklist manager in preferences.
+- The blacklist manager can open an existing blacklisted file in Explorer and can browse the preset folder to add new `.milk` files.
+- The blacklist is stored at `<foobar2000 profile folder>\milkdrop2\preset-blacklist.txt`.
 
 ## Current Release State
 
@@ -119,6 +133,8 @@ The current public release line includes the following user-visible behaviour ch
 - Persisted album artwork display state.
 - Song titles that scale down to fit before falling back to ellipsis clipping.
 - Optional mouse controls for volume and play/pause.
+- Persistent preset blacklist management and direct preset file access from the context menu.
+- Blacklist manager improvements including preset-folder browsing, safer preferences integration, and the startup/runtime overlay-state option.
 - Preferences dialog layout fixes for the newer settings.
 
 ## Releases

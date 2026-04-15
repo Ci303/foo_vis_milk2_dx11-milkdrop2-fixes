@@ -26,6 +26,7 @@
 #define IDS_ENTER_THE_NEW_STRING        11
 #define ID_MSG                          12
 #define ID_SPRITE                       13
+#define ID_BLACKLIST                    16
 #define IDS_MILKDROP_ERROR              14
 #define ID_FONTS                        15
 #define IDS_MILKDROP_WARNING            19
@@ -629,6 +630,7 @@
 #define IDS_TITLE_FORMAT_HELP           647
 #define IDS_ARTWORK_FORMAT_HELP         648
 #define IDD_PREFS                       700
+#define IDD_PRESET_BLACKLIST            701
 //#define IDC_CB_FOG                      1000
 //#define IDC_CB_SUPERTEX                 1001
 //#define IDC_CB_HELP_MSG                 1001
@@ -892,6 +894,14 @@
 #define IDC_FONT1                       1093
 #define IDC_CB_MOUSE_WHEEL_VOLUME       1094
 #define IDC_CB_MOUSE_CLICK_PLAYPAUSE    1095
+#define IDC_BLACKLIST_LIST              1096
+#define IDC_BLACKLIST_ENTRY             1097
+#define IDC_BLACKLIST_ADD               1098
+#define IDC_BLACKLIST_REMOVE            1099
+#define IDC_BLACKLIST_OPEN              1100
+#define IDC_BLACKLIST_LABEL             1101
+#define IDC_CB_PERSIST_RUNTIME_STATES   1102
+#define IDC_BLACKLIST_PRESET_DIR        1103
 #define ID_SHOWHELP                     40007
 #define ID_SHOWPLAYLIST                 40008
 #define ID_QUIT                         40009
@@ -902,9 +912,9 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        103
+#define _APS_NEXT_RESOURCE_VALUE        104
 #define _APS_NEXT_COMMAND_VALUE         40011
-#define _APS_NEXT_CONTROL_VALUE         1096
+#define _APS_NEXT_CONTROL_VALUE         1104
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

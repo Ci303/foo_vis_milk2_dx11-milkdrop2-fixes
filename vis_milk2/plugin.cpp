@@ -592,6 +592,8 @@ void CPlugin::MilkDropPreInitialize()
     m_szCurrentPresetFile[0] = 0;
     m_szRememberedPreset[0] = 0;
     m_szLoadingPreset[0] = 0;
+    m_presetBlacklist.clear();
+    m_bPresetBlacklistLoaded = false;
     m_bPresetListReady = false;
     m_szUpdatePresetMask[0] = 0;
     //m_nRatingReadProgress = -1;
@@ -1488,13 +1490,13 @@ int CPlugin::AllocateMilkDropDX11()
     m_fInvAspectX = 1.0f / m_fAspectX;
     m_fInvAspectY = 1.0f / m_fAspectY;
 
-    // BUILD VERTEX LIST for final composite blit
-    // note the +0.5-texel offset!
-    // (otherwise, a 1-pixel-wide line of the image would wrap at the top and left edges).
+    // BUILD VERTEX LIST for final composite blit.
+    // Keep UVs half a texel inside the source texture on every edge so the
+    // fullscreen composite pass does not sample wrapped border pixels.
     ZeroMemory(m_comp_verts, sizeof(MDVERTEX) * FCGSX * FCGSY);
     //float fOnePlusInvWidth  = 1.0f + 1.0f / (float)GetWidth();
     //float fOnePlusInvHeight = 1.0f + 1.0f / (float)GetHeight();
-    float fHalfTexelW = 0.5f / static_cast<float>(std::max(1, GetWidth())); // 2.5: 2 pixels bad @ bottom right
+    float fHalfTexelW = 0.5f / static_cast<float>(std::max(1, GetWidth())); // keep UVs off the texture border
     float fHalfTexelH = 0.5f / static_cast<float>(std::max(1, GetHeight()));
     float fDivX = 1.0f / (float)(FCGSX - 2);
     float fDivY = 1.0f / (float)(FCGSY - 2);
@@ -1503,13 +1505,13 @@ int CPlugin::AllocateMilkDropDX11()
         int j2 = j - j / (FCGSY / 2);
         float v = j2 * fDivY;
         v = SquishToCenter(v, 3.0f);
-        float sy = -((v - fHalfTexelH) * 2 - 1); //fOnePlusInvHeight*v*2-1;
+        float sy = -(v * 2 - 1);
         for (int i = 0; i < FCGSX; i++)
         {
             int i2 = i - i / (FCGSX / 2);
             float u = i2 * fDivX;
             u = SquishToCenter(u, 3.0f);
-            float sx = (u - fHalfTexelW) * 2 - 1; //fOnePlusInvWidth*u*2-1;
+            float sx = u * 2 - 1;
             MDVERTEX* p = &m_comp_verts[i + j * FCGSX];
             p->x = sx;
             p->y = sy;
@@ -1561,8 +1563,8 @@ int CPlugin::AllocateMilkDropDX11()
                 else
                     ang = 3.1415926535898f * 0.0f;
             }
-            p->tu = u;
-            p->tv = v;
+            p->tu = (std::max)(fHalfTexelW, (std::min)(1.0f - fHalfTexelW, u));
+            p->tv = (std::max)(fHalfTexelH, (std::min)(1.0f - fHalfTexelH, v));
             //p->tu0 = u;
             //p->tv0 = v;
             p->rad = rad;
@@ -5249,8 +5251,20 @@ void CPlugin::NextPreset(float fBlendTime)
 
 void CPlugin::LoadRandomPreset(float fBlendTime)
 {
+    const auto presetBlacklist = GetPresetBlacklist();
+    std::vector<int> allowedPresetIndices;
+    allowedPresetIndices.reserve(std::max(0, m_nPresets - m_nDirs));
+    for (int i = m_nDirs; i < m_nPresets; i++)
+    {
+        bool blacklisted = std::any_of(presetBlacklist.begin(), presetBlacklist.end(), [this, i](const std::wstring& entry) {
+            return _wcsicmp(entry.c_str(), m_presets[i].szFilename.c_str()) == 0;
+        });
+        if (!blacklisted)
+            allowedPresetIndices.push_back(i);
+    }
+
     // Ensure file list is OK.
-    if (m_nPresets - m_nDirs == 0)
+    if (allowedPresetIndices.empty())
     {
         // Note: this error message is repeated in `milkdropfs.cpp` in `DrawText()`.
         wchar_t buf[1024] = {0};
@@ -5303,20 +5317,31 @@ void CPlugin::LoadRandomPreset(float fBlendTime)
 
     if (m_bSequentialPresetOrder)
     {
-        m_nCurrentPreset++;
-        if (m_nCurrentPreset < m_nDirs || m_nCurrentPreset >= m_nPresets)
-            m_nCurrentPreset = m_nDirs;
+        int nextAllowed = allowedPresetIndices.front();
+        for (int index : allowedPresetIndices)
+        {
+            if (index > m_nCurrentPreset)
+            {
+                nextAllowed = index;
+                break;
+            }
+        }
+        m_nCurrentPreset = nextAllowed;
     }
     else
     {
         // Pick a random file.
-        if (!m_bEnableRating || (m_presets[static_cast<size_t>(m_nPresets) - 1].fRatingCum < 0.1f)) //|| (m_nRatingReadProgress < m_nPresets))
+        float totalAllowedRating = 0.0f;
+        for (int index : allowedPresetIndices)
+            totalAllowedRating += m_presets[index].fRatingThis;
+
+        if (!m_bEnableRating || (totalAllowedRating < 0.1f)) //|| (m_nRatingReadProgress < m_nPresets))
         {
-            m_nCurrentPreset = m_nDirs + (warand() % (m_nPresets - m_nDirs));
+            m_nCurrentPreset = allowedPresetIndices[warand() % allowedPresetIndices.size()];
         }
         else
         {
-            float cdf_pos = (warand() % 14345) / 14345.0f * m_presets[static_cast<size_t>(m_nPresets) - 1].fRatingCum;
+            float cdf_pos = (warand() % 14345) / 14345.0f * totalAllowedRating;
 
             /*
             char buf[512] = {0};
@@ -5330,23 +5355,16 @@ void CPlugin::LoadRandomPreset(float fBlendTime)
             DumpDebugMessage(buf);
             */
 
-            if (cdf_pos < m_presets[m_nDirs].fRatingCum)
+            float runningRating = 0.0f;
+            m_nCurrentPreset = allowedPresetIndices.back();
+            for (int index : allowedPresetIndices)
             {
-                m_nCurrentPreset = m_nDirs;
-            }
-            else
-            {
-                int lo = m_nDirs;
-                int hi = m_nPresets;
-                while (lo + 1 < hi)
+                runningRating += m_presets[index].fRatingThis;
+                if (cdf_pos <= runningRating)
                 {
-                    int mid = (lo + hi) / 2;
-                    if (m_presets[mid].fRatingCum > cdf_pos)
-                        hi = mid;
-                    else
-                        lo = mid;
+                    m_nCurrentPreset = index;
+                    break;
                 }
-                m_nCurrentPreset = hi;
             }
         }
     }
@@ -5525,6 +5543,14 @@ void CPlugin::GenPlasma(int x0, int x1, int y0, int y1, float dt)
 
 void CPlugin::LoadPreset(const wchar_t* szPresetFilename, float fBlendTime)
 {
+    const wchar_t* presetName = wcsrchr(szPresetFilename, L'\\');
+    presetName = (presetName) ? (presetName + 1) : szPresetFilename;
+    if (IsPresetBlacklisted(presetName))
+    {
+        LoadRandomPreset(fBlendTime);
+        return;
+    }
+
     OutputDebugString(szPresetFilename);
     //OutputDebugString(L"\n");
     // Clear old error message.
@@ -5758,6 +5784,218 @@ static char* NextLine(char* p)
     return s;
 }
 
+std::wstring CPlugin::NormalizePresetBlacklistEntry(const std::wstring& presetFilename)
+{
+    std::wstring normalized = presetFilename;
+    auto slashPos = normalized.find_last_of(L"\\/");
+    if (slashPos != std::wstring::npos)
+        normalized.erase(0, slashPos + 1);
+
+    const wchar_t* whitespace = L" \t\r\n";
+    size_t first = normalized.find_first_not_of(whitespace);
+    if (first == std::wstring::npos)
+        return {};
+    size_t last = normalized.find_last_not_of(whitespace);
+    normalized = normalized.substr(first, last - first + 1);
+    if (!normalized.empty() && normalized[0] == L'*')
+        normalized.clear();
+
+    return normalized;
+}
+
+std::wstring CPlugin::GetCurrentPresetFilename() const
+{
+    if (m_nCurrentPreset >= m_nDirs && m_nCurrentPreset < m_nPresets)
+        return m_presets[m_nCurrentPreset].szFilename;
+
+    if (!m_szCurrentPresetFile[0])
+        return {};
+
+    const wchar_t* presetName = wcsrchr(m_szCurrentPresetFile, L'\\');
+    return NormalizePresetBlacklistEntry((presetName) ? (presetName + 1) : m_szCurrentPresetFile);
+}
+
+std::wstring CPlugin::GetCurrentPresetPath() const
+{
+    std::wstring presetFilename = GetCurrentPresetFilename();
+    if (presetFilename.empty())
+        return {};
+
+    std::wstring presetPath = m_szPresetDir;
+    presetPath += presetFilename;
+    return presetPath;
+}
+
+std::wstring CPlugin::GetPresetBlacklistPath() const
+{
+    std::wstring path = m_szMilkdrop2Path;
+    path += L"preset-blacklist.txt";
+    return path;
+}
+
+bool CPlugin::LoadPresetBlacklist()
+{
+    std::vector<std::wstring> blacklist;
+
+    FILE* file = nullptr;
+    errno_t err = _wfopen_s(&file, GetPresetBlacklistPath().c_str(), L"rt, ccs=UTF-8");
+    if (err != 0 || !file)
+    {
+        m_presetBlacklist.clear();
+        m_bPresetBlacklistLoaded = true;
+        return false;
+    }
+
+    wchar_t line[1024] = {0};
+    while (fgetws(line, static_cast<int>(std::size(line)), file))
+    {
+        std::wstring entry = NormalizePresetBlacklistEntry(line);
+        if (entry.empty())
+            continue;
+
+        bool duplicate = std::any_of(blacklist.begin(), blacklist.end(), [&entry](const std::wstring& existing) {
+            return _wcsicmp(existing.c_str(), entry.c_str()) == 0;
+        });
+        if (!duplicate)
+            blacklist.push_back(entry);
+    }
+
+    fclose(file);
+    m_presetBlacklist = std::move(blacklist);
+    m_bPresetBlacklistLoaded = true;
+    return true;
+}
+
+bool CPlugin::SavePresetBlacklist() const
+{
+    FILE* file = nullptr;
+    errno_t err = _wfopen_s(&file, GetPresetBlacklistPath().c_str(), L"wt, ccs=UTF-8");
+    if (err != 0 || !file)
+        return false;
+
+    for (const auto& preset : m_presetBlacklist)
+    {
+        if (!preset.empty())
+            fwprintf(file, L"%ls\n", preset.c_str());
+    }
+
+    fclose(file);
+    return true;
+}
+
+std::vector<std::wstring> CPlugin::GetPresetBlacklist() const
+{
+    auto* self = const_cast<CPlugin*>(this);
+    AcquireSRWLockExclusive(&m_presetBlacklistLock);
+    if (!self->m_bPresetBlacklistLoaded)
+        self->LoadPresetBlacklist();
+    auto blacklist = self->m_presetBlacklist;
+    ReleaseSRWLockExclusive(&m_presetBlacklistLock);
+    return blacklist;
+}
+
+bool CPlugin::IsPresetBlacklisted(const std::wstring& presetFilename) const
+{
+    std::wstring normalized = NormalizePresetBlacklistEntry(presetFilename);
+    if (normalized.empty())
+        return false;
+
+    auto* self = const_cast<CPlugin*>(this);
+    AcquireSRWLockExclusive(&m_presetBlacklistLock);
+    if (!self->m_bPresetBlacklistLoaded)
+        self->LoadPresetBlacklist();
+    bool isBlacklisted = std::any_of(self->m_presetBlacklist.begin(), self->m_presetBlacklist.end(), [&normalized](const std::wstring& entry) {
+        return _wcsicmp(entry.c_str(), normalized.c_str()) == 0;
+    });
+    ReleaseSRWLockExclusive(&m_presetBlacklistLock);
+    return isBlacklisted;
+}
+
+bool CPlugin::AddPresetToBlacklist(const std::wstring& presetFilename)
+{
+    std::wstring normalized = NormalizePresetBlacklistEntry(presetFilename);
+    if (normalized.empty())
+        return false;
+
+    bool added = false;
+    bool exists = false;
+    bool saved = false;
+    AcquireSRWLockExclusive(&m_presetBlacklistLock);
+    if (!m_bPresetBlacklistLoaded)
+        LoadPresetBlacklist();
+
+    exists = std::any_of(m_presetBlacklist.begin(), m_presetBlacklist.end(), [&normalized](const std::wstring& entry) {
+        return _wcsicmp(entry.c_str(), normalized.c_str()) == 0;
+    });
+    if (!exists)
+    {
+        m_presetBlacklist.push_back(normalized);
+        std::sort(m_presetBlacklist.begin(), m_presetBlacklist.end(), [](const std::wstring& a, const std::wstring& b) {
+            return _wcsicmp(a.c_str(), b.c_str()) < 0;
+        });
+        added = true;
+        saved = SavePresetBlacklist();
+    }
+    ReleaseSRWLockExclusive(&m_presetBlacklistLock);
+
+    return exists || (added && saved);
+}
+
+bool CPlugin::RemovePresetFromBlacklist(const std::wstring& presetFilename)
+{
+    std::wstring normalized = NormalizePresetBlacklistEntry(presetFilename);
+    if (normalized.empty())
+        return false;
+
+    bool removed = false;
+    bool saved = false;
+    AcquireSRWLockExclusive(&m_presetBlacklistLock);
+    if (!m_bPresetBlacklistLoaded)
+        LoadPresetBlacklist();
+
+    auto oldEnd = std::remove_if(m_presetBlacklist.begin(), m_presetBlacklist.end(), [&normalized](const std::wstring& entry) {
+        return _wcsicmp(entry.c_str(), normalized.c_str()) == 0;
+    });
+    removed = oldEnd != m_presetBlacklist.end();
+    if (removed)
+    {
+        m_presetBlacklist.erase(oldEnd, m_presetBlacklist.end());
+        saved = SavePresetBlacklist();
+    }
+    ReleaseSRWLockExclusive(&m_presetBlacklistLock);
+
+    return removed && saved;
+}
+
+bool CPlugin::SetPresetBlacklist(const std::vector<std::wstring>& presetFilenames)
+{
+    std::vector<std::wstring> normalizedEntries;
+    normalizedEntries.reserve(presetFilenames.size());
+    for (const auto& entry : presetFilenames)
+    {
+        std::wstring normalized = NormalizePresetBlacklistEntry(entry);
+        if (normalized.empty())
+            continue;
+
+        bool duplicate = std::any_of(normalizedEntries.begin(), normalizedEntries.end(), [&normalized](const std::wstring& existing) {
+            return _wcsicmp(existing.c_str(), normalized.c_str()) == 0;
+        });
+        if (!duplicate)
+            normalizedEntries.push_back(normalized);
+    }
+
+    std::sort(normalizedEntries.begin(), normalizedEntries.end(), [](const std::wstring& a, const std::wstring& b) {
+        return _wcsicmp(a.c_str(), b.c_str()) < 0;
+    });
+
+    AcquireSRWLockExclusive(&m_presetBlacklistLock);
+    m_presetBlacklist = std::move(normalizedEntries);
+    m_bPresetBlacklistLoaded = true;
+    bool saved = SavePresetBlacklist();
+    ReleaseSRWLockExclusive(&m_presetBlacklistLock);
+    return saved;
+}
+
 // NOTE - this is run in a separate thread!!!
 static unsigned int WINAPI __UpdatePresetList(void* lpVoid)
 {
@@ -5840,6 +6078,8 @@ retry:
 
     LeaveCriticalSection(&g_cs);
 
+    std::vector<std::wstring> presetBlacklist = g_plugin.GetPresetBlacklist();
+
     PresetList temp_presets;
     int temp_nDirs = 0;
     int temp_nPresets = 0;
@@ -5867,6 +6107,10 @@ retry:
             // Skip normal files not ending in ".milk".
             size_t len = wcslen(fd.cFileName);
             if (len < 5 || wcscmp(fd.cFileName + len - 5, L".milk"))
+                bSkip = true;
+            else if (std::any_of(presetBlacklist.begin(), presetBlacklist.end(), [&fd](const std::wstring& entry) {
+                         return _wcsicmp(entry.c_str(), fd.cFileName) == 0;
+                     }))
                 bSkip = true;
 
             // If it is `.milk`, make sure to know how to run its pixel shaders -
