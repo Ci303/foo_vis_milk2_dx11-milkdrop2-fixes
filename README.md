@@ -12,6 +12,12 @@ This is not a new renderer or a redesign of MilkDrop. The aim is to keep the Dir
 
 Existing licensing and attribution are preserved under MPL-2.0.
 
+## Photosensitivity Warning
+
+MilkDrop presets can contain rapid flashing, strobing, high-contrast motion, intense colour changes, and fast full-screen movement. These visuals may trigger seizures, migraines, dizziness, nausea, or discomfort in people with photosensitive epilepsy or other visual sensitivities.
+
+Stop using the visualiser immediately if you feel unwell. Use it in a well-lit room, keep the display at a comfortable brightness, and avoid watching full-screen effects for long periods if you are sensitive to flashing or rapidly moving visuals.
+
 ## What Has Been Fixed Here
 
 This repository already includes the DirectX 11 foobar2000 port from upstream. On top of that, the recent maintenance work in this branch focuses on the following:
@@ -22,6 +28,7 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Restored working title and time display shortcuts.
 - Shortcut handling aligned with the on-screen help overlay so the documented keys match actual behaviour.
 - Reworked the built-in help overlay so it lays out on-screen more cleanly and includes the newer mouse controls and clearer playback shortcut guidance.
+- Refined the help overlay into a stable left-anchored two-column layout and fixed the embedded text loading so stray characters are not rendered.
 - Stabilised the song time display so the elapsed and remaining time do not jump around as the timer updates.
 - Fixed album art and font dialog issues in the preferences UI.
 - Fixed album artwork toggle persistence so it now remembers the selected state across restarts.
@@ -34,6 +41,7 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Added optional mouse wheel volume control and optional single-click play/pause, with a short `Playing` / `Paused` overlay that follows the current animated song-title font settings.
 - Added preset blacklisting, including a `Never Show Again` runtime action, a blacklist manager dialog, and persistent blacklist storage in the `milkdrop2` profile folder.
 - Refined the mouse focus/playback interaction so accidental first-click pauses are less likely when MilkDrop has just regained focus.
+- Added crash diagnostics and minidump logging under `<foobar2000 profile folder>\milkdrop2\crashlogs` to help investigate intermittent runtime crashes.
 
 ## Current Behaviour and Limits
 
@@ -135,6 +143,8 @@ The current public release line includes the following user-visible behaviour ch
 - Optional mouse controls for volume and play/pause.
 - Persistent preset blacklist management and direct preset file access from the context menu.
 - Blacklist manager improvements including preset-folder browsing, safer preferences integration, and the startup/runtime overlay-state option.
+- Stable built-in help overlay formatting with current keyboard and mouse shortcut information.
+- Crash diagnostics/minidump logging for intermittent runtime crash investigation.
 - Preferences dialog layout fixes for the newer settings.
 
 ## Releases

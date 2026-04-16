@@ -199,6 +199,7 @@ class CPluginShell : public DX::IDeviceNotify
     std::unique_ptr<TextStyle> m_dwrite_font[NUM_BASIC_FONTS + NUM_EXTRA_FONTS];
     HFONT m_font[NUM_BASIC_FONTS + NUM_EXTRA_FONTS];
     TextElement m_helpManual;
+    TextElement m_helpManualRight;
     TextElement m_helpMessage;
     TextElement m_playlist_song[MAX_SONGS_PER_PAGE];
 

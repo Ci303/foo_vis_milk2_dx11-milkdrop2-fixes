@@ -762,7 +762,7 @@ void PresetBlacklistDlg::OnAdd(UINT, int, CWindow)
         return;
 
     if (g_plugin.IsPresetBlacklisted(g_plugin.GetCurrentPresetFilename()))
-        g_plugin.LoadRandomPreset(0.0f);
+        ::PostMessage(g_hWindow, WM_MILK2, MILK2_WPARAM_RANDOM_PRESET, 0);
 
     m_changed = true;
     SetDlgItemText(IDC_BLACKLIST_ENTRY, L"");

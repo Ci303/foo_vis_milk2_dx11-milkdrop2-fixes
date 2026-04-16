@@ -2,6 +2,17 @@
 
 ## Release History
 
+### 0.2.1.9 - 2026-04-16
+
+Help-overlay and stability follow-up for the foobar2000 x64 component.
+
+- Reworked the built-in help overlay to use a stable left-anchored two-column `key: action` layout.
+- Loaded the embedded help text by exact resource size to avoid stray trailing characters.
+- Restored direct `Space`, `F2`, and `F3` shortcut behaviour after the focus-hotkey changes.
+- Added crash diagnostics and minidump logging under the foobar2000 profile `milkdrop2\crashlogs` folder.
+- Added safer locking around runtime preset operations and safer random-preset dispatch from the blacklist manager.
+- Added a photosensitivity warning to the README.
+
 ### 0.2.1.8 - 2026-04-15
 
 Blacklist and mouse-control usability release for the foobar2000 x64 component.

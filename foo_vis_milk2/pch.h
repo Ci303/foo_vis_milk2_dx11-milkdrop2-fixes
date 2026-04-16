@@ -35,6 +35,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <dbghelp.h>
 
 #include <d3d11_1.h> // Windows 8 and Platform Update for Windows 7 [desktop apps | UWP apps]
 #include <dxgi1_6.h> // Windows 10, version 1803 [desktop apps only]
@@ -111,6 +112,7 @@
 #define WM_MILK2 (WM_USER + 0)
 #define WM_CONFIG_CHANGE (WM_USER + 1)
 #define MILK2_WPARAM_REFRESH_PRESET_LIST 0x1001
+#define MILK2_WPARAM_RANDOM_PRESET 0x1002
 
 #ifdef _DEBUG
 #define MILK2_CONSOLE_LOG(...) FB2K_console_print(core_api::get_my_file_name(), ": ", __VA_ARGS__);

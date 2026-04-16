@@ -56,6 +56,157 @@ void log_runtime_exception(const char* where) noexcept
     FB2K_console_print(core_api::get_my_file_name(), ": ", where, " failed - unknown exception");
 }
 
+template <typename Callback>
+void run_plugin_locked(const char* where, Callback&& callback) noexcept
+{
+    bool lock_held = false;
+    try
+    {
+#ifdef TIMER_TP
+        EnterCriticalSection(&s_cs);
+        lock_held = true;
+#endif
+        callback();
+    }
+    catch (const std::exception& exc)
+    {
+        log_runtime_exception(where, exc);
+    }
+    catch (...)
+    {
+        log_runtime_exception(where);
+    }
+#ifdef TIMER_TP
+    if (lock_held)
+        LeaveCriticalSection(&s_cs);
+#endif
+}
+
+static wchar_t s_crash_log_dir[MAX_PATH]{};
+static PVOID s_crash_handler = nullptr;
+static volatile LONG s_crash_log_written = 0;
+
+void append_crash_line(HANDLE file, const wchar_t* text) noexcept
+{
+    if (file == INVALID_HANDLE_VALUE || !text)
+        return;
+
+    DWORD written = 0;
+    WriteFile(file, text, static_cast<DWORD>(wcslen(text) * sizeof(wchar_t)), &written, nullptr);
+    WriteFile(file, L"\r\n", 2 * sizeof(wchar_t), &written, nullptr);
+}
+
+LONG CALLBACK milk2_crash_handler(EXCEPTION_POINTERS* exceptionInfo) noexcept
+{
+    if (!exceptionInfo || !exceptionInfo->ExceptionRecord)
+        return EXCEPTION_CONTINUE_SEARCH;
+
+    const DWORD code = exceptionInfo->ExceptionRecord->ExceptionCode;
+    if (code == EXCEPTION_BREAKPOINT || code == EXCEPTION_SINGLE_STEP)
+        return EXCEPTION_CONTINUE_SEARCH;
+
+    if (InterlockedCompareExchange(&s_crash_log_written, 1, 0) != 0)
+        return EXCEPTION_CONTINUE_SEARCH;
+
+    SYSTEMTIME now{};
+    GetLocalTime(&now);
+
+    wchar_t basePath[MAX_PATH]{};
+    swprintf_s(basePath, L"%sfoo_vis_milk2-crash-%04u%02u%02u-%02u%02u%02u-%lu",
+               s_crash_log_dir[0] ? s_crash_log_dir : L".\\",
+               now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond,
+               GetCurrentProcessId());
+
+    wchar_t textPath[MAX_PATH]{};
+    swprintf_s(textPath, L"%s.txt", basePath);
+    HANDLE textFile = CreateFileW(textPath, GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (textFile != INVALID_HANDLE_VALUE)
+    {
+        constexpr wchar_t bom = 0xFEFF;
+        DWORD written = 0;
+        WriteFile(textFile, &bom, sizeof(bom), &written, nullptr);
+
+        wchar_t line[1024]{};
+        swprintf_s(line, L"foo_vis_milk2 crash diagnostic");
+        append_crash_line(textFile, line);
+        swprintf_s(line, L"ExceptionCode=0x%08lX ExceptionAddress=0x%p ThreadId=%lu ProcessId=%lu",
+                   code,
+                   exceptionInfo->ExceptionRecord->ExceptionAddress,
+                   GetCurrentThreadId(),
+                   GetCurrentProcessId());
+        append_crash_line(textFile, line);
+        swprintf_s(line, L"CurrentPreset=%ls", g_plugin.m_szCurrentPresetFile);
+        append_crash_line(textFile, line);
+        swprintf_s(line, L"LoadingPreset=%ls", g_plugin.m_szLoadingPreset);
+        append_crash_line(textFile, line);
+        swprintf_s(line, L"Frame=%d ScreenMode=%d UiMode=%d LoadingState=%d Presets=%d Dirs=%d CurrentPresetIndex=%d",
+                   g_plugin.GetFrame(),
+                   g_plugin.GetScreenMode(),
+                   static_cast<int>(g_plugin.m_UI_mode),
+                   g_plugin.m_nLoadingPreset,
+                   g_plugin.m_nPresets,
+                   g_plugin.m_nDirs,
+                   g_plugin.m_nCurrentPreset);
+        append_crash_line(textFile, line);
+        swprintf_s(line, L"Text log path: %ls", textPath);
+        append_crash_line(textFile, line);
+        CloseHandle(textFile);
+    }
+
+    wchar_t dumpPath[MAX_PATH]{};
+    swprintf_s(dumpPath, L"%s.dmp", basePath);
+    HANDLE dumpFile = CreateFileW(dumpPath, GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (dumpFile != INVALID_HANDLE_VALUE)
+    {
+        HMODULE dbghelp = LoadLibraryW(L"dbghelp.dll");
+        if (dbghelp)
+        {
+            using MiniDumpWriteDumpProc = BOOL(WINAPI*)(HANDLE, DWORD, HANDLE, MINIDUMP_TYPE, PMINIDUMP_EXCEPTION_INFORMATION,
+                                                       PMINIDUMP_USER_STREAM_INFORMATION, PMINIDUMP_CALLBACK_INFORMATION);
+            auto writeDump = reinterpret_cast<MiniDumpWriteDumpProc>(GetProcAddress(dbghelp, "MiniDumpWriteDump"));
+            if (writeDump)
+            {
+                MINIDUMP_EXCEPTION_INFORMATION dumpException{};
+                dumpException.ThreadId = GetCurrentThreadId();
+                dumpException.ExceptionPointers = exceptionInfo;
+                dumpException.ClientPointers = FALSE;
+                writeDump(GetCurrentProcess(),
+                          GetCurrentProcessId(),
+                          dumpFile,
+                          static_cast<MINIDUMP_TYPE>(MiniDumpWithDataSegs | MiniDumpWithIndirectlyReferencedMemory | MiniDumpScanMemory),
+                          &dumpException,
+                          nullptr,
+                          nullptr);
+            }
+            FreeLibrary(dbghelp);
+        }
+        CloseHandle(dumpFile);
+    }
+
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+void install_crash_logging() noexcept
+{
+    if (s_crash_handler)
+        return;
+
+    try
+    {
+        pfc::string8 crashPath = filesystem::g_get_native_path(core_api::get_profile_path());
+        crashPath.end_with_slash();
+        crashPath.add_string("milkdrop2\\crashlogs\\");
+        pfc::stringcvt::convert_utf8_to_wide(s_crash_log_dir, std::size(s_crash_log_dir), crashPath, crashPath.length());
+        CreateDirectoryW(s_crash_log_dir, nullptr);
+    }
+    catch (...)
+    {
+        wcscpy_s(s_crash_log_dir, L".\\");
+    }
+
+    s_crash_handler = AddVectoredExceptionHandler(1, milk2_crash_handler);
+}
+
 milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_instance_callback_ptr p_callback) :
     m_callback(p_callback),
     m_bMsgHandled(TRUE),
@@ -800,6 +951,11 @@ LRESULT milk2_ui_element::OnMilk2Message(UINT uMsg, WPARAM wParam, LPARAM lParam
         g_plugin.UpdatePresetList(false, true, true);
         return 0;
     }
+    if (wParam == MILK2_WPARAM_RANDOM_PRESET)
+    {
+        RandomPreset(0.0f);
+        return 0;
+    }
 
     auto api = playlist_manager::get();
     if (LOBYTE(wParam) == 0x21 && HIBYTE(wParam) == 0x09)
@@ -1472,12 +1628,12 @@ const char* milk2_ui_element::ToggleShuffle(bool forward = true)
 
 void milk2_ui_element::NextPreset(float fBlendTime)
 {
-    g_plugin.NextPreset(fBlendTime);
+    run_plugin_locked("NextPreset", [&] { g_plugin.NextPreset(fBlendTime); });
 }
 
 void milk2_ui_element::PrevPreset(float fBlendTime)
 {
-    g_plugin.PrevPreset(fBlendTime);
+    run_plugin_locked("PrevPreset", [&] { g_plugin.PrevPreset(fBlendTime); });
 }
 
 bool milk2_ui_element::LoadPreset(int select)
@@ -1498,25 +1654,30 @@ bool milk2_ui_element::LoadPreset(int select)
 
 std::wstring milk2_ui_element::GetCurrentPreset()
 {
+    std::wstring currentPreset;
+    run_plugin_locked("GetCurrentPreset", [&] {
 #ifdef _DEBUG
-    wchar_t buf[512]{};
-    swprintf_s(buf, L"%s", (g_plugin.m_nLoadingPreset != 0) ? g_plugin.m_pNewState->m_szDesc : g_plugin.m_pState->m_szDesc);
-    wcscat_s(buf, L".milk");
-    if (g_plugin.m_presets.size() == 0 || g_plugin.m_nCurrentPreset == -1)
-    {
-        MILK2_CONSOLE_LOG("No presets found")
-    }
-    else if (wcscmp(buf, g_plugin.m_presets[g_plugin.m_nCurrentPreset].szFilename.c_str()))
-    {
-        MILK2_CONSOLE_LOG("GetCurrentPreset Mismatch --> ", buf, " != ", g_plugin.m_presets[g_plugin.m_nCurrentPreset].szFilename.c_str())
-    }
+        wchar_t buf[512]{};
+        swprintf_s(buf, L"%s", (g_plugin.m_nLoadingPreset != 0) ? g_plugin.m_pNewState->m_szDesc : g_plugin.m_pState->m_szDesc);
+        wcscat_s(buf, L".milk");
+        if (g_plugin.m_presets.size() == 0 || g_plugin.m_nCurrentPreset == -1)
+        {
+            MILK2_CONSOLE_LOG("No presets found")
+        }
+        else if (wcscmp(buf, g_plugin.m_presets[g_plugin.m_nCurrentPreset].szFilename.c_str()))
+        {
+            MILK2_CONSOLE_LOG("GetCurrentPreset Mismatch --> ", buf, " != ", g_plugin.m_presets[g_plugin.m_nCurrentPreset].szFilename.c_str())
+        }
 #endif
-    return g_plugin.GetCurrentPresetFilename();
+        currentPreset = g_plugin.GetCurrentPresetFilename();
+    });
+    return currentPreset;
 }
 
 void milk2_ui_element::OpenCurrentPresetLocation()
 {
-    const std::wstring presetPath = g_plugin.GetCurrentPresetPath();
+    std::wstring presetPath;
+    run_plugin_locked("OpenCurrentPresetLocation", [&] { presetPath = g_plugin.GetCurrentPresetPath(); });
     if (presetPath.empty())
         return;
 
@@ -1526,7 +1687,8 @@ void milk2_ui_element::OpenCurrentPresetLocation()
 
 void milk2_ui_element::BlacklistCurrentPreset()
 {
-    const std::wstring presetName = g_plugin.GetCurrentPresetFilename();
+    std::wstring presetName;
+    run_plugin_locked("BlacklistCurrentPreset current preset", [&] { presetName = g_plugin.GetCurrentPresetFilename(); });
     if (presetName.empty())
         return;
 
@@ -1539,22 +1701,24 @@ void milk2_ui_element::BlacklistCurrentPreset()
 
 void milk2_ui_element::LockPreset(bool lockUnlock)
 {
-    g_plugin.m_bPresetLockedByUser = lockUnlock;
+    run_plugin_locked("LockPreset", [&] { g_plugin.m_bPresetLockedByUser = lockUnlock; });
 }
 
 bool milk2_ui_element::IsPresetLock()
 {
-    return g_plugin.m_bPresetLockedByUser || g_plugin.m_bPresetLockedByCode;
+    bool locked = false;
+    run_plugin_locked("IsPresetLock", [&] { locked = g_plugin.m_bPresetLockedByUser || g_plugin.m_bPresetLockedByCode; });
+    return locked;
 }
 
 void milk2_ui_element::RandomPreset(float fBlendTime)
 {
-    g_plugin.LoadRandomPreset(fBlendTime);
+    run_plugin_locked("RandomPreset", [&] { g_plugin.LoadRandomPreset(fBlendTime); });
 }
 
 void milk2_ui_element::SetPresetRating(float inc_dec)
 {
-    g_plugin.SetCurrentPresetRating(g_plugin.m_pState->m_fRating + inc_dec);
+    run_plugin_locked("SetPresetRating", [&] { g_plugin.SetCurrentPresetRating(g_plugin.m_pState->m_fRating + inc_dec); });
 }
 
 void milk2_ui_element::Seek(UINT nRepCnt, bool bShiftHeldDown, double seekDelta)
@@ -1974,6 +2138,7 @@ class milk2_initquit : public initquit
         MILK2_CONSOLE_LOG("on_init")
         if (core_api::is_quiet_mode_enabled())
             return;
+        install_crash_logging();
         //create_first_run();
     }
 
@@ -1983,6 +2148,11 @@ class milk2_initquit : public initquit
         //NSEEL_quit();
         if (core_api::is_quiet_mode_enabled())
             return;
+        if (s_crash_handler)
+        {
+            RemoveVectoredExceptionHandler(s_crash_handler);
+            s_crash_handler = nullptr;
+        }
         //delete_first_run();
     }
 

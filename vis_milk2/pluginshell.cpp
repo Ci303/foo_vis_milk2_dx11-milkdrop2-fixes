@@ -37,6 +37,7 @@
 #include "utility.h"
 #define WASABI_API_ORIG_HINST GetInstance()
 #include "api.h"
+#include "../foo_vis_milk2/resource.h"
 #include <nu/AutoWide.h>
 #include <winamp/wa_ipc.h>
 
@@ -51,6 +52,83 @@ extern wchar_t* g_szHelp;
 
 CPluginShell::CPluginShell() { /* This should remain empty! */ }
 CPluginShell::~CPluginShell() { /* This should remain empty! */ }
+
+namespace
+{
+void ConfigureHelpTextElement(TextElement& element, DXContext* dx, const D2D1_COLOR_F& color, TextStyle* style)
+{
+    if (!element.IsVisible())
+        element.Initialize(dx->GetD2DDeviceContext());
+    element.SetAlignment(AlignNear, AlignNear);
+    element.SetTextColor(color);
+    element.SetTextOpacity(color.a);
+    element.SetTextShadow(false);
+    element.SetTextStyle(style);
+    element.SetVisible(true);
+}
+
+std::wstring LoadHelpResourceText()
+{
+    HINSTANCE hinst = nullptr;
+    HRSRC hrsrc = FindResource(hinst, MAKEINTRESOURCE(IDR_HELP_TEXT), RT_RCDATA);
+    if (!hrsrc)
+    {
+        hinst = HINST_THISCOMPONENT;
+        hrsrc = FindResource(hinst, MAKEINTRESOURCE(IDR_HELP_TEXT), RT_RCDATA);
+    }
+    if (!hrsrc)
+        return {};
+
+    HGLOBAL hglob = LoadResource(hinst, hrsrc);
+    if (!hglob)
+        return {};
+
+    const DWORD bytes = SizeofResource(hinst, hrsrc);
+    const auto* data = static_cast<const char*>(LockResource(hglob));
+    if (!data || bytes == 0)
+        return {};
+
+    std::string narrow(data, data + bytes);
+    while (!narrow.empty() && narrow.back() == '\0')
+        narrow.pop_back();
+
+    AutoWide wideHelp(narrow.c_str());
+    return static_cast<wchar_t*>(wideHelp);
+}
+
+FLOAT MeasureHelpTextWidth(CTextManager& text, TextStyle* style, TextElement& element, const std::wstring& value, DWORD color, int height)
+{
+    if (value.empty())
+        return 0.0f;
+
+    D2D1_RECT_F rect = D2D1::RectF(0.0f, 0.0f, 2000.0f, static_cast<FLOAT>(height));
+    element.SetContainer(rect);
+    element.SetText(value.c_str());
+    text.DrawD2DText(style, &element, value.c_str(), &rect, DT_CALCRECT, color, false);
+    return (std::max)(0.0f, rect.right - rect.left);
+}
+
+FLOAT MeasureHelpTextHeight(CTextManager& text, TextStyle* style, TextElement& element, const std::wstring& value, DWORD color, int width, int height)
+{
+    if (value.empty())
+        return 0.0f;
+
+    D2D1_RECT_F rect = D2D1::RectF(0.0f, 0.0f, static_cast<FLOAT>(width), static_cast<FLOAT>(height));
+    element.SetContainer(rect);
+    element.SetText(value.c_str());
+    text.DrawD2DText(style, &element, value.c_str(), &rect, DT_CALCRECT, color, false);
+    return (std::max)(0.0f, rect.bottom - rect.top);
+}
+
+void HideHelpElement(CTextManager& text, TextElement& element)
+{
+    if (element.IsVisible())
+    {
+        element.SetVisible(false);
+        text.UnregisterElement(&element);
+    }
+}
+}
 
 eScrMode CPluginShell::GetScreenMode() const { return m_screenmode; }
 uint32_t CPluginShell::GetFrame() const { return m_frame; }
@@ -1310,30 +1388,44 @@ void CPluginShell::RenderBuiltInTextMsgs()
 
         if (m_show_help)
         {
-            if (!m_helpManual.IsVisible()) m_helpManual.Initialize(m_lpDX->GetD2DDeviceContext());
-            m_helpManual.SetAlignment(AlignNear, AlignNear);
-            m_helpManual.SetTextColor(fTextColor);
-            m_helpManual.SetTextOpacity(fTextColor.a);
-            m_helpManual.SetTextShadow(false);
-            m_helpManual.SetTextStyle(GetFont(HELPSCREEN_FONT));
+            auto helpStyle = GetFont(HELPSCREEN_FONT);
+            ConfigureHelpTextElement(m_helpManual, m_lpDX.get(), fTextColor, helpStyle);
+            ConfigureHelpTextElement(m_helpManualRight, m_lpDX.get(), fTextColor, helpStyle);
 
             //int y = m_upper_left_corner_y;
 
-            D2D1_RECT_F measured = D2D1::RectF(0.0f, 0.0f, static_cast<FLOAT>(GetWidth()), static_cast<FLOAT>(GetHeight()));
-            m_helpManual.SetContainer(measured);
-            m_helpManual.SetVisible(true);
+            std::wstring helpText = LoadHelpResourceText();
+            const std::wstring splitMarker = L"\nPLAYBACK\n";
+            std::wstring leftText = helpText;
+            std::wstring rightText;
+            size_t split = helpText.find(splitMarker);
+            if (split != std::wstring::npos)
+            {
+                leftText = helpText.substr(0, split);
+                rightText = helpText.substr(split + 1);
+            }
 
-            m_helpManual.SetText(AutoWide(reinterpret_cast<char*>(g_szHelp)));
-            m_text.DrawD2DText(GetFont(HELPSCREEN_FONT), &m_helpManual, AutoWide(reinterpret_cast<char*>(g_szHelp)), &measured, DT_CALCRECT, textColor, false);
+            const FLOAT columnGap = PLAYLIST_INNER_MARGIN * 6.0f;
+            D2D1_RECT_F measuredLeft = D2D1::RectF(0.0f, 0.0f, static_cast<FLOAT>(GetWidth()), static_cast<FLOAT>(GetHeight()));
+            D2D1_RECT_F measuredRight = measuredLeft;
+            m_helpManual.SetContainer(measuredLeft);
+            m_helpManualRight.SetContainer(measuredRight);
+            m_helpManual.SetText(leftText.c_str());
+            m_helpManualRight.SetText(rightText.c_str());
+            m_text.DrawD2DText(helpStyle, &m_helpManual, leftText.c_str(), &measuredLeft, DT_CALCRECT, textColor, false);
+            if (!rightText.empty())
+                m_text.DrawD2DText(helpStyle, &m_helpManualRight, rightText.c_str(), &measuredRight, DT_CALCRECT, textColor, false);
 
-            const FLOAT measuredWidth = (std::max)(0.0f, measured.right - measured.left);
-            const FLOAT measuredHeight = (std::max)(0.0f, measured.bottom - measured.top);
+            const FLOAT measuredLeftWidth = (std::max)(0.0f, measuredLeft.right - measuredLeft.left);
+            const FLOAT measuredRightWidth = rightText.empty() ? 0.0f : (std::max)(0.0f, measuredRight.right - measuredRight.left);
+            const FLOAT measuredWidth = measuredLeftWidth + (rightText.empty() ? 0.0f : columnGap + measuredRightWidth);
+            const FLOAT measuredHeight = (std::max)((std::max)(0.0f, measuredLeft.bottom - measuredLeft.top),
+                                                    rightText.empty() ? 0.0f : (std::max)(0.0f, measuredRight.bottom - measuredRight.top));
             const FLOAT boxWidth = (std::min)(measuredWidth + PLAYLIST_INNER_MARGIN * 2.0f,
                                               static_cast<FLOAT>(GetWidth()) - PLAYLIST_INNER_MARGIN * 4.0f);
             const FLOAT boxHeight = (std::min)(measuredHeight + PLAYLIST_INNER_MARGIN * 2.0f,
                                                static_cast<FLOAT>(GetHeight() - m_upper_left_corner_y) - PLAYLIST_INNER_MARGIN * 2.0f);
-            const FLOAT left = (std::max)(static_cast<FLOAT>(m_left_edge + PLAYLIST_INNER_MARGIN),
-                                          static_cast<FLOAT>(m_right_edge) - boxWidth - PLAYLIST_INNER_MARGIN);
+            const FLOAT left = static_cast<FLOAT>(m_left_edge + PLAYLIST_INNER_MARGIN);
             const FLOAT top = static_cast<FLOAT>(m_upper_left_corner_y);
             r = D2D1::RectF(left, top, left + boxWidth, top + boxHeight);
             DrawDarkTranslucentBox(&r);
@@ -1342,19 +1434,34 @@ void CPluginShell::RenderBuiltInTextMsgs()
             r.left += PLAYLIST_INNER_MARGIN;
             r.right -= PLAYLIST_INNER_MARGIN;
             r.bottom -= PLAYLIST_INNER_MARGIN;
-            m_helpManual.SetContainer(r);
-            m_helpManual.SetText(AutoWide(reinterpret_cast<char*>(g_szHelp)));
-            m_text.DrawD2DText(GetFont(HELPSCREEN_FONT), &m_helpManual, AutoWide(reinterpret_cast<char*>(g_szHelp)), &r, 0, textColor, false);
+            D2D1_RECT_F leftColumn = r;
+            D2D1_RECT_F rightColumn = r;
+            if (!rightText.empty())
+            {
+                leftColumn.right = (std::min)(r.right, r.left + measuredLeftWidth);
+                rightColumn.left = (std::min)(r.right, leftColumn.right + columnGap);
+            }
 
+            m_helpManual.SetContainer(leftColumn);
+            m_helpManual.SetText(leftText.c_str());
+            m_text.DrawD2DText(helpStyle, &m_helpManual, leftText.c_str(), &leftColumn, 0, textColor, false);
             m_text.RegisterElement(&m_helpManual);
+            if (!rightText.empty())
+            {
+                m_helpManualRight.SetContainer(rightColumn);
+                m_helpManualRight.SetText(rightText.c_str());
+                m_text.DrawD2DText(helpStyle, &m_helpManualRight, rightText.c_str(), &rightColumn, 0, textColor, false);
+                m_text.RegisterElement(&m_helpManualRight);
+            }
+            else
+            {
+                HideHelpElement(m_text, m_helpManualRight);
+            }
         }
         else
         {
-            if (m_helpManual.IsVisible())
-            {
-                m_helpManual.SetVisible(false);
-                m_text.UnregisterElement(&m_helpManual);
-            }
+            HideHelpElement(m_text, m_helpManual);
+            HideHelpElement(m_text, m_helpManualRight);
         }
 
         // Render 'Press F1 for Help' message in lower-right corner.

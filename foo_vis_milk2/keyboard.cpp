@@ -921,12 +921,10 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
         switch (nChar)
         {
             case VK_F2:
-                if (!m_focus_hotkeys_registered)
-                    ToggleSongTitle();
+                ToggleSongTitle();
                 return;
             case VK_F3:
-                if (!m_focus_hotkeys_registered)
-                    ToggleSongLength();
+                ToggleSongLength();
                 return;
             case VK_F4:
                 TogglePresetInfo();
