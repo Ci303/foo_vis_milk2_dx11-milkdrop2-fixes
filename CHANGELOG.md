@@ -2,6 +2,13 @@
 
 ## Release History
 
+### 0.2.1.14 - 2026-04-17
+
+Small play/pause overlay behavior update for the foobar2000 x64 component.
+
+- Changed single-click play/pause overlay behavior so pausing explicitly shows `Paused`.
+- Changed resume behavior to relaunch the current song title animation instead of showing a separate `Playing` message.
+
 ### 0.2.1.13 - 2026-04-17
 
 Blacklist usability and hang-avoidance follow-up for the foobar2000 x64 component.

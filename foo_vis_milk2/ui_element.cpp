@@ -480,7 +480,10 @@ void milk2_ui_element::OnTimer(UINT_PTR nIDEvent)
 
             const bool was_playing = m_playback_control->is_playing() && !m_playback_control->is_paused();
             m_playback_control->toggle_pause();
-            LaunchStatusText(was_playing ? L"Paused" : L"Playing");
+            if (was_playing)
+                LaunchStatusText(L"Paused");
+            else
+                LaunchSongTitle();
         }
         return;
     }
