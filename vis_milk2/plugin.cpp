@@ -619,6 +619,7 @@ void CPlugin::MilkDropPreInitialize()
     //ClearErrors();
     m_szSongTitle[0] = L'\0';
     m_szSongTitlePrev[0] = L'\0';
+    m_fSuppressSongTitleAnimUntilThisTime = -1.0f;
 
     m_lpVS[0] = NULL;
     m_lpVS[1] = NULL;
@@ -3425,9 +3426,14 @@ void CPlugin::MilkDropRenderFrame(int redraw)
         GetWinampSongTitle(GetWinampWindow(), m_szSongTitle, ARRAYSIZE(m_szSongTitle));
         if (wcscmp(m_szSongTitle, m_szSongTitlePrev) != 0)
         {
-            wcscpy_s(m_szSongTitlePrev, m_szSongTitle);
-            if (m_bSongTitleAnims)
+            if (!m_bSongTitleAnims || GetTime() >= m_fSuppressSongTitleAnimUntilThisTime)
+            {
+                wcscpy_s(m_szSongTitlePrev, m_szSongTitle);
+            }
+            if (m_bSongTitleAnims && GetTime() >= m_fSuppressSongTitleAnimUntilThisTime)
+            {
                 LaunchSongTitleAnim();
+            }
         }
     }
 
@@ -3807,7 +3813,11 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
     TextStyle* pFont = GetFont(DECORATIVE_FONT);
     int h = GetFontHeight(DECORATIVE_FONT);
 
-    if (m_supertext.bIsSongTitle && m_supertext.nFontSizeUsed <= 0 && m_supertext.fStartTime >= 0.0f && !m_supertext.bRedrawSuperText && m_supertext.szText[0])
+    if (m_supertext.fStartTime >= 0.0f &&
+        !m_supertext.bRedrawSuperText &&
+        m_supertext.szText[0] &&
+        m_supertext.bIsSongTitle &&
+        m_supertext.nFontSizeUsed <= 0)
     {
         const float duration = std::max(0.1f, m_supertext.fDuration);
         const float progress = (GetTime() - m_supertext.fStartTime) / duration;
@@ -7225,7 +7235,7 @@ void CPlugin::LaunchStatusText(const wchar_t* text, float duration, float fadeTi
         return;
 
     m_supertext.bRedrawSuperText = true;
-    m_supertext.bIsSongTitle = false;
+    m_supertext.bIsSongTitle = true;
     m_supertext.nFontSizeUsed = 0;
     wcscpy_s(m_supertext.szText, text);
     wcscpy_s(m_supertext.nFontFace, m_fontinfo[SONGTITLE_FONT].szFace);
@@ -7241,6 +7251,7 @@ void CPlugin::LaunchStatusText(const wchar_t* text, float duration, float fadeTi
     m_supertext.nColorG = 255;
     m_supertext.nColorB = 255;
     m_supertext.fStartTime = GetTime();
+    m_fSuppressSongTitleAnimUntilThisTime = m_supertext.fStartTime + std::max(0.1f, duration);
 }
 
 bool CPlugin::LaunchSprite(int nSpriteNum, int nSlot, const std::wstring& filename, const std::vector<uint8_t>& data)

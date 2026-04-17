@@ -236,6 +236,7 @@ milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_ins
     m_focus_hotkeys_registered = false;
     m_pending_single_click = false;
     m_require_explicit_click_for_play_pause = false;
+    m_last_left_double_click_tick = 0;
 #if defined(TIMER_TP)
     m_tpTimer = nullptr;
 #elif defined(TIMER_32)
@@ -459,6 +460,10 @@ void milk2_ui_element::OnTimer(UINT_PTR nIDEvent)
         if (m_pending_single_click)
         {
             m_pending_single_click = false;
+            const DWORD now = GetTickCount();
+            if (m_last_left_double_click_tick != 0 && now - m_last_left_double_click_tick <= GetDoubleClickTime())
+                return;
+
             const bool was_playing = m_playback_control->is_playing() && !m_playback_control->is_paused();
             m_playback_control->toggle_pause();
             LaunchStatusText(was_playing ? L"Paused" : L"Playing");
@@ -802,6 +807,7 @@ void milk2_ui_element::OnLButtonDblClk(UINT nFlags, CPoint point)
 
     KillTimer(ID_CLICK_TIMER);
     m_pending_single_click = false;
+    m_last_left_double_click_tick = GetTickCount();
 
     MILK2_CONSOLE_LOG("OnLButtonDblClk ", GetWnd())
     ToggleFullScreen();
@@ -909,7 +915,7 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
         case IDM_SHOW_ALBUM:
             s_config.settings.m_bShowAlbum = !s_config.settings.m_bShowAlbum;
             s_config.persist_runtime_settings();
-            ShowAlbumArt();
+            ShowAlbumArt(true);
             break;
         case IDM_QUIT:
             //g_plugin.m_exiting = 1;
@@ -1836,37 +1842,39 @@ void milk2_ui_element::UpdateTrack(metadb_handle_ptr p_track)
     }
 }
 
-void milk2_ui_element::ShowAlbumArt()
+void milk2_ui_element::ShowAlbumArt(bool wait_for_lock)
 {
-    // Only remove the album-art sprite; keep preset/user sprites intact.
-    for (int x = 0; x < NUM_TEX; x++)
-    {
-        if (g_plugin.m_texmgr.m_tex[x].nUserData == 100)
-            g_plugin.KillSprite(x);
-    }
+    const bool showAlbum = s_config.settings.m_bShowAlbum;
+    const std::wstring artFile = m_art_file;
+    const std::vector<uint8_t> raster = m_raster;
 
-    if (s_config.settings.m_bShowAlbum)
+    if (showAlbum && !artFile.empty())
     {
-        if (!m_art_file.empty()) // file
-        {
-            // Check if file exists.
-            pfc::string8 artFile = pfc::utf8FromWide(m_art_file.c_str());
-            if (!filesystem::g_exists(artFile, fb2k::noAbort))
-            {
-                return;
-            }
-
-            g_plugin.LaunchSprite(100, -1, m_art_file);
-        }
-        else if (m_raster.size() > 0) // memory
-        {
-            g_plugin.LaunchSprite(100, -1, L"", m_raster);
-        }
-        else // nothing
-        {
+        pfc::string8 artFileUtf8 = pfc::utf8FromWide(artFile.c_str());
+        if (!filesystem::g_exists(artFileUtf8, fb2k::noAbort))
             return;
-        }
     }
+
+    run_plugin_locked("ShowAlbumArt", [&] {
+        // Only remove the album-art sprite; keep preset/user sprites intact.
+        for (int x = 0; x < NUM_TEX; x++)
+        {
+            if (g_plugin.m_texmgr.m_tex[x].nUserData == 100)
+                g_plugin.KillSprite(x);
+        }
+
+        if (!showAlbum)
+            return;
+
+        if (!artFile.empty()) // file
+        {
+            g_plugin.LaunchSprite(100, -1, artFile);
+        }
+        else if (raster.size() > 0) // memory
+        {
+            g_plugin.LaunchSprite(100, -1, L"", raster);
+        }
+    }, wait_for_lock);
 }
 
 void milk2_ui_element::UpdatePlaylist()
@@ -1890,7 +1898,7 @@ void milk2_ui_element::LaunchSongTitle()
 
 void milk2_ui_element::LaunchStatusText(const wchar_t* text, float duration, float fadeTime)
 {
-    g_plugin.LaunchStatusText(text, duration, fadeTime);
+    run_plugin_locked("LaunchStatusText", [&] { g_plugin.LaunchStatusText(text, duration, fadeTime); }, true);
 }
 
 #ifdef TIMER_TP

@@ -161,6 +161,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     bool m_focus_hotkeys_registered;
     bool m_pending_single_click;
     bool m_require_explicit_click_for_play_pause;
+    DWORD m_last_left_double_click_tick;
 
     DWORD m_refresh_interval;
     double m_last_time;
@@ -327,7 +328,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     void RegisterForArtwork();
     void ExtractRasterData(const uint8_t* data, size_t size) noexcept;
     void LoadAlbumArt(const metadb_handle_ptr& track, abort_callback& abort);
-    void ShowAlbumArt();
+    void ShowAlbumArt(bool wait_for_lock = false);
     // clang-format on
 
     // Text

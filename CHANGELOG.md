@@ -2,6 +2,18 @@
 
 ## Release History
 
+### 0.2.1.12 - 2026-04-17
+
+Crash-stability and overlay behavior follow-up for the foobar2000 x64 component.
+
+- Guarded album-art sprite replacement with the render lock to avoid racing the render thread during rapid track changes.
+- Kept explicit album-art menu changes on a blocking lock path while allowing automatic track-change artwork updates to skip safely if rendering is busy.
+- Added render-lock protection around left-click play/pause status text.
+- Prevented double-click fullscreen actions from also firing the delayed single-click play/pause action.
+- Restored `Playing` and `Paused` to the same large animated center text path used by track-title animations.
+- Prevented automatic track-title updates from immediately overwriting `Playing` and `Paused`, while keeping suppressed title changes pending so the new title can still animate afterward.
+- Kept blacklist replacement preset loading on a blocking render-lock path so `Never Show Again` reliably advances to a replacement preset.
+
 ### 0.2.1.11 - 2026-04-17
 
 Small UI cleanup release for the foobar2000 x64 component.

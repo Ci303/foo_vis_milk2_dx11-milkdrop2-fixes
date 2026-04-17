@@ -486,6 +486,7 @@ class CPlugin : public CPluginShell
 
     wchar_t m_szSongTitle[256];
     wchar_t m_szSongTitlePrev[256];
+    float m_fSuppressSongTitleAnimUntilThisTime;
 
     // Stuff for the menu system.
     CMilkMenu* m_pCurMenu; // should always be valid!
