@@ -16,8 +16,6 @@ Existing licensing and attribution are preserved under MPL-2.0.
 
 MilkDrop presets can contain rapid flashing, strobing, high-contrast motion, intense colour changes, and fast full-screen movement. These visuals may trigger seizures, migraines, dizziness, nausea, or discomfort in people with photosensitive epilepsy or other visual sensitivities.
 
-Stop using the visualiser immediately if you feel unwell. Use it in a well-lit room, keep the display at a comfortable brightness, and avoid watching full-screen effects for long periods if you are sensitive to flashing or rapidly moving visuals.
-
 ## What Has Been Fixed Here
 
 This repository already includes the DirectX 11 foobar2000 port from upstream. On top of that, the recent maintenance work in this branch focuses on the following:
