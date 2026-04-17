@@ -725,10 +725,38 @@ void milk2_preferences_page::OnButtonPushed(UINT uNotifyCode, int nID, CWindow w
 
 BOOL PresetBlacklistDlg::OnInitDialog(CWindow, LPARAM)
 {
+    m_dark.AddDialogWithControls(*this);
+    ApplyEntryPlaceholder();
     RefreshList();
     UpdateButtons();
     CenterWindow(GetParent());
     return TRUE;
+}
+
+void PresetBlacklistDlg::OnDestroy()
+{
+    if (m_entry_placeholder_font)
+    {
+        DeleteObject(m_entry_placeholder_font);
+        m_entry_placeholder_font = nullptr;
+    }
+    m_dark.clear();
+}
+
+LRESULT PresetBlacklistDlg::OnCtlColorEdit(UINT, WPARAM wParam, LPARAM lParam)
+{
+    if (reinterpret_cast<HWND>(lParam) == GetDlgItem(IDC_BLACKLIST_ENTRY).m_hWnd && m_entry_placeholder_active)
+    {
+        HDC hdc = reinterpret_cast<HDC>(wParam);
+        SetTextColor(hdc, RGB(150, 150, 150));
+        const COLORREF background = DarkMode::GetSysColor(COLOR_WINDOW);
+        SetBkColor(hdc, background);
+        SetDCBrushColor(hdc, background);
+        return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
+    }
+
+    SetMsgHandled(FALSE);
+    return 0;
 }
 
 void PresetBlacklistDlg::OnCloseCmd(UINT, int nID, CWindow)
@@ -738,24 +766,29 @@ void PresetBlacklistDlg::OnCloseCmd(UINT, int nID, CWindow)
 
 void PresetBlacklistDlg::OnAdd(UINT, int, CWindow)
 {
-    wchar_t selectedPath[MAX_PATH] = {0};
-    OPENFILENAME ofn = {};
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = *this;
-    ofn.lpstrFilter = L"MilkDrop Presets (*.milk)\0*.milk\0All Files (*.*)\0*.*\0";
-    ofn.lpstrFile = selectedPath;
-    ofn.nMaxFile = static_cast<DWORD>(std::size(selectedPath));
-    ofn.lpstrInitialDir = g_plugin.GetPresetDir();
-    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
-    ofn.lpstrDefExt = L"milk";
-
-    if (!GetOpenFileName(&ofn))
-        return;
-
-    const wchar_t* filename = wcsrchr(selectedPath, L'\\');
-    filename = filename ? (filename + 1) : selectedPath;
     wchar_t entry[512] = {0};
-    wcscpy_s(entry, filename);
+    if (!m_entry_placeholder_active)
+        GetDlgItemText(IDC_BLACKLIST_ENTRY, entry, static_cast<int>(std::size(entry)));
+
+    if (CPlugin::NormalizePresetBlacklistEntry(entry).empty())
+    {
+        wchar_t selectedPath[MAX_PATH] = {0};
+        OPENFILENAME ofn = {};
+        ofn.lStructSize = sizeof(ofn);
+        ofn.hwndOwner = *this;
+        ofn.lpstrFilter = L"MilkDrop Presets (*.milk)\0*.milk\0All Files (*.*)\0*.*\0";
+        ofn.lpstrFile = selectedPath;
+        ofn.nMaxFile = static_cast<DWORD>(std::size(selectedPath));
+        ofn.lpstrInitialDir = g_plugin.GetPresetDir();
+        ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+        ofn.lpstrDefExt = L"milk";
+
+        if (!GetOpenFileName(&ofn))
+            return;
+
+        wcscpy_s(entry, selectedPath);
+    }
+
     if (!g_plugin.AddPresetToBlacklist(entry))
         return;
 
@@ -764,6 +797,7 @@ void PresetBlacklistDlg::OnAdd(UINT, int, CWindow)
 
     m_changed = true;
     SetDlgItemText(IDC_BLACKLIST_ENTRY, L"");
+    ApplyEntryPlaceholder();
     RefreshList();
     UpdateButtons();
 }
@@ -806,6 +840,55 @@ void PresetBlacklistDlg::OnOpenPresetDirectory(UINT, int, CWindow)
 void PresetBlacklistDlg::OnEntryChanged(UINT, int, CWindow)
 {
     UpdateButtons();
+}
+
+void PresetBlacklistDlg::OnEntrySetFocus(UINT, int, CWindow)
+{
+    ClearEntryPlaceholder();
+}
+
+void PresetBlacklistDlg::OnEntryKillFocus(UINT, int, CWindow)
+{
+    ApplyEntryPlaceholder();
+}
+
+void PresetBlacklistDlg::ApplyEntryPlaceholder()
+{
+    if (m_entry_placeholder_active)
+        return;
+
+    wchar_t entry[512] = {0};
+    GetDlgItemText(IDC_BLACKLIST_ENTRY, entry, static_cast<int>(std::size(entry)));
+    if (entry[0] != L'\0')
+        return;
+
+    m_entry_placeholder_active = true;
+    CWindow entryControl = GetDlgItem(IDC_BLACKLIST_ENTRY);
+    if (!m_entry_placeholder_font)
+    {
+        LOGFONT lf = {};
+        HFONT baseFont = GetFont();
+        if (!baseFont)
+            baseFont = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+        if (baseFont && GetObject(baseFont, sizeof(lf), &lf) == sizeof(lf))
+        {
+            lf.lfItalic = TRUE;
+            m_entry_placeholder_font = CreateFontIndirect(&lf);
+        }
+    }
+    if (m_entry_placeholder_font)
+        entryControl.SetFont(m_entry_placeholder_font, TRUE);
+    SetDlgItemText(IDC_BLACKLIST_ENTRY, L"example.milk");
+}
+
+void PresetBlacklistDlg::ClearEntryPlaceholder()
+{
+    if (!m_entry_placeholder_active)
+        return;
+
+    m_entry_placeholder_active = false;
+    GetDlgItem(IDC_BLACKLIST_ENTRY).SetFont(GetFont(), TRUE);
+    SetDlgItemText(IDC_BLACKLIST_ENTRY, L"");
 }
 
 void PresetBlacklistDlg::OnListSelectionChanged(UINT, int, CWindow)

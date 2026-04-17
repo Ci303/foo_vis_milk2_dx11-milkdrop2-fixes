@@ -446,6 +446,8 @@ class PresetBlacklistDlg : public CDialogImpl<PresetBlacklistDlg>
 
     BEGIN_MSG_MAP(PresetBlacklistDlg)
         MSG_WM_INITDIALOG(OnInitDialog)
+        MSG_WM_DESTROY(OnDestroy)
+        MESSAGE_HANDLER_EX(WM_CTLCOLOREDIT, OnCtlColorEdit)
         COMMAND_ID_HANDLER_EX(IDOK, OnCloseCmd)
         COMMAND_ID_HANDLER_EX(IDCANCEL, OnCloseCmd)
         COMMAND_HANDLER_EX(IDC_BLACKLIST_ADD, BN_CLICKED, OnAdd)
@@ -453,23 +455,34 @@ class PresetBlacklistDlg : public CDialogImpl<PresetBlacklistDlg>
         COMMAND_HANDLER_EX(IDC_BLACKLIST_OPEN, BN_CLICKED, OnOpenLocation)
         COMMAND_HANDLER_EX(IDC_BLACKLIST_PRESET_DIR, BN_CLICKED, OnOpenPresetDirectory)
         COMMAND_HANDLER_EX(IDC_BLACKLIST_ENTRY, EN_CHANGE, OnEntryChanged)
+        COMMAND_HANDLER_EX(IDC_BLACKLIST_ENTRY, EN_SETFOCUS, OnEntrySetFocus)
+        COMMAND_HANDLER_EX(IDC_BLACKLIST_ENTRY, EN_KILLFOCUS, OnEntryKillFocus)
         COMMAND_HANDLER_EX(IDC_BLACKLIST_LIST, LBN_SELCHANGE, OnListSelectionChanged)
         COMMAND_HANDLER_EX(IDC_BLACKLIST_LIST, LBN_DBLCLK, OnOpenLocation)
     END_MSG_MAP()
 
   private:
     BOOL OnInitDialog(CWindow, LPARAM);
+    void OnDestroy();
+    LRESULT OnCtlColorEdit(UINT, WPARAM, LPARAM);
     void OnCloseCmd(UINT, int nID, CWindow);
     void OnAdd(UINT, int, CWindow);
     void OnRemove(UINT, int, CWindow);
     void OnOpenLocation(UINT, int, CWindow);
     void OnOpenPresetDirectory(UINT, int, CWindow);
     void OnEntryChanged(UINT, int, CWindow);
+    void OnEntrySetFocus(UINT, int, CWindow);
+    void OnEntryKillFocus(UINT, int, CWindow);
     void OnListSelectionChanged(UINT, int, CWindow);
+    void ApplyEntryPlaceholder();
+    void ClearEntryPlaceholder();
     void RefreshList();
     void UpdateButtons();
 
     bool m_changed = false;
+    bool m_entry_placeholder_active = false;
+    HFONT m_entry_placeholder_font = nullptr;
+    fb2k::CDarkModeHooks m_dark;
 };
 
 class milk2_config

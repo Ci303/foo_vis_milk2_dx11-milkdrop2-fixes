@@ -49,7 +49,7 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Default UI only. Columns UI is not supported.
 - foobar2000 preferences are used for most component settings.
 - Presets, textures, custom messages and custom sprites still use the `milkdrop2` profile directory.
-- Older presets can still fail or partially render if they depend on unsupported EEL1 syntax, old shader assumptions, or missing texture packs.
+- Older presets can still fail, crash, hang, or remain black if they depend on unsupported EEL1 syntax, old shader assumptions, missing texture packs, or other compatibility issues. The blacklist is intended to help filter those presets out over time.
 - This is currently tested mainly on foobar2000 v2 x64, although the project can still be built for other targets present in the solution.
 
 ## How To Install and Use It
@@ -60,7 +60,7 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Current public packages are x64 builds intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
 - Import `foo_vis_milk2.fb2k-component` in **File > Preferences > Components > Install...**.
-- Current release packages are named like `foo_vis_milk2-0.2.1.12.fb2k-component`.
+- Current release packages are named like `foo_vis_milk2-0.2.1.13.fb2k-component`.
 - Restart foobar2000 after the component is installed.
 
 ### 2. Add presets and textures
@@ -151,6 +151,7 @@ The current public release line includes the following user-visible behaviour ch
 - `F3` time display without fractional milliseconds.
 - Crash diagnostics/minidump logging for intermittent runtime crash investigation.
 - Preferences dialog layout fixes for the newer settings.
+- Known-bad preset filtering remains ongoing; some presets may still crash, hang, or render as a black screen until they are identified and blacklisted.
 
 ## Releases
 

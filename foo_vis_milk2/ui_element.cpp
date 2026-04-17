@@ -57,23 +57,35 @@ void log_runtime_exception(const char* where) noexcept
 }
 
 template <typename Callback>
-void run_plugin_locked(const char* where, Callback&& callback, bool wait_for_lock = false) noexcept
+bool run_plugin_locked(const char* where, Callback&& callback, bool wait_for_lock = false) noexcept
 {
+    constexpr DWORD max_blocking_lock_wait_ms = 250;
     bool lock_held = false;
+    bool callback_attempted = false;
     try
     {
 #ifdef TIMER_TP
         if (wait_for_lock)
         {
-            EnterCriticalSection(&s_cs);
+            const DWORD start = GetTickCount();
+            while (TryEnterCriticalSection(&s_cs) == 0)
+            {
+                if (GetTickCount() - start >= max_blocking_lock_wait_ms)
+                {
+                    MILK2_CONSOLE_LOG(where, " skipped because render lock stayed busy")
+                    return false;
+                }
+                Sleep(1);
+            }
         }
         else if (TryEnterCriticalSection(&s_cs) == 0)
         {
             MILK2_CONSOLE_LOG(where, " skipped because render lock is busy")
-            return;
+            return false;
         }
         lock_held = true;
 #endif
+        callback_attempted = true;
         callback();
     }
     catch (const std::exception& exc)
@@ -88,6 +100,7 @@ void run_plugin_locked(const char* where, Callback&& callback, bool wait_for_loc
     if (lock_held)
         LeaveCriticalSection(&s_cs);
 #endif
+    return callback_attempted;
 }
 
 static wchar_t s_crash_log_dir[MAX_PATH]{};
@@ -236,6 +249,7 @@ milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_ins
     m_focus_hotkeys_registered = false;
     m_pending_single_click = false;
     m_require_explicit_click_for_play_pause = false;
+    m_blacklist_load_retries = 0;
     m_last_left_double_click_tick = 0;
 #if defined(TIMER_TP)
     m_tpTimer = nullptr;
@@ -474,7 +488,15 @@ void milk2_ui_element::OnTimer(UINT_PTR nIDEvent)
     if (nIDEvent == ID_BLACKLIST_TIMER)
     {
         KillTimer(ID_BLACKLIST_TIMER);
-        run_plugin_locked("BlacklistCurrentPreset load replacement", [&] { g_plugin.LoadRandomPreset(0.0f); }, true);
+        if (!run_plugin_locked("BlacklistCurrentPreset load replacement", [&] { g_plugin.LoadRandomPreset(0.0f); }, true))
+        {
+            if (++m_blacklist_load_retries <= ID_BLACKLIST_MAX_RETRIES)
+                SetTimer(ID_BLACKLIST_TIMER, ID_BLACKLIST_RETRY_DELAY_MS, nullptr);
+            else
+                m_blacklist_load_retries = 0;
+            return;
+        }
+        m_blacklist_load_retries = 0;
         return;
     }
 
@@ -1710,6 +1732,7 @@ void milk2_ui_element::BlacklistCurrentPreset()
         return;
 
     KillTimer(ID_BLACKLIST_TIMER);
+    m_blacklist_load_retries = 0;
     SetTimer(ID_BLACKLIST_TIMER, 1, nullptr);
 }
 

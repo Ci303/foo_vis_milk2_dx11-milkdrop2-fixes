@@ -2,6 +2,17 @@
 
 ## Release History
 
+### 0.2.1.13 - 2026-04-17
+
+Blacklist usability and hang-avoidance follow-up for the foobar2000 x64 component.
+
+- Replaced indefinite UI-thread render-lock waits with a bounded wait so busy or wedged rendering cannot leave foobar permanently not responding.
+- Retried blacklist replacement preset loading when the render lock is temporarily busy, so `Never Show Again` is less likely to leave the current preset visible.
+- Updated the preset blacklist dialog for foobar dark mode.
+- Made the blacklist entry field clearer with a grey italic `example.milk` placeholder inside the box.
+- Allowed the blacklist Add action to use a typed or pasted preset filename/path, while still opening the preset file picker when the field is empty.
+- Some presets are still known to crash, hang, or remain black because of preset/shader/texture compatibility issues; the blacklist is intended to help filter those out as they are found.
+
 ### 0.2.1.12 - 2026-04-17
 
 Crash-stability and overlay behavior follow-up for the foobar2000 x64 component.

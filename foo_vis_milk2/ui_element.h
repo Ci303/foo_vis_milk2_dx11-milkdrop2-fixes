@@ -161,6 +161,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     bool m_focus_hotkeys_registered;
     bool m_pending_single_click;
     bool m_require_explicit_click_for_play_pause;
+    UINT m_blacklist_load_retries;
     DWORD m_last_left_double_click_tick;
 
     DWORD m_refresh_interval;
@@ -176,6 +177,8 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
 #endif
     static constexpr UINT_PTR ID_CLICK_TIMER = 2;
     static constexpr UINT_PTR ID_BLACKLIST_TIMER = 3;
+    static constexpr UINT ID_BLACKLIST_RETRY_DELAY_MS = 50;
+    static constexpr UINT ID_BLACKLIST_MAX_RETRIES = 20;
 
     enum milk2_ui_menu_id
     {
