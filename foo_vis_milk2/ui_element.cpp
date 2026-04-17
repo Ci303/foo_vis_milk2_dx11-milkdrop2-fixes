@@ -57,13 +57,21 @@ void log_runtime_exception(const char* where) noexcept
 }
 
 template <typename Callback>
-void run_plugin_locked(const char* where, Callback&& callback) noexcept
+void run_plugin_locked(const char* where, Callback&& callback, bool wait_for_lock = false) noexcept
 {
     bool lock_held = false;
     try
     {
 #ifdef TIMER_TP
-        EnterCriticalSection(&s_cs);
+        if (wait_for_lock)
+        {
+            EnterCriticalSection(&s_cs);
+        }
+        else if (TryEnterCriticalSection(&s_cs) == 0)
+        {
+            MILK2_CONSOLE_LOG(where, " skipped because render lock is busy")
+            return;
+        }
         lock_held = true;
 #endif
         callback();
@@ -83,7 +91,8 @@ void run_plugin_locked(const char* where, Callback&& callback) noexcept
 }
 
 static wchar_t s_crash_log_dir[MAX_PATH]{};
-static PVOID s_crash_handler = nullptr;
+static LPTOP_LEVEL_EXCEPTION_FILTER s_previous_crash_filter = nullptr;
+static bool s_crash_filter_installed = false;
 static volatile LONG s_crash_log_written = 0;
 
 void append_crash_line(HANDLE file, const wchar_t* text) noexcept
@@ -102,7 +111,8 @@ LONG CALLBACK milk2_crash_handler(EXCEPTION_POINTERS* exceptionInfo) noexcept
         return EXCEPTION_CONTINUE_SEARCH;
 
     const DWORD code = exceptionInfo->ExceptionRecord->ExceptionCode;
-    if (code == EXCEPTION_BREAKPOINT || code == EXCEPTION_SINGLE_STEP)
+    constexpr DWORD MS_VC_THREAD_NAME_EXCEPTION = 0x406D1388;
+    if (code == EXCEPTION_BREAKPOINT || code == EXCEPTION_SINGLE_STEP || code == MS_VC_THREAD_NAME_EXCEPTION)
         return EXCEPTION_CONTINUE_SEARCH;
 
     if (InterlockedCompareExchange(&s_crash_log_written, 1, 0) != 0)
@@ -173,7 +183,7 @@ LONG CALLBACK milk2_crash_handler(EXCEPTION_POINTERS* exceptionInfo) noexcept
                 writeDump(GetCurrentProcess(),
                           GetCurrentProcessId(),
                           dumpFile,
-                          static_cast<MINIDUMP_TYPE>(MiniDumpWithDataSegs | MiniDumpWithIndirectlyReferencedMemory | MiniDumpScanMemory),
+                          static_cast<MINIDUMP_TYPE>(MiniDumpNormal | MiniDumpWithThreadInfo),
                           &dumpException,
                           nullptr,
                           nullptr);
@@ -183,12 +193,15 @@ LONG CALLBACK milk2_crash_handler(EXCEPTION_POINTERS* exceptionInfo) noexcept
         CloseHandle(dumpFile);
     }
 
+    if (s_previous_crash_filter)
+        return s_previous_crash_filter(exceptionInfo);
+
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
 void install_crash_logging() noexcept
 {
-    if (s_crash_handler)
+    if (s_crash_filter_installed)
         return;
 
     try
@@ -204,7 +217,8 @@ void install_crash_logging() noexcept
         wcscpy_s(s_crash_log_dir, L".\\");
     }
 
-    s_crash_handler = AddVectoredExceptionHandler(1, milk2_crash_handler);
+    s_previous_crash_filter = SetUnhandledExceptionFilter(milk2_crash_handler);
+    s_crash_filter_installed = true;
 }
 
 milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_instance_callback_ptr p_callback) :
@@ -390,6 +404,7 @@ void milk2_ui_element::OnDestroy()
 #if defined(TIMER_TP)
     StopTimer();
     EnterCriticalSection(&s_cs);
+    bool delete_cs = false;
 #elif defined(TIMER_DX)
     message_loop_v2::get()->remove_idle_handler(this);
 #endif
@@ -414,7 +429,7 @@ void milk2_ui_element::OnDestroy()
 #if defined(TIMER_32)
         KillTimer(ID_REFRESH_TIMER);
 #elif defined(TIMER_TP)
-        DeleteCriticalSection(&s_cs);
+        delete_cs = true;
 #endif
         wcscpy_s(s_config.settings.m_szPresetDir, g_plugin.GetPresetDir()); // save last "Load Preset" menu directory
         g_plugin.PluginQuit();
@@ -431,6 +446,8 @@ void milk2_ui_element::OnDestroy()
     }
 #ifdef TIMER_TP
     LeaveCriticalSection(&s_cs);
+    if (delete_cs)
+        DeleteCriticalSection(&s_cs);
 #endif
 }
 
@@ -452,7 +469,7 @@ void milk2_ui_element::OnTimer(UINT_PTR nIDEvent)
     if (nIDEvent == ID_BLACKLIST_TIMER)
     {
         KillTimer(ID_BLACKLIST_TIMER);
-        RandomPreset(0.0f);
+        run_plugin_locked("BlacklistCurrentPreset load replacement", [&] { g_plugin.LoadRandomPreset(0.0f); }, true);
         return;
     }
 
@@ -717,20 +734,7 @@ void milk2_ui_element::OnDisplayChange(UINT uBitsPerPixel, CSize sizeScreen)
 
     MILK2_CONSOLE_LOG("OnDisplayChange ", GetWnd())
     if (m_milk2)
-    {
-        try
-        {
-            g_plugin.OnDisplayChange();
-        }
-        catch (const std::exception& exc)
-        {
-            log_runtime_exception("OnDisplayChange", exc);
-        }
-        catch (...)
-        {
-            log_runtime_exception("OnDisplayChange");
-        }
-    }
+        run_plugin_locked("OnDisplayChange", [] { g_plugin.OnDisplayChange(); });
 }
 
 void milk2_ui_element::OnDpiChanged(UINT nDpiX, UINT nDpiY, PRECT pRect)
@@ -1881,7 +1885,7 @@ void milk2_ui_element::UpdatePlaylist()
 
 void milk2_ui_element::LaunchSongTitle()
 {
-    g_plugin.LaunchSongTitleAnim();
+    run_plugin_locked("LaunchSongTitle", [] { g_plugin.LaunchSongTitleAnim(true); }, true);
 }
 
 void milk2_ui_element::LaunchStatusText(const wchar_t* text, float duration, float fadeTime)
@@ -2148,10 +2152,11 @@ class milk2_initquit : public initquit
         //NSEEL_quit();
         if (core_api::is_quiet_mode_enabled())
             return;
-        if (s_crash_handler)
+        if (s_crash_filter_installed)
         {
-            RemoveVectoredExceptionHandler(s_crash_handler);
-            s_crash_handler = nullptr;
+            SetUnhandledExceptionFilter(s_previous_crash_filter);
+            s_previous_crash_filter = nullptr;
+            s_crash_filter_installed = false;
         }
         //delete_first_run();
     }

@@ -1005,7 +1005,11 @@ void CPlugin::RenderFrame(int bRedraw)
     if (m_supertext.bRedrawSuperText)
     {
         if (!RenderStringToTitleTexture())
-            m_supertext.fStartTime = -1.0f;
+        {
+            m_supertext.nFontSizeUsed = 0;
+            if (!m_supertext.bIsSongTitle)
+                m_supertext.fStartTime = -1.0f;
+        }
         m_supertext.bRedrawSuperText = false;
     }
 

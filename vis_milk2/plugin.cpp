@@ -1080,9 +1080,8 @@ static void CancelThread(int max_wait_time_ms)
 // created or initialized in `AllocateMilkDropNonDX11()`.
 void CPlugin::CleanUpMilkDropNonDX11()
 {
-    DeleteCriticalSection(&g_cs);
-
     CancelThread(0);
+    DeleteCriticalSection(&g_cs);
 
     m_menuPreset.Finish();
     m_menuWave.Finish();
@@ -3601,6 +3600,48 @@ static void DrawShadowTextAt(CTextManager& textManager,
     }
 }
 
+static void DrawCenteredShadowText(CTextManager& textManager,
+                                   DXContext* dx,
+                                   TextStyle* font,
+                                   TextElement& element,
+                                   const wchar_t* text,
+                                   int left,
+                                   int right,
+                                   int top,
+                                   int bottom,
+                                   DWORD color)
+{
+    if (!(text && text[0] != L'\0') || right <= left || bottom <= top)
+    {
+        HideTextElement(textManager, element);
+        return;
+    }
+
+    if (!element.IsVisible())
+        element.Initialize(dx->GetD2DDeviceContext());
+
+    D2D1_COLOR_F fText = D2D1::ColorF(color, static_cast<FLOAT>(((color & 0xFF000000) >> 24) / 255.0f));
+    D2D1_RECT_F rect = D2D1::RectF(static_cast<FLOAT>(left), static_cast<FLOAT>(top), static_cast<FLOAT>(right), static_cast<FLOAT>(bottom));
+    element.SetAlignment(AlignCenter, AlignCenter);
+    element.SetTextColor(fText);
+    element.SetTextOpacity(fText.a);
+    element.SetText(text);
+    element.SetTextStyle(font);
+    element.SetTextShadow(true);
+    element.SetContainer(rect);
+
+    if (textManager.DrawD2DText(font, &element, const_cast<wchar_t*>(text), &rect, DT_NOPREFIX | DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_WORD_ELLIPSIS, color, false, 0xFF000000) != 0)
+    {
+        if (!element.IsVisible())
+            textManager.RegisterElement(&element);
+        element.SetVisible(true);
+    }
+    else
+    {
+        HideTextElement(textManager, element);
+    }
+}
+
 static void BuildElapsedTimeSlot(const wchar_t* lengthText, wchar_t* slotText, size_t slotCount)
 {
     if (!(lengthText && slotText && slotCount > 0))
@@ -3765,6 +3806,37 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
     wchar_t buf[512] = {0};
     TextStyle* pFont = GetFont(DECORATIVE_FONT);
     int h = GetFontHeight(DECORATIVE_FONT);
+
+    if (m_supertext.bIsSongTitle && m_supertext.nFontSizeUsed <= 0 && m_supertext.fStartTime >= 0.0f && !m_supertext.bRedrawSuperText && m_supertext.szText[0])
+    {
+        const float duration = std::max(0.1f, m_supertext.fDuration);
+        const float progress = (GetTime() - m_supertext.fStartTime) / duration;
+        if (progress >= 0.0f && progress < 1.0f)
+        {
+            const BYTE alpha = static_cast<BYTE>(std::clamp(std::pow(progress, 0.3f), 0.0f, 1.0f) * 255.0f);
+            const DWORD color = (static_cast<DWORD>(alpha) << 24) | 0x00FFFFFF;
+            const int titleHeight = std::max(GetFontHeight(SONGTITLE_FONT) * 3, h * 3);
+            const int centerY = GetHeight() / 2;
+            DrawCenteredShadowText(m_text,
+                                   m_lpDX.get(),
+                                   GetFont(SONGTITLE_FONT),
+                                   m_centerSongTitle,
+                                   m_supertext.szText,
+                                   xL,
+                                   xR,
+                                   centerY - titleHeight / 2,
+                                   centerY + titleHeight / 2,
+                                   color);
+        }
+        else
+        {
+            HideTextElement(m_text, m_centerSongTitle);
+        }
+    }
+    else
+    {
+        HideTextElement(m_text, m_centerSongTitle);
+    }
 
     // 1. Render text in upper-right corner EXCEPT USER MESSAGE.
     //    The User Message goes last because it draws a box under itself
@@ -5219,15 +5291,31 @@ void CPlugin::PrevPreset(float fBlendTime)
 {
     if (m_bSequentialPresetOrder)
     {
-        m_nCurrentPreset--;
-        if (m_nCurrentPreset < m_nDirs)
-            m_nCurrentPreset = m_nPresets - 1;
-        if (m_nCurrentPreset >= m_nPresets) // just in case
-            m_nCurrentPreset = m_nDirs;
+        std::wstring presetFilename;
+        wchar_t presetDir[MAX_PATH] = {0};
+
+        EnterCriticalSection(&g_cs);
+        const int presetCount = std::min(m_nPresets, static_cast<int>(m_presets.size()));
+        const int dirCount = std::min(std::max(0, m_nDirs), presetCount);
+        if (presetCount > dirCount)
+        {
+            m_nCurrentPreset--;
+            if (m_nCurrentPreset < dirCount)
+                m_nCurrentPreset = presetCount - 1;
+            if (m_nCurrentPreset >= presetCount)
+                m_nCurrentPreset = dirCount;
+
+            presetFilename = m_presets[m_nCurrentPreset].szFilename;
+            wcscpy_s(presetDir, m_szPresetDir);
+        }
+        LeaveCriticalSection(&g_cs);
+
+        if (presetFilename.empty())
+            return;
 
         wchar_t szFile[MAX_PATH] = {0};
-        wcscpy_s(szFile, m_szPresetDir); // note: m_szPresetDir always ends with '\'
-        wcscat_s(szFile, m_presets[m_nCurrentPreset].szFilename.c_str());
+        wcscpy_s(szFile, presetDir); // note: m_szPresetDir always ends with '\'
+        wcscat_s(szFile, presetFilename.c_str());
 
         LoadPreset(szFile, fBlendTime);
     }
@@ -5252,35 +5340,6 @@ void CPlugin::NextPreset(float fBlendTime)
 void CPlugin::LoadRandomPreset(float fBlendTime)
 {
     const auto presetBlacklist = GetPresetBlacklist();
-    std::vector<int> allowedPresetIndices;
-    allowedPresetIndices.reserve(std::max(0, m_nPresets - m_nDirs));
-    for (int i = m_nDirs; i < m_nPresets; i++)
-    {
-        bool blacklisted = std::any_of(presetBlacklist.begin(), presetBlacklist.end(), [this, i](const std::wstring& entry) {
-            return _wcsicmp(entry.c_str(), m_presets[i].szFilename.c_str()) == 0;
-        });
-        if (!blacklisted)
-            allowedPresetIndices.push_back(i);
-    }
-
-    // Ensure file list is OK.
-    if (allowedPresetIndices.empty())
-    {
-        // Note: this error message is repeated in `milkdropfs.cpp` in `DrawText()`.
-        wchar_t buf[1024] = {0};
-        swprintf_s(buf, WASABI_API_LNGSTRINGW(IDS_ERROR_NO_PRESET_FILE_FOUND_IN_X_MILK), m_szPresetDir);
-        AddError(buf, 6.0f, ERR_MISC, true);
-
-        // Also bring up the directory navigation menu...
-        if (m_UI_mode == UI_REGULAR || m_UI_mode == UI_MENU)
-        {
-            m_UI_mode = UI_LOAD;
-            m_bUserPagedUp = false;
-            m_bUserPagedDown = false;
-        }
-        return;
-    }
-
     bool bHistoryEmpty = (m_presetHistoryFwdFence == m_presetHistoryBackFence);
 
     // If we have history to march back forward through, do that first.
@@ -5315,65 +5374,109 @@ void CPlugin::LoadRandomPreset(float fBlendTime)
     */
     // --[END]TEMPORARY--
 
-    if (m_bSequentialPresetOrder)
+    std::wstring presetFilename;
+    wchar_t presetDir[MAX_PATH] = {0};
+
+    EnterCriticalSection(&g_cs);
     {
-        int nextAllowed = allowedPresetIndices.front();
-        for (int index : allowedPresetIndices)
+        std::vector<int> allowedPresetIndices;
+        const int presetCount = std::min(m_nPresets, static_cast<int>(m_presets.size()));
+        const int dirCount = std::min(std::max(0, m_nDirs), presetCount);
+        allowedPresetIndices.reserve(std::max(0, presetCount - dirCount));
+        for (int i = dirCount; i < presetCount; i++)
         {
-            if (index > m_nCurrentPreset)
-            {
-                nextAllowed = index;
-                break;
-            }
+            bool blacklisted = std::any_of(presetBlacklist.begin(), presetBlacklist.end(), [this, i](const std::wstring& entry) {
+                return _wcsicmp(entry.c_str(), m_presets[i].szFilename.c_str()) == 0;
+            });
+            if (!blacklisted)
+                allowedPresetIndices.push_back(i);
         }
-        m_nCurrentPreset = nextAllowed;
-    }
-    else
-    {
-        // Pick a random file.
-        float totalAllowedRating = 0.0f;
-        for (int index : allowedPresetIndices)
-            totalAllowedRating += m_presets[index].fRatingThis;
 
-        if (!m_bEnableRating || (totalAllowedRating < 0.1f)) //|| (m_nRatingReadProgress < m_nPresets))
+        if (!allowedPresetIndices.empty())
         {
-            m_nCurrentPreset = allowedPresetIndices[warand() % allowedPresetIndices.size()];
-        }
-        else
-        {
-            float cdf_pos = (warand() % 14345) / 14345.0f * totalAllowedRating;
-
-            /*
-            char buf[512] = {0};
-            sprintf_s(buf, "max = %f, rand = %f, \tvalues: ", m_presets[static_cast<size_t>(m_nPresets) - 1].fRatingCum, cdf_pos);
-            for (int i=m_nDirs; i<m_nPresets; i++)
+            if (m_bSequentialPresetOrder)
             {
-                char buf2[32] = {0};
-                sprintf_s(buf2, "%3.1f ", m_presets[i].fRatingCum);
-                wcscat_s(buf, buf2);
-            }
-            DumpDebugMessage(buf);
-            */
-
-            float runningRating = 0.0f;
-            m_nCurrentPreset = allowedPresetIndices.back();
-            for (int index : allowedPresetIndices)
-            {
-                runningRating += m_presets[index].fRatingThis;
-                if (cdf_pos <= runningRating)
+                int nextAllowed = allowedPresetIndices.front();
+                for (int index : allowedPresetIndices)
                 {
-                    m_nCurrentPreset = index;
-                    break;
+                    if (index > m_nCurrentPreset)
+                    {
+                        nextAllowed = index;
+                        break;
+                    }
+                }
+                m_nCurrentPreset = nextAllowed;
+            }
+            else
+            {
+                // Pick a random file.
+                float totalAllowedRating = 0.0f;
+                for (int index : allowedPresetIndices)
+                    totalAllowedRating += m_presets[index].fRatingThis;
+
+                if (!m_bEnableRating || (totalAllowedRating < 0.1f)) //|| (m_nRatingReadProgress < m_nPresets))
+                {
+                    m_nCurrentPreset = allowedPresetIndices[warand() % allowedPresetIndices.size()];
+                }
+                else
+                {
+                    float cdf_pos = (warand() % 14345) / 14345.0f * totalAllowedRating;
+
+                    /*
+                    char buf[512] = {0};
+                    sprintf_s(buf, "max = %f, rand = %f, \tvalues: ", m_presets[static_cast<size_t>(m_nPresets) - 1].fRatingCum, cdf_pos);
+                    for (int i=m_nDirs; i<m_nPresets; i++)
+                    {
+                        char buf2[32] = {0};
+                        sprintf_s(buf2, "%3.1f ", m_presets[i].fRatingCum);
+                        wcscat_s(buf, buf2);
+                    }
+                    DumpDebugMessage(buf);
+                    */
+
+                    float runningRating = 0.0f;
+                    m_nCurrentPreset = allowedPresetIndices.back();
+                    for (int index : allowedPresetIndices)
+                    {
+                        runningRating += m_presets[index].fRatingThis;
+                        if (cdf_pos <= runningRating)
+                        {
+                            m_nCurrentPreset = index;
+                            break;
+                        }
+                    }
                 }
             }
+
+            presetFilename = m_presets[m_nCurrentPreset].szFilename;
+            wcscpy_s(presetDir, m_szPresetDir);
         }
+    }
+    LeaveCriticalSection(&g_cs);
+
+    // Ensure file list is OK.
+    if (presetFilename.empty())
+    {
+        // Note: this error message is repeated in `milkdropfs.cpp` in `DrawText()`.
+        wchar_t buf[1024] = {0};
+        swprintf_s(buf, WASABI_API_LNGSTRINGW(IDS_ERROR_NO_PRESET_FILE_FOUND_IN_X_MILK), m_szPresetDir);
+        AddError(buf, 6.0f, ERR_MISC, true);
+
+        // Also bring up the directory navigation menu...
+        if (m_UI_mode == UI_REGULAR || m_UI_mode == UI_MENU)
+        {
+            m_UI_mode = UI_LOAD;
+            m_bUserPagedUp = false;
+            m_bUserPagedDown = false;
+        }
+        return;
     }
 
     // `m_pPresetAddr[m_nCurrentPreset]` points to the preset file to load (without the path);
     // first prepend the path, then load section [preset00] within that file.
     wchar_t szFile[MAX_PATH] = {0};
-    wcscpy_s(szFile, m_szPresetDir); // note: m_szPresetDir always ends with '\'
-    wcscat_s(szFile, m_presets[m_nCurrentPreset].szFilename.c_str());
+    wcscpy_s(szFile, presetDir); // note: m_szPresetDir always ends with '\'
+    wcscat_s(szFile, presetFilename.c_str());
 
     if (!bHistoryEmpty)
         m_presetHistoryPos = (m_presetHistoryPos + 1) % PRESET_HIST_LEN;
@@ -5718,9 +5821,12 @@ void CPlugin::SetPresetListPosition(std::wstring search)
     size_t basename = search.find_last_of(L"\\");
     if (basename != std::wstring::npos)
         search = search.substr(basename + 1, search.length() - basename - 1);
+
+    EnterCriticalSection(&g_cs);
     auto it = std::find_if(m_presets.begin(), m_presets.end(), [&s = search](const PresetInfo& m) -> bool { return m.szFilename == s; });
     if (it != m_presets.end())
         m_nCurrentPreset = static_cast<int>(it - m_presets.begin());
+    LeaveCriticalSection(&g_cs);
 }
 
 void CPlugin::SeekToPreset(wchar_t cStartChar)
@@ -6010,9 +6116,9 @@ static unsigned int WINAPI __UpdatePresetList(void* lpVoid)
     //int nTry = 0;
     bool bRetrying = false;
 
+retry:
     EnterCriticalSection(&g_cs);
 
-retry:
     // Make sure the path exists; if not, go to Winamp plugins directory.
     if (GetFileAttributes(g_plugin.m_szPresetDir) == INVALID_FILE_ATTRIBUTES)
     {
@@ -6058,6 +6164,7 @@ retry:
             g_plugin.FindValidPresetDir();
 
             bRetrying = true;
+            LeaveCriticalSection(&g_cs);
             goto retry;
         }
 
@@ -6218,6 +6325,17 @@ retry:
                 temp_nDirs++;
         }
 
+        constexpr int PRESET_UPDATE_INTERVAL = 64;
+        if (temp_nPresets > 0 && (temp_nPresets == 30 || ((temp_nPresets % PRESET_UPDATE_INTERVAL) == 0)))
+        {
+            EnterCriticalSection(&g_cs);
+            for (int i = g_plugin.m_nPresets; i < temp_nPresets; i++)
+                g_plugin.m_presets.push_back(temp_presets[i]);
+            g_plugin.m_nPresets = temp_nPresets;
+            g_plugin.m_nDirs = temp_nDirs;
+            LeaveCriticalSection(&g_cs);
+        }
+
         if (h && !FindNextFile(h, &fd))
         {
             FindClose(h);
@@ -6226,20 +6344,6 @@ retry:
             break;
         }
 
-        constexpr int PRESET_UPDATE_INTERVAL = 64;
-        // Every so often, add some presets...
-        if (temp_nPresets == 30 || ((temp_nPresets % PRESET_UPDATE_INTERVAL) == 0))
-        {
-            EnterCriticalSection(&g_cs);
-
-            //g_plugin.m_presets = temp_presets;
-            for (int i = g_plugin.m_nPresets; i < temp_nPresets; i++)
-                g_plugin.m_presets.push_back(temp_presets[i]);
-            g_plugin.m_nPresets = temp_nPresets;
-            g_plugin.m_nDirs = temp_nDirs;
-
-            LeaveCriticalSection(&g_cs);
-        }
     }
 
     if (g_bThreadShouldQuit)
@@ -6250,16 +6354,7 @@ retry:
         return 0;
     }
 
-    EnterCriticalSection(&g_cs);
-
-    //g_plugin.m_presets = temp_presets;
-    for (int i = g_plugin.m_nPresets; i < temp_nPresets; i++)
-        g_plugin.m_presets.push_back(temp_presets[i]);
-    g_plugin.m_nPresets = temp_nPresets;
-    g_plugin.m_nDirs = temp_nDirs;
-    //g_plugin.m_bPresetListReady = true;
-
-    if (g_plugin.m_nPresets == 0) //if (g_plugin.m_bPresetListReady && g_plugin.m_nPresets == 0)
+    if (temp_nPresets == 0) //if (g_plugin.m_bPresetListReady && g_plugin.m_nPresets == 0)
     {
         // no presets OR directories found - weird - but it happens.
         // --> revert back to plugins dir
@@ -6271,53 +6366,66 @@ retry:
 
         if (bRetrying)
         {
-            LeaveCriticalSection(&g_cs);
             g_bThreadAlive = false;
             _endthreadex(0);
             return 0;
         }
 
+        EnterCriticalSection(&g_cs);
         g_plugin.FindValidPresetDir();
+        LeaveCriticalSection(&g_cs);
 
         bRetrying = true;
         goto retry;
     }
 
-    //if (g_plugin.m_bPresetListReady)
+    std::stable_sort(temp_presets.begin(), temp_presets.end(), [](const PresetInfo& a, const PresetInfo& b) {
+        const bool aSpecial = !a.szFilename.empty() && a.szFilename.c_str()[0] == L'*';
+        const bool bSpecial = !b.szFilename.empty() && b.szFilename.c_str()[0] == L'*';
+        if (aSpecial != bSpecial)
+            return aSpecial;
+        return _wcsicmp(a.szFilename.c_str(), b.szFilename.c_str()) < 0;
+    });
+
+    if (!temp_presets.empty())
     {
-        g_plugin.MergeSortPresets(0, g_plugin.m_nPresets - 1);
+        temp_presets[0].fRatingCum = temp_presets[0].fRatingThis;
+        for (int i = 1; i < temp_nPresets; i++)
+            temp_presets[i].fRatingCum = temp_presets[static_cast<size_t>(i) - 1].fRatingCum + temp_presets[i].fRatingThis;
+    }
 
-        // Update cumulative ratings, since order changed...
-        g_plugin.m_presets[0].fRatingCum = g_plugin.m_presets[0].fRatingThis;
-        for (int i = 1; i < g_plugin.m_nPresets; i++)
-            g_plugin.m_presets[i].fRatingCum = g_plugin.m_presets[static_cast<size_t>(i) - 1].fRatingCum + g_plugin.m_presets[i].fRatingThis;
+    EnterCriticalSection(&g_cs);
 
-        // Clear the "Scanning presets..." message.
-        //g_plugin.ClearErrors(ERR_SCANNING_PRESETS);
+    g_plugin.m_presets = std::move(temp_presets);
+    g_plugin.m_nPresets = temp_nPresets;
+    g_plugin.m_nDirs = temp_nDirs;
 
-        // Finally, try to re-select the most recently-used preset in the list.
-        g_plugin.m_nPresetListCurPos = 0;
-        if (bTryReselectCurrentPreset)
+    // Clear the "Scanning presets..." message.
+    //g_plugin.ClearErrors(ERR_SCANNING_PRESETS);
+
+    // Finally, try to re-select the most recently-used preset in the list.
+    g_plugin.m_nPresetListCurPos = 0;
+    if (bTryReselectCurrentPreset)
+    {
+        if (g_plugin.m_szCurrentPresetFile[0])
         {
-            if (g_plugin.m_szCurrentPresetFile[0])
+            // Try to automatically seek to the last preset loaded.
+            wchar_t* p = wcsrchr(g_plugin.m_szCurrentPresetFile, L'\\');
+            p = (p) ? (p + 1) : g_plugin.m_szCurrentPresetFile;
+            for (int i = g_plugin.m_nDirs; i < g_plugin.m_nPresets; i++)
             {
-                // Try to automatically seek to the last preset loaded.
-                wchar_t* p = wcsrchr(g_plugin.m_szCurrentPresetFile, L'\\');
-                p = (p) ? (p + 1) : g_plugin.m_szCurrentPresetFile;
-                for (int i = g_plugin.m_nDirs; i < g_plugin.m_nPresets; i++)
+                if (wcscmp(p, g_plugin.m_presets[i].szFilename.c_str()) == 0)
                 {
-                    if (wcscmp(p, g_plugin.m_presets[i].szFilename.c_str()) == 0)
-                    {
-                        g_plugin.m_nPresetListCurPos = i;
-                        break;
-                    }
+                    g_plugin.m_nPresetListCurPos = i;
+                    g_plugin.m_nCurrentPreset = i;
+                    break;
                 }
             }
         }
     }
 
-    LeaveCriticalSection(&g_cs);
     g_plugin.m_bPresetListReady = true;
+    LeaveCriticalSection(&g_cs);
 
     g_bThreadAlive = false;
     //_endthreadex(0); // calling this here stops destructors from being called for local objects!
@@ -6843,6 +6951,8 @@ void CPlugin::SetCurrentPresetRating(float fNewRating)
 {
     if (!m_bEnableRating)
         return;
+    if (!m_szCurrentPresetFile[0] || !m_pState)
+        return;
 
     if (fNewRating < 0)
         fNewRating = 0;
@@ -6861,10 +6971,12 @@ void CPlugin::SetCurrentPresetRating(float fNewRating)
     m_pState->m_fRating = fNewRating;
 
     // Update the cumulative internal listing.
-    m_presets[m_nCurrentPreset].fRatingThis += change;
-    if (m_nCurrentPreset != -1) //&& m_nRatingReadProgress >= m_nCurrentPreset) // (can be -1 if dir. changed but no new preset was loaded yet)
+    if (m_nCurrentPreset >= 0 && m_nCurrentPreset < m_nPresets) //&& m_nRatingReadProgress >= m_nCurrentPreset) // (can be -1 if dir. changed but no new preset was loaded yet)
+    {
+        m_presets[m_nCurrentPreset].fRatingThis += change;
         for (int i = m_nCurrentPreset; i < m_nPresets; i++)
             m_presets[i].fRatingCum += change;
+    }
 
     /* keep in view:
         -test switching dirs w/o loading a preset, and trying to change the rating
@@ -7077,13 +7189,21 @@ void CPlugin::LaunchCustomMessage(int nMsgNum)
     m_supertext.fStartTime = GetTime();
 }
 
-void CPlugin::LaunchSongTitleAnim()
+void CPlugin::LaunchSongTitleAnim(bool refreshCurrentTitle)
 {
+    if (refreshCurrentTitle)
+    {
+        GetWinampSongTitle(GetWinampWindow(), m_szSongTitle, ARRAYSIZE(m_szSongTitle));
+        wcscpy_s(m_szSongTitlePrev, m_szSongTitle);
+    }
+
     wcscpy_s(m_supertext.szText, m_szSongTitle);
     if (wcscmp(m_supertext.szText, L"Stopped.") == 0 || wcscmp(m_supertext.szText, L"Opening...") == 0 || wcscmp(m_supertext.szText, L"") == 0)
         return;
+
     m_supertext.bRedrawSuperText = true;
     m_supertext.bIsSongTitle = true;
+    m_supertext.nFontSizeUsed = 0;
     wcscpy_s(m_supertext.nFontFace, m_fontinfo[SONGTITLE_FONT].szFace);
     m_supertext.fFontSize = static_cast<float>(m_fontinfo[SONGTITLE_FONT].nSize);
     m_supertext.bBold = m_fontinfo[SONGTITLE_FONT].bBold;
@@ -7106,6 +7226,7 @@ void CPlugin::LaunchStatusText(const wchar_t* text, float duration, float fadeTi
 
     m_supertext.bRedrawSuperText = true;
     m_supertext.bIsSongTitle = false;
+    m_supertext.nFontSizeUsed = 0;
     wcscpy_s(m_supertext.szText, text);
     wcscpy_s(m_supertext.nFontFace, m_fontinfo[SONGTITLE_FONT].szFace);
     m_supertext.fFontSize = static_cast<float>(m_fontinfo[SONGTITLE_FONT].nSize);

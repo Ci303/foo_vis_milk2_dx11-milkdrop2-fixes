@@ -563,7 +563,7 @@ void milk2_ui_element::OnChar(TCHAR chChar, UINT nRepCnt, UINT nFlags)
                 return;
             case 't':
             case 'T':
-                g_plugin.LaunchSongTitleAnim();
+                LaunchSongTitle();
                 return;
             case 'o':
                 g_plugin.m_pState->m_fWarpAmount /= 1.1f;

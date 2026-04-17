@@ -603,7 +603,7 @@ class CPlugin : public CPluginShell
     void ClearGraphicsWindow(); // for windowed mode only
     void LaunchCustomMessage(int nMsgNum);
     void ReadCustomMessages();
-    void LaunchSongTitleAnim();
+    void LaunchSongTitleAnim(bool refreshCurrentTitle = false);
     void LaunchStatusText(const wchar_t* text, float duration = 0.9f, float fadeTime = 0.25f);
 
     bool RenderStringToTitleTexture();
@@ -703,6 +703,7 @@ class CPlugin : public CPluginShell
     TextElement m_debugInfo;
     TextElement m_toolTip;
     TextElement m_songTitle;
+    TextElement m_centerSongTitle;
     TextElement m_songStats;
     TextElement m_songStatsSuffix;
     TextElement m_waitText[MAX_PRESETS_PER_PAGE];

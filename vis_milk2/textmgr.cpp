@@ -105,6 +105,9 @@ void TextStyle::SetTextAlignment(DWRITE_TEXT_ALIGNMENT textAlignment)
 
 IDWriteTextFormat* TextStyle::GetTextFormat(IDWriteFactory* dwriteFactory)
 {
+    if (!dwriteFactory)
+        return nullptr;
+
     if (m_textFormat == nullptr)
     {
         ThrowIfFailed(dwriteFactory->CreateTextFormat(
@@ -265,6 +268,9 @@ void TextElement::Update(float timeTotal, float timeDelta)
 
 void TextElement::Render(ID2D1RenderTarget* d2dRenderTarget, IDWriteFactory* dwriteFactory)
 {
+    if (!m_textStyle || !d2dRenderTarget || !dwriteFactory)
+        return;
+
     D2D1_RECT_F bounds = GetBounds(dwriteFactory);
     D2D1_POINT_2F origin = Point2F(bounds.left - m_textExtents.left, bounds.top - m_textExtents.top);
 
@@ -290,6 +296,9 @@ void TextElement::Render(ID2D1RenderTarget* d2dRenderTarget, IDWriteFactory* dwr
 
 void TextElement::Render(ID2D1DeviceContext* d2dContext, IDWriteFactory* dwriteFactory)
 {
+    if (!m_textStyle || !d2dContext || !dwriteFactory)
+        return;
+
     D2D1_RECT_F bounds = GetBounds(dwriteFactory);
     D2D1_POINT_2F origin = Point2F(bounds.left - m_textExtents.left, bounds.top - m_textExtents.top);
 
@@ -378,7 +387,21 @@ void TextElement::FadeIn(float fadeOutTime)
 
 void TextElement::CalculateSize(IDWriteFactory* dwriteFactory)
 {
+    if (!m_textStyle || !dwriteFactory)
+    {
+        m_textExtents = RectF();
+        m_size = SizeF();
+        return;
+    }
+
     CreateTextLayout(dwriteFactory);
+
+    if (!m_textLayout)
+    {
+        m_textExtents = RectF();
+        m_size = SizeF();
+        return;
+    }
 
     DWRITE_TEXT_METRICS metrics;
     DWRITE_OVERHANG_METRICS overhangMetrics;
@@ -395,13 +418,19 @@ void TextElement::CalculateSize(IDWriteFactory* dwriteFactory)
 
 void TextElement::CreateTextLayout(IDWriteFactory* dwriteFactory)
 {
+    if (!m_textStyle || !dwriteFactory)
+        return;
+
     if ((m_textLayout == nullptr) || m_textStyle->HasTextFormatChanged())
     {
         //m_textLayout = nullptr;
+        IDWriteTextFormat* textFormat = m_textStyle->GetTextFormat(dwriteFactory);
+        if (!textFormat)
+            return;
 
         ThrowIfFailed(dwriteFactory->CreateTextLayout(m_text.data(),
                                                       static_cast<UINT32>(m_text.size()),
-                                                      m_textStyle->GetTextFormat(dwriteFactory),
+                                                      textFormat,
                                                       m_container.right - m_container.left,
                                                       m_container.bottom - m_container.top,
                                                       m_textLayout.ReleaseAndGetAddressOf()));

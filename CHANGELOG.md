@@ -2,6 +2,19 @@
 
 ## Release History
 
+### 0.2.1.10 - 2026-04-17
+
+Crash-stability and title-display hotfix for the foobar2000 x64 component.
+
+- Reduced render-thread lock contention by making most UI-triggered plugin operations skip when the render lock is busy, while keeping explicit user actions that must complete on a blocking path.
+- Reworked preset scanning and preset selection so the shared preset list is copied, sorted, and read under safer critical-section boundaries.
+- Fixed preset cleanup ordering so the preset update thread is cancelled before the shared critical section is destroyed.
+- Added guards around preset rating updates, text rendering, help text setup, and DirectWrite layout creation to avoid null-pointer crashes during shutdown, resize, or device transitions.
+- Fixed `Show Track Title` and the `T` shortcut so they refresh the current foobar track title before launching the center title animation.
+- Added a centered one-shot title fallback for cases where the title texture cannot be rendered, while suppressing the fallback when the normal large animated title succeeds.
+- Kept the `F2` lower-corner title overlay independent from the one-shot center title display.
+- Fixed `Never Show Again` so the replacement preset load waits for the render lock and reliably advances after the current preset is blacklisted.
+
 ### 0.2.1.9 - 2026-04-16
 
 Help-overlay and stability follow-up for the foobar2000 x64 component.

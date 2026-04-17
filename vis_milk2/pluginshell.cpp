@@ -57,6 +57,12 @@ namespace
 {
 void ConfigureHelpTextElement(TextElement& element, DXContext* dx, const D2D1_COLOR_F& color, TextStyle* style)
 {
+    if (!dx || !dx->GetD2DDeviceContext() || !style)
+    {
+        element.SetVisible(false);
+        return;
+    }
+
     if (!element.IsVisible())
         element.Initialize(dx->GetD2DDeviceContext());
     element.SetAlignment(AlignNear, AlignNear);
