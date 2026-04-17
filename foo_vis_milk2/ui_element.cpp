@@ -1484,12 +1484,16 @@ void milk2_ui_element::BuildWaves()
 #pragma region Message Handlers
 void milk2_ui_element::OnActivated()
 {
+    if (::GetFocus() == get_wnd())
+        RegisterFocusHotkeys();
+
     if (s_fullscreen)
         ApplyFullscreenWindowOrder();
 }
 
 void milk2_ui_element::OnDeactivated()
 {
+    UnregisterFocusHotkeys();
 }
 
 void milk2_ui_element::OnSuspending()

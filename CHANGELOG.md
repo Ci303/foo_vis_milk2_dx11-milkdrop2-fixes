@@ -13,6 +13,7 @@ Crash-stability and overlay behavior follow-up for the foobar2000 x64 component.
 - Restored `Playing` and `Paused` to the same large animated center text path used by track-title animations.
 - Prevented automatic track-title updates from immediately overwriting `Playing` and `Paused`, while keeping suppressed title changes pending so the new title can still animate afterward.
 - Kept blacklist replacement preset loading on a blocking render-lock path so `Never Show Again` reliably advances to a replacement preset.
+- Scoped the Space hard-cut hotkey to foobar activation so it works in MilkDrop without stealing Space from other Windows applications.
 
 ### 0.2.1.11 - 2026-04-17
 
