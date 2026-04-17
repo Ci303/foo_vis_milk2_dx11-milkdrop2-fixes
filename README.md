@@ -8,7 +8,7 @@ The original upstream project at `jecassis/foo_vis_milk2` is end-of-life.
 
 This repository is an independent continuation focused on keeping the foobar2000 component usable on current systems, especially foobar2000 v2 and x64 installs. It keeps the upstream code and licensing intact, but documents and carries the practical fixes that were needed in day-to-day use.
 
-This is not a new renderer or a redesign of MilkDrop. The aim is to keep the DirectX 11 foobar2000 port working reliably, make the preferences pages easier to use, and fix regressions that showed up in real use.
+This is not a new renderer or a redesign of MilkDrop. The aim is to keep the DirectX 11 foobar2000 port working reliably, make the preferences pages easier to use, and fix regressions that showed up in real use, whilst adding extra functionality.
 
 Existing licensing and attribution are preserved under MPL-2.0.
 
