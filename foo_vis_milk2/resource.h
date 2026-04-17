@@ -900,7 +900,6 @@
 #define IDC_BLACKLIST_REMOVE            1099
 #define IDC_BLACKLIST_OPEN              1100
 #define IDC_BLACKLIST_LABEL             1101
-#define IDC_CB_PERSIST_RUNTIME_STATES   1102
 #define IDC_BLACKLIST_PRESET_DIR        1103
 #define ID_SHOWHELP                     40007
 #define ID_SHOWPLAYLIST                 40008

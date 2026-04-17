@@ -218,21 +218,14 @@ void GetWinampSongPosAsText(HWND hWndWinamp, wchar_t* szSongPos)
     LRESULT res = SendMessageTimeout(hWndWinamp, WM_USER, 0, IPC_GETOUTPUTTIME, SMTO_NORMAL | SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT, 100, &nSongPosMS);
     if (res != 0 && static_cast<LRESULT>(nSongPosMS) >= 0)
     {
-        wchar_t tmp[16];
-        float time_s = nSongPosMS * 0.001f;
-        unsigned int total_seconds = static_cast<unsigned int>(time_s);
+        unsigned int total_seconds = static_cast<unsigned int>(nSongPosMS / 1000);
         unsigned int hours = total_seconds / 3600;
         unsigned int minutes = (total_seconds / 60) % 60;
-        time_s -= total_seconds;
-        time_s += (total_seconds % 60);
-        unsigned int seconds = static_cast<unsigned int>(time_s);
-        time_s -= seconds;
-        unsigned int dsec = static_cast<unsigned int>(time_s * 100);
-        swprintf_s(tmp, L"%.02f", dsec / 100.0f);
+        unsigned int seconds = total_seconds % 60;
         if (hours > 0)
-            swprintf_s(szSongPos, 64, L"%u:%02u:%02u%s", hours, minutes, seconds, tmp + 1);
+            swprintf_s(szSongPos, 64, L"%u:%02u:%02u", hours, minutes, seconds);
         else
-            swprintf_s(szSongPos, 64, L"%u:%02u%s", minutes, seconds, tmp + 1);
+            swprintf_s(szSongPos, 64, L"%u:%02u", minutes, seconds);
     }
 }
 

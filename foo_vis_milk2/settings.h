@@ -168,7 +168,6 @@ typedef struct
     bool m_bShowAlbum;
     bool m_bEnableMouseWheelVolume;
     bool m_bEnableMouseClickPlayPause;
-    bool m_bPersistRuntimeOverlayStates;
     bool m_bEnableHDR;
     bool m_bSkipCompShader;
     uint32_t m_nBackBufferFormat;

@@ -173,10 +173,6 @@ static constexpr GUID guid_cfg_bEnableMouseWheelVolume = {
 static constexpr GUID guid_cfg_bEnableMouseClickPlayPause = {
     0x1b4f7e91, 0x6c31, 0x44eb, {0x91, 0x1f, 0xeb, 0x4c, 0x65, 0xee, 0x3b, 0xf8}
 }; // {1B4F7E91-6C31-44EB-911F-EB4C65EE3BF8}
-static constexpr GUID guid_cfg_bPersistRuntimeOverlayStates = {
-    0x9111ce0c, 0x7ae2, 0x4de5, {0x97, 0x65, 0xbe, 0x73, 0x4a, 0x58, 0x20, 0x71}
-}; // {9111CE0C-7AE2-4DE5-9765-BE734A582071}
-
 // Preferences derived from other settings or hidden.
 static constexpr GUID guid_cfg_bTexSizeWasAutoPow2 = {
     0xb85e5868, 0xde29, 0x40a1, {0x84, 0x14, 0x62, 0x2e, 0xb6, 0x82, 0xbc, 0xff}
@@ -261,7 +257,6 @@ static constexpr bool default_bEnableDownmix = false;
 static constexpr bool default_bShowAlbum = false;
 static constexpr bool default_bEnableMouseWheelVolume = true;
 static constexpr bool default_bEnableMouseClickPlayPause = true;
-static constexpr bool default_bPersistRuntimeOverlayStates = false;
 static constexpr bool default_bEnableHDR = false;
 static constexpr int default_nBackBufferFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
 static constexpr int default_nDepthBufferFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
@@ -327,7 +322,6 @@ class milk2_preferences_page : public preferences_page_instance, public CDialogI
         COMMAND_HANDLER_EX(IDC_CB_NOCOMPSHADER, BN_CLICKED, OnButtonClick)
         COMMAND_HANDLER_EX(IDC_CB_MOUSE_WHEEL_VOLUME, BN_CLICKED, OnButtonClick)
         COMMAND_HANDLER_EX(IDC_CB_MOUSE_CLICK_PLAYPAUSE, BN_CLICKED, OnButtonClick)
-        COMMAND_HANDLER_EX(IDC_CB_PERSIST_RUNTIME_STATES, BN_CLICKED, OnButtonClick)
         COMMAND_HANDLER_EX(IDC_W_MAXFPS2, CBN_SELCHANGE, OnComboChange)
         COMMAND_HANDLER_EX(IDC_FS_MAXFPS2, CBN_SELCHANGE, OnComboChange)
         COMMAND_HANDLER_EX(IDC_CB_WPT, BN_CLICKED, OnButtonClick)

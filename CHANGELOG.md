@@ -2,6 +2,14 @@
 
 ## Release History
 
+### 0.2.1.11 - 2026-04-17
+
+Small UI cleanup release for the foobar2000 x64 component.
+
+- Removed the `Restore F-key overlay states on startup` preference and its persistence path.
+- Kept F-key/runtime overlays on their default startup state instead of restoring saved overlay state.
+- Changed the `F3` track-time overlay to display elapsed time as `m:ss` or `h:mm:ss`, matching the track length format without fractional seconds.
+
 ### 0.2.1.10 - 2026-04-17
 
 Crash-stability and title-display hotfix for the foobar2000 x64 component.
