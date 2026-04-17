@@ -39,6 +39,9 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Added optional mouse wheel volume control and optional single-click play/pause, with a short `Playing` / `Paused` overlay that follows the current animated song-title font settings.
 - Added preset blacklisting, including a `Never Show Again` runtime action, a blacklist manager dialog, and persistent blacklist storage in the `milkdrop2` profile folder.
 - Refined the mouse focus/playback interaction so accidental first-click pauses are less likely when MilkDrop has just regained focus.
+- Hardened album-art sprite replacement, blacklist preset replacement, and play/pause overlay launching around the render lock to reduce crashes during rapid track or preset changes.
+- Fixed the center title animation path used by `Show Track Title`, automatic track changes, and the `Playing` / `Paused` overlays so they do not overwrite each other or render duplicate/tiny fallback text.
+- Changed the `F3` track-time overlay to show minutes and seconds without fractional milliseconds.
 - Added crash diagnostics and minidump logging under `<foobar2000 profile folder>\milkdrop2\crashlogs` to help investigate intermittent runtime crashes.
 
 ## Current Behaviour and Limits
@@ -54,9 +57,10 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 ### 1. Install the component
 
 - The easiest install path is the GitHub Releases page for this repository.
-- The first published release is an x64 package intended for foobar2000 v2 x64.
+- Current public packages are x64 builds intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
 - Import `foo_vis_milk2.fb2k-component` in **File > Preferences > Components > Install...**.
+- Current release packages are named like `foo_vis_milk2-0.2.1.12.fb2k-component`.
 - Restart foobar2000 after the component is installed.
 
 ### 2. Add presets and textures
@@ -89,7 +93,6 @@ Example:
   - image cache
   - fonts
   - optional mouse wheel volume and single-click play/pause controls
-  - whether F-key overlay states should be restored on startup
   - preset blacklist editing
 
 For refresh rates above 60 FPS, use `Unlimited`. The other higher frame-rate settings are not currently working correctly in this fork and fixing them is outside the current scope of this project.
@@ -105,7 +108,7 @@ If those files are blank or missing, normal playback still works. They are only 
 
 - `F1`: show help
 - `F2`: song title
-- `F3`: time display
+- `F3`: time display, formatted as `m:ss` or `h:mm:ss`
 - `F4`: preset name
 - `F5`: frames per second
 - `F6`: preset rating
@@ -122,6 +125,7 @@ The full shortcut list is also shown in the built-in help overlay.
 - To avoid accidental pauses, the first click after focus is regained or after the context menu closes only arms MilkDrop and shows `Click Again for Play/Pause`.
 - Double click still toggles fullscreen.
 - When single-click play/pause is enabled, MilkDrop shows a short `Playing` or `Paused` overlay using the current animated song-title font settings.
+- The play/pause overlay uses the same center animated text path as track-title animations and temporarily prevents the automatic track title from overwriting it.
 
 ### 7. Preset blacklist
 
@@ -140,8 +144,11 @@ The current public release line includes the following user-visible behaviour ch
 - Song titles that scale down to fit before falling back to ellipsis clipping.
 - Optional mouse controls for volume and play/pause.
 - Persistent preset blacklist management and direct preset file access from the context menu.
-- Blacklist manager improvements including preset-folder browsing, safer preferences integration, and the startup/runtime overlay-state option.
+- Blacklist manager improvements including preset-folder browsing, safer preferences integration, and reliable replacement preset loading after `Never Show Again`.
 - Stable built-in help overlay formatting with current keyboard and mouse shortcut information.
+- Render-lock hardening for album-art updates, blacklist replacement preset loads, and play/pause status overlays.
+- Center title animation fixes for manual title display, automatic track changes, and `Playing` / `Paused` overlays.
+- `F3` time display without fractional milliseconds.
 - Crash diagnostics/minidump logging for intermittent runtime crash investigation.
 - Preferences dialog layout fixes for the newer settings.
 
