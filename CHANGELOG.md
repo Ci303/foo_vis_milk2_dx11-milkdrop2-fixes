@@ -2,6 +2,15 @@
 
 ## Release History
 
+### 0.2.1.15 - 2026-04-19
+
+Play/pause overlay reliability update for the foobar2000 x64 component.
+
+- Queued left-click play/pause animated text on the render tick so it is not skipped when the render lock is briefly busy.
+- Kept resume behavior showing the current track title animation.
+- Kept pause behavior showing the large animated `Paused` message.
+- Removed the extra `Click Again to Pause/Play` prompt so a single left click toggles playback directly.
+
 ### 0.2.1.14 - 2026-04-17
 
 Small play/pause overlay behavior update for the foobar2000 x64 component.

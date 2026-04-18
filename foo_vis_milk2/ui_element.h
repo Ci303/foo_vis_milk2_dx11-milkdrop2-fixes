@@ -160,9 +160,19 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     bool m_minimized;
     bool m_focus_hotkeys_registered;
     bool m_pending_single_click;
-    bool m_require_explicit_click_for_play_pause;
     UINT m_blacklist_load_retries;
     DWORD m_last_left_double_click_tick;
+    enum class pending_animated_text_kind
+    {
+        none,
+        status,
+        song_title
+    };
+    std::mutex m_pending_animated_text_mutex;
+    pending_animated_text_kind m_pending_animated_text_kind;
+    std::wstring m_pending_animated_status_text;
+    float m_pending_animated_status_duration;
+    float m_pending_animated_status_fade_time;
 
     DWORD m_refresh_interval;
     double m_last_time;
@@ -335,8 +345,11 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     // clang-format on
 
     // Text
-    void LaunchStatusText(const wchar_t* text, float duration = 0.9f, float fadeTime = 0.25f);
-    void LaunchSongTitle();
+    void QueueStatusText(const wchar_t* text, float duration = 1.6f, float fadeTime = 0.35f);
+    void QueueSongTitle();
+    void FlushPendingAnimatedText();
+    bool LaunchStatusText(const wchar_t* text, float duration = 0.9f, float fadeTime = 0.25f);
+    bool LaunchSongTitle();
 };
 
 // clang-format off

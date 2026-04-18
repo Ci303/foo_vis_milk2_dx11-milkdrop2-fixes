@@ -1943,13 +1943,6 @@ void milk2_ui_element::OnLButtonDown(UINT nFlags, CPoint point)
     KillTimer(ID_CLICK_TIMER);
     m_pending_single_click = false;
 
-    if (!hadFocus || m_require_explicit_click_for_play_pause)
-    {
-        m_require_explicit_click_for_play_pause = false;
-        LaunchStatusText(L"Click Again for Play/Pause", 1.6f, 0.35f);
-        return;
-    }
-
     m_pending_single_click = true;
     SetTimer(ID_CLICK_TIMER, GetDoubleClickTime(), nullptr);
 }

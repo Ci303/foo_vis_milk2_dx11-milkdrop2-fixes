@@ -60,7 +60,7 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Current public packages are x64 builds intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
 - Import `foo_vis_milk2.fb2k-component` in **File > Preferences > Components > Install...**.
-- Current release packages are named like `foo_vis_milk2-0.2.1.13.fb2k-component`.
+- Current release packages are named like `foo_vis_milk2-0.2.1.15.fb2k-component`.
 - Restart foobar2000 after the component is installed.
 
 ### 2. Add presets and textures

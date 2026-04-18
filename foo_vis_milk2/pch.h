@@ -47,6 +47,8 @@
 #include <array>
 #include <filesystem>
 #include <map>
+#include <mutex>
+#include <string>
 #include <vector>
 
 #ifdef _MSC_VER

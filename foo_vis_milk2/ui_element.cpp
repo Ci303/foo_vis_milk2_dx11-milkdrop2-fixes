@@ -248,9 +248,11 @@ milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_ins
     m_minimized = false;
     m_focus_hotkeys_registered = false;
     m_pending_single_click = false;
-    m_require_explicit_click_for_play_pause = false;
     m_blacklist_load_retries = 0;
     m_last_left_double_click_tick = 0;
+    m_pending_animated_text_kind = pending_animated_text_kind::none;
+    m_pending_animated_status_duration = 1.6f;
+    m_pending_animated_status_fade_time = 0.35f;
 #if defined(TIMER_TP)
     m_tpTimer = nullptr;
 #elif defined(TIMER_32)
@@ -481,9 +483,9 @@ void milk2_ui_element::OnTimer(UINT_PTR nIDEvent)
             const bool was_playing = m_playback_control->is_playing() && !m_playback_control->is_paused();
             m_playback_control->toggle_pause();
             if (was_playing)
-                LaunchStatusText(L"Paused");
+                QueueStatusText(L"Paused");
             else
-                LaunchSongTitle();
+                QueueSongTitle();
         }
         return;
     }
@@ -865,7 +867,6 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
     //menu.AppendMenu(MF_STRING, menu.GetSubMenu(0), TEXT("Winamp"));
     KillTimer(ID_CLICK_TIMER);
     m_pending_single_click = false;
-    m_require_explicit_click_for_play_pause = true;
 
     const std::wstring currentPreset = g_plugin.GetCurrentPresetFilename();
     const UINT presetItemFlags = currentPreset.empty() ? (MF_STRING | MF_GRAYED) : MF_STRING;
@@ -1363,6 +1364,8 @@ void milk2_ui_element::Tick()
 #ifdef TIMER_DX
     m_timer.Tick([&]() { Update(m_timer); });
 #endif
+
+    FlushPendingAnimatedText();
 
     try
     {
@@ -1921,14 +1924,59 @@ void milk2_ui_element::UpdatePlaylist()
     g_plugin.m_playlist_top_idx = -1;
 }
 
-void milk2_ui_element::LaunchSongTitle()
+void milk2_ui_element::QueueStatusText(const wchar_t* text, float duration, float fadeTime)
 {
-    run_plugin_locked("LaunchSongTitle", [] { g_plugin.LaunchSongTitleAnim(true); }, true);
+    if (!text || text[0] == L'\0')
+        return;
+
+    std::lock_guard<std::mutex> lock(m_pending_animated_text_mutex);
+    m_pending_animated_text_kind = pending_animated_text_kind::status;
+    m_pending_animated_status_text = text;
+    m_pending_animated_status_duration = duration;
+    m_pending_animated_status_fade_time = fadeTime;
 }
 
-void milk2_ui_element::LaunchStatusText(const wchar_t* text, float duration, float fadeTime)
+void milk2_ui_element::QueueSongTitle()
 {
-    run_plugin_locked("LaunchStatusText", [&] { g_plugin.LaunchStatusText(text, duration, fadeTime); }, true);
+    std::lock_guard<std::mutex> lock(m_pending_animated_text_mutex);
+    m_pending_animated_text_kind = pending_animated_text_kind::song_title;
+    m_pending_animated_status_text.clear();
+}
+
+void milk2_ui_element::FlushPendingAnimatedText()
+{
+    pending_animated_text_kind kind = pending_animated_text_kind::none;
+    std::wstring statusText;
+    float duration = 1.6f;
+    float fadeTime = 0.35f;
+
+    {
+        std::lock_guard<std::mutex> lock(m_pending_animated_text_mutex);
+        kind = m_pending_animated_text_kind;
+        if (kind == pending_animated_text_kind::none)
+            return;
+
+        statusText = m_pending_animated_status_text;
+        duration = m_pending_animated_status_duration;
+        fadeTime = m_pending_animated_status_fade_time;
+        m_pending_animated_text_kind = pending_animated_text_kind::none;
+        m_pending_animated_status_text.clear();
+    }
+
+    if (kind == pending_animated_text_kind::song_title)
+        g_plugin.LaunchSongTitleAnim(true);
+    else if (!statusText.empty())
+        g_plugin.LaunchStatusText(statusText.c_str(), duration, fadeTime);
+}
+
+bool milk2_ui_element::LaunchSongTitle()
+{
+    return run_plugin_locked("LaunchSongTitle", [] { g_plugin.LaunchSongTitleAnim(true); }, true);
+}
+
+bool milk2_ui_element::LaunchStatusText(const wchar_t* text, float duration, float fadeTime)
+{
+    return run_plugin_locked("LaunchStatusText", [&] { g_plugin.LaunchStatusText(text, duration, fadeTime); }, true);
 }
 
 #ifdef TIMER_TP
