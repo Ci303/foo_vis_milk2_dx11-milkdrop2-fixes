@@ -52,6 +52,7 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Presets, textures, custom messages and custom sprites still use the `milkdrop2` profile directory.
 - Older presets can still fail, crash, hang, or remain black if they depend on unsupported EEL1 syntax, old shader assumptions, missing texture packs, or other compatibility issues. The blacklist is intended to help filter those presets out over time.
 - This is currently tested mainly on foobar2000 v2 x64, although the project can still be built for other targets present in the solution.
+- Max frame rate settings do not work, setting to unlimited produces 65fps; setting to 60 will produce up to 45fps.
 
 ## How To Install and Use It
 
@@ -87,7 +88,6 @@ Example:
 
 - Add the MilkDrop visualisation element to a Default UI layout, or open it from the visualisations area if your layout already includes it.
 - Open **Preferences > Visualisations > MilkDrop** to configure:
-  - max frame rate
   - preset timing
   - hard cuts
   - title display
