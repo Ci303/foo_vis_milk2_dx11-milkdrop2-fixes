@@ -38,6 +38,7 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Improved long song title rendering so oversized titles scale down to fit and fall back to ellipsis clipping instead of disappearing.
 - Added optional mouse wheel volume control and optional single-click play/pause, with a short `Playing` / `Paused` overlay that follows the current animated song-title font settings.
 - Added preset blacklisting, including a `Never Show Again` runtime action, a blacklist manager dialog, and persistent blacklist storage in the `milkdrop2` profile folder.
+- Added preset blacklist import/export so blacklist text files can be merged in or saved out from the blacklist manager.
 - Refined the mouse focus/playback interaction so accidental first-click pauses are less likely when MilkDrop has just regained focus.
 - Hardened album-art sprite replacement, blacklist preset replacement, and play/pause overlay launching around the render lock to reduce crashes during rapid track or preset changes.
 - Fixed the center title animation path used by `Show Track Title`, automatic track changes, and the `Playing` / `Paused` overlays so they do not overwrite each other or render duplicate/tiny fallback text.
@@ -60,7 +61,7 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Current public packages are x64 builds intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
 - Import `foo_vis_milk2.fb2k-component` in **File > Preferences > Components > Install...**.
-- Current release packages are named like `foo_vis_milk2-0.2.1.15.fb2k-component`.
+- Current release packages are named like `foo_vis_milk2-0.2.1.16.fb2k-component`.
 - Restart foobar2000 after the component is installed.
 
 ### 2. Add presets and textures

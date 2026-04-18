@@ -901,6 +901,8 @@
 #define IDC_BLACKLIST_OPEN              1100
 #define IDC_BLACKLIST_LABEL             1101
 #define IDC_BLACKLIST_PRESET_DIR        1103
+#define IDC_BLACKLIST_IMPORT            1104
+#define IDC_BLACKLIST_EXPORT            1105
 #define ID_SHOWHELP                     40007
 #define ID_SHOWPLAYLIST                 40008
 #define ID_QUIT                         40009

@@ -837,6 +837,98 @@ void PresetBlacklistDlg::OnOpenPresetDirectory(UINT, int, CWindow)
     ShellExecute(*this, L"open", g_plugin.GetPresetDir(), nullptr, g_plugin.GetPresetDir(), SW_SHOWNORMAL);
 }
 
+void PresetBlacklistDlg::OnImport(UINT, int, CWindow)
+{
+    wchar_t selectedPath[MAX_PATH] = {0};
+    OPENFILENAME ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = *this;
+    ofn.lpstrFilter = L"Text Files (*.txt)\0*.txt\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFile = selectedPath;
+    ofn.nMaxFile = static_cast<DWORD>(std::size(selectedPath));
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+    ofn.lpstrDefExt = L"txt";
+
+    if (!GetOpenFileName(&ofn))
+        return;
+
+    FILE* file = nullptr;
+    errno_t err = _wfopen_s(&file, selectedPath, L"rt, ccs=UTF-8");
+    if (err != 0 || !file)
+    {
+        MessageBox(L"Could not open the selected blacklist file.", L"Import Blacklist", MB_ICONERROR);
+        return;
+    }
+
+    std::vector<std::wstring> merged = g_plugin.GetPresetBlacklist();
+    size_t imported = 0;
+    wchar_t line[1024] = {0};
+    while (fgetws(line, static_cast<int>(std::size(line)), file))
+    {
+        std::wstring entry = CPlugin::NormalizePresetBlacklistEntry(line);
+        if (entry.empty())
+            continue;
+
+        const bool duplicate = std::any_of(merged.begin(), merged.end(), [&entry](const std::wstring& existing) {
+            return _wcsicmp(existing.c_str(), entry.c_str()) == 0;
+        });
+        if (!duplicate)
+        {
+            merged.push_back(entry);
+            imported++;
+        }
+    }
+    fclose(file);
+
+    if (imported == 0)
+    {
+        MessageBox(L"No new preset names were found in the selected file.", L"Import Blacklist", MB_ICONINFORMATION);
+        return;
+    }
+
+    if (!g_plugin.SetPresetBlacklist(merged))
+    {
+        MessageBox(L"Could not save the updated blacklist.", L"Import Blacklist", MB_ICONERROR);
+        return;
+    }
+
+    m_changed = true;
+    RefreshList();
+    UpdateButtons();
+}
+
+void PresetBlacklistDlg::OnExport(UINT, int, CWindow)
+{
+    wchar_t selectedPath[MAX_PATH] = L"preset-blacklist.txt";
+    OPENFILENAME ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = *this;
+    ofn.lpstrFilter = L"Text Files (*.txt)\0*.txt\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFile = selectedPath;
+    ofn.nMaxFile = static_cast<DWORD>(std::size(selectedPath));
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+    ofn.lpstrDefExt = L"txt";
+
+    if (!GetSaveFileName(&ofn))
+        return;
+
+    FILE* file = nullptr;
+    errno_t err = _wfopen_s(&file, selectedPath, L"wt, ccs=UTF-8");
+    if (err != 0 || !file)
+    {
+        MessageBox(L"Could not create the selected blacklist file.", L"Export Blacklist", MB_ICONERROR);
+        return;
+    }
+
+    const auto blacklist = g_plugin.GetPresetBlacklist();
+    for (const auto& entry : blacklist)
+    {
+        if (!entry.empty())
+            fwprintf(file, L"%ls\n", entry.c_str());
+    }
+    fclose(file);
+}
+
 void PresetBlacklistDlg::OnEntryChanged(UINT, int, CWindow)
 {
     UpdateButtons();

@@ -454,6 +454,8 @@ class PresetBlacklistDlg : public CDialogImpl<PresetBlacklistDlg>
         COMMAND_HANDLER_EX(IDC_BLACKLIST_REMOVE, BN_CLICKED, OnRemove)
         COMMAND_HANDLER_EX(IDC_BLACKLIST_OPEN, BN_CLICKED, OnOpenLocation)
         COMMAND_HANDLER_EX(IDC_BLACKLIST_PRESET_DIR, BN_CLICKED, OnOpenPresetDirectory)
+        COMMAND_HANDLER_EX(IDC_BLACKLIST_IMPORT, BN_CLICKED, OnImport)
+        COMMAND_HANDLER_EX(IDC_BLACKLIST_EXPORT, BN_CLICKED, OnExport)
         COMMAND_HANDLER_EX(IDC_BLACKLIST_ENTRY, EN_CHANGE, OnEntryChanged)
         COMMAND_HANDLER_EX(IDC_BLACKLIST_ENTRY, EN_SETFOCUS, OnEntrySetFocus)
         COMMAND_HANDLER_EX(IDC_BLACKLIST_ENTRY, EN_KILLFOCUS, OnEntryKillFocus)
@@ -470,6 +472,8 @@ class PresetBlacklistDlg : public CDialogImpl<PresetBlacklistDlg>
     void OnRemove(UINT, int, CWindow);
     void OnOpenLocation(UINT, int, CWindow);
     void OnOpenPresetDirectory(UINT, int, CWindow);
+    void OnImport(UINT, int, CWindow);
+    void OnExport(UINT, int, CWindow);
     void OnEntryChanged(UINT, int, CWindow);
     void OnEntrySetFocus(UINT, int, CWindow);
     void OnEntryKillFocus(UINT, int, CWindow);

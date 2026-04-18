@@ -2,6 +2,14 @@
 
 ## Release History
 
+### 0.2.1.16 - 2026-04-19
+
+Preset blacklist import/export update for the foobar2000 x64 component.
+
+- Added `Import...` to the preset blacklist manager so a text file of preset filenames can be merged into the current blacklist.
+- Added `Export...` to save the current preset blacklist to a user-selected text file.
+- Kept imported entries normalized and de-duplicated so repeated filenames are ignored.
+
 ### 0.2.1.15 - 2026-04-19
 
 Play/pause overlay reliability update for the foobar2000 x64 component.
