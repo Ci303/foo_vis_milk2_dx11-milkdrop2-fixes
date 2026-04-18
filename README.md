@@ -41,7 +41,7 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Added preset blacklist import/export so blacklist text files can be merged in or saved out from the blacklist manager.
 - Refined the mouse focus/playback interaction so accidental first-click pauses are less likely when MilkDrop has just regained focus.
 - Hardened album-art sprite replacement, blacklist preset replacement, and play/pause overlay launching around the render lock to reduce crashes during rapid track or preset changes.
-- Fixed the center title animation path used by `Show Track Title`, automatic track changes, and the `Playing` / `Paused` overlays so they do not overwrite each other or render duplicate/tiny fallback text.
+- Fixed the center title animation path used by `Show Track Title`, automatic track changes, and the `Track Title` / `Paused` overlays so they do not overwrite each other or render duplicate/tiny fallback text.
 - Changed the `F3` track-time overlay to show minutes and seconds without fractional milliseconds.
 - Added crash diagnostics and minidump logging under `<foobar2000 profile folder>\milkdrop2\crashlogs` to help investigate intermittent runtime crashes.
 
