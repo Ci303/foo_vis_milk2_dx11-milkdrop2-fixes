@@ -123,7 +123,6 @@ The full shortcut list is also shown in the built-in help overlay.
 
 - Mouse wheel can adjust foobar2000 volume when **Enable mouse wheel volume control** is turned on in MilkDrop preferences.
 - Single left click can toggle play/pause when **Enable single-click play/pause** is turned on.
-- To avoid accidental pauses, the first click after focus is regained or after the context menu closes only arms MilkDrop and shows `Click Again for Play/Pause`.
 - Double click still toggles fullscreen.
 - When single-click play/pause is enabled, MilkDrop shows a short `Paused` overlay using the current animated song-title font settings.
 - The play/pause overlay uses the same center animated text path as track-title animations and temporarily prevents the automatic track title from overwriting it.
