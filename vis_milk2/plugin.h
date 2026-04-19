@@ -331,6 +331,7 @@ class CPlugin : public CPluginShell
     //int m_cRightEye3DColor[3];
     bool m_bEnableRating;
     bool m_bSongTitleAnims;
+    bool m_bSongTitleOutline;
     float m_fSongTitleAnimDuration;
     float m_fTimeBetweenRandomSongTitles;
     float m_fTimeBetweenRandomCustomMsgs;

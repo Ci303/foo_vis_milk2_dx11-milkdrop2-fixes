@@ -205,25 +205,11 @@ bool CPlugin::RenderStringToTitleTexture()
     }
     lpDevice->SetRenderTarget(m_lpDDSTitle, &pDSView);
 
-    // Clear the texture to black.
+    // Clear the title texture without depending on shader/blend state left by a preset.
     {
-        lpDevice->SetVertexShader(NULL, NULL);
-        //lpDevice->SetFVF(WFVERTEX_FORMAT);
         lpDevice->SetTexture(0, NULL);
-
-        lpDevice->SetBlendState(false);
-
-        // Set up a quad.
-        MDVERTEX verts[4]{};
-        for (int i = 0; i < 4; i++)
-        {
-            verts[i].x = (i % 2 == 0) ? -1.0f : 1.0f;
-            verts[i].y = (i / 2 == 0) ? -1.0f : 1.0f;
-            verts[i].z = 0.0f;
-            verts[i].a = 1.0f; verts[i].r = 0.0f; verts[i].g = 0.0f; verts[i].b = 0.0f;
-        }
-
-        lpDevice->DrawPrimitive(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP, 2, verts, sizeof(MDVERTEX));
+        const float clearColor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        lpDevice->ClearRenderTarget(m_lpDDSTitle, clearColor);
     }
 
     // 1. Clip title if too many characters.
@@ -4328,7 +4314,9 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
 
     lpDevice->SetTexture(0, m_lpDDSTitle);
     lpDevice->SetVertexShader(NULL, NULL);
-    //lpDevice->SetShader(0);
+    lpDevice->SetPixelShader(NULL, NULL);
+    lpDevice->SetShader(0);
+    lpDevice->SetSamplerState(0, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_CLAMP);
     //lpDevice->SetFVF(SPRITEVERTEX_FORMAT);
 
     lpDevice->SetBlendState(true, D3D11_BLEND_ONE, D3D11_BLEND_ONE);
@@ -4499,8 +4487,32 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
         //v3[i].y /= ASPECT_Y;
         v3[i].y *= m_fInvAspectY;
 
-    for (int it = 0; it < 2; it++)
+    MDVERTEX baseVertices[128]{};
+    for (i = 0; i < 128; i++)
+        baseVertices[i] = v3[i];
+
+    constexpr float outlinePixels = 2.0f;
+    constexpr std::pair<float, float> outlineOffsets[] = {
+        {-outlinePixels, -outlinePixels},
+        {0.0f, -outlinePixels},
+        {outlinePixels, -outlinePixels},
+        {-outlinePixels, 0.0f},
+        {outlinePixels, 0.0f},
+        {-outlinePixels, outlinePixels},
+        {0.0f, outlinePixels},
+        {outlinePixels, outlinePixels},
+    };
+
+    const bool useTitleOutline = m_supertext.bIsSongTitle && IsFontOutlined(SONGTITLE_FONT);
+    const int shadowPasses = useTitleOutline ? static_cast<int>(std::size(outlineOffsets)) : 1;
+
+    for (int it = 0; it < shadowPasses + 1; it++)
     {
+        const bool isTextPass = (it == shadowPasses);
+
+        for (i = 0; i < 128; i++)
+            v3[i] = baseVertices[i];
+
         // Colors.
         {
             float t;
@@ -4510,7 +4522,7 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
             else
                 t = CosineInterp(std::min(1.0f, (fProgress / m_supertext.fFadeTime)));
 
-            if (it == 0)
+            if (!isTextPass)
                 v3[0].r = v3[0].g = v3[0].b = v3[0].a = t;
             else
             {
@@ -4524,18 +4536,25 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
                 COPY_COLOR(v3[i], v3[0]);
         }
 
-        // Nudge down and right for shadow, up and left for solid text.
-        float offset_x = 0, offset_y = 0;
-        switch (it)
+        float offset_x = 0.0f;
+        float offset_y = 0.0f;
+        if (!isTextPass)
         {
-            case 0:
+            if (useTitleOutline)
+            {
+                offset_x = outlineOffsets[it].first / static_cast<float>(m_nTitleTexSizeX);
+                offset_y = outlineOffsets[it].second / static_cast<float>(m_nTitleTexSizeY);
+            }
+            else
+            {
                 offset_x = 2.0f / static_cast<float>(m_nTitleTexSizeX);
                 offset_y = 2.0f / static_cast<float>(m_nTitleTexSizeY);
-                break;
-            case 1:
-                offset_x = -4.0f / static_cast<float>(m_nTitleTexSizeX);
-                offset_y = -4.0f / static_cast<float>(m_nTitleTexSizeY);
-                break;
+            }
+        }
+        else if (!useTitleOutline)
+        {
+            offset_x = -2.0f / static_cast<float>(m_nTitleTexSizeX);
+            offset_y = -2.0f / static_cast<float>(m_nTitleTexSizeY);
         }
 
         for (i = 0; i < 128; i++)
@@ -4544,7 +4563,7 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
             v3[i].y += offset_y;
         }
 
-        if (it == 0)
+        if (!isTextPass)
         {
             lpDevice->SetBlendState(true, D3D11_BLEND_ZERO, D3D11_BLEND_INV_SRC_COLOR);
         }

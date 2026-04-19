@@ -509,6 +509,9 @@ void CPlugin::MilkDropPreInitialize()
     //m_nFpsLimit = -1;
     m_bEnableRating = true;
     m_bSongTitleAnims = true;
+    m_bSongTitleOutline = true;
+    m_fontOutlineMask = 1u << SONGTITLE_FONT;
+    SetFontOutlineMask(m_fontOutlineMask);
     m_fSongTitleAnimDuration = 1.7f;
     m_fTimeBetweenRandomSongTitles = -1.0f;
     m_fTimeBetweenRandomCustomMsgs = -1.0f;
@@ -695,6 +698,13 @@ void CPlugin::MilkDropReadConfig()
     m_bShowPressF1ForHelp = GetPrivateProfileBool(L"settings", L"bShowPressF1ForHelp", m_bShowPressF1ForHelp, pIni);
     //m_bShowMenuToolTips = GetPrivateProfileBool(L"settings", L"bShowMenuToolTips", m_bShowMenuToolTips, pIni);
     m_bSongTitleAnims = GetPrivateProfileBool(L"settings", L"bSongTitleAnims", m_bSongTitleAnims, pIni);
+    m_bSongTitleOutline = GetPrivateProfileBool(L"settings", L"bSongTitleOutline", m_bSongTitleOutline, pIni);
+    m_fontOutlineMask = static_cast<uint32_t>(GetPrivateProfileInt(L"settings", L"nFontOutlineMask", m_fontOutlineMask, pIni));
+    if (m_bSongTitleOutline)
+        m_fontOutlineMask |= 1u << SONGTITLE_FONT;
+    else
+        m_fontOutlineMask &= ~(1u << SONGTITLE_FONT);
+    SetFontOutlineMask(m_fontOutlineMask);
 
     m_bShowFPS = GetPrivateProfileBool(L"settings", L"bShowFPS", m_bShowFPS, pIni);
     m_bShowRating = GetPrivateProfileBool(L"settings", L"bShowRating", m_bShowRating, pIni);
@@ -806,6 +816,8 @@ void CPlugin::MilkDropWriteConfig()
     wchar_t szSectionName[] = L"settings";
 
     WritePrivateProfileInt(m_bSongTitleAnims, L"bSongTitleAnims", pIni, L"settings");
+    WritePrivateProfileInt(m_bSongTitleOutline, L"bSongTitleOutline", pIni, L"settings");
+    WritePrivateProfileInt(m_fontOutlineMask, L"nFontOutlineMask", pIni, L"settings");
     WritePrivateProfileInt(m_bHardCutsDisabled, L"bHardCutsDisabled", pIni, L"settings");
     WritePrivateProfileInt(m_bEnableRating, L"bEnableRating", pIni, L"settings");
     WritePrivateProfileInt(g_bDebugOutput, L"bDebugOutput", pIni, L"settings");
@@ -879,6 +891,9 @@ bool CPlugin::PanelSettings(plugin_config* settings)
     //m_bShowPressF1ForHelp = settings->m_bShowPressF1ForHelp;
     //m_bShowMenuToolTips = settings->m_bShowMenuToolTips;
     m_bSongTitleAnims = settings->m_bSongTitleAnims;
+    m_bSongTitleOutline = settings->m_bSongTitleOutline;
+    m_fontOutlineMask = settings->m_fontOutlineMask;
+    SetFontOutlineMask(m_fontOutlineMask);
 
     m_bShowFPS = settings->m_bShowFPS;
     m_bShowRating = settings->m_bShowRating;

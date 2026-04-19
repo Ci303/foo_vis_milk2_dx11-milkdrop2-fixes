@@ -54,7 +54,8 @@ TextStyle::TextStyle(std::wstring fontName,
     m_textAlignment(textAlignment),
     m_paragraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR),
     m_wordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP),
-    m_trimmingGranularity(trimmingGranularity)
+    m_trimmingGranularity(trimmingGranularity),
+    m_hasOutline(false)
 {
 }
 
@@ -101,6 +102,11 @@ void TextStyle::SetTextAlignment(DWRITE_TEXT_ALIGNMENT textAlignment)
         m_textAlignment = textAlignment;
         m_textFormat = nullptr;
     }
+}
+
+void TextStyle::SetTextOutline(bool hasOutline)
+{
+    m_hasOutline = hasOutline;
 }
 
 IDWriteTextFormat* TextStyle::GetTextFormat(IDWriteFactory* dwriteFactory)
@@ -285,7 +291,23 @@ void TextElement::Render(ID2D1RenderTarget* d2dRenderTarget, IDWriteFactory* dwr
         d2dRenderTarget->FillRectangle(m_boxRect, m_boxColorBrush.Get()); // draw a filled rectangle
     }
 
-    if (m_hasShadow)
+    if (m_textStyle->HasTextOutline())
+    {
+        constexpr D2D1_POINT_2F outlineOffsets[] = {
+            {-2.0f, -2.0f},
+            {0.0f, -2.0f},
+            {2.0f, -2.0f},
+            {-2.0f, 0.0f},
+            {2.0f, 0.0f},
+            {-2.0f, 2.0f},
+            {0.0f, 2.0f},
+            {2.0f, 2.0f},
+        };
+        m_shadowColorBrush->SetOpacity(m_textColorBrush->GetOpacity());
+        for (const auto& offset : outlineOffsets)
+            d2dRenderTarget->DrawTextLayout(Point2F(origin.x + offset.x, origin.y + offset.y), m_textLayout.Get(), m_shadowColorBrush.Get(), D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
+    }
+    else if (m_hasShadow)
     {
         m_shadowColorBrush->SetOpacity(m_textColorBrush->GetOpacity() * 0.5f);
         d2dRenderTarget->DrawTextLayout(Point2F(origin.x + 1.0f, origin.y + 1.0f), m_textLayout.Get(), m_shadowColorBrush.Get(), D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
@@ -313,7 +335,23 @@ void TextElement::Render(ID2D1DeviceContext* d2dContext, IDWriteFactory* dwriteF
         d2dContext->FillRectangle(m_boxRect, m_boxColorBrush.Get()); // draw a filled rectangle
     }
 
-    if (m_hasShadow)
+    if (m_textStyle->HasTextOutline())
+    {
+        constexpr D2D1_POINT_2F outlineOffsets[] = {
+            {-2.0f, -2.0f},
+            {0.0f, -2.0f},
+            {2.0f, -2.0f},
+            {-2.0f, 0.0f},
+            {2.0f, 0.0f},
+            {-2.0f, 2.0f},
+            {0.0f, 2.0f},
+            {2.0f, 2.0f},
+        };
+        m_shadowColorBrush->SetOpacity(m_textColorBrush->GetOpacity());
+        for (const auto& offset : outlineOffsets)
+            d2dContext->DrawTextLayout(Point2F(origin.x + offset.x, origin.y + offset.y), m_textLayout.Get(), m_shadowColorBrush.Get(), D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
+    }
+    else if (m_hasShadow)
     {
         m_shadowColorBrush->SetOpacity(m_textColorBrush->GetOpacity() * 0.5f);
         d2dContext->DrawTextLayout(Point2F(origin.x + 1.0f, origin.y + 1.0f), m_textLayout.Get(), m_shadowColorBrush.Get(), D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);

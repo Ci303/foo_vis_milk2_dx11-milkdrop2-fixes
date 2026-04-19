@@ -903,6 +903,17 @@
 #define IDC_BLACKLIST_PRESET_DIR        1103
 #define IDC_BLACKLIST_IMPORT            1104
 #define IDC_BLACKLIST_EXPORT            1105
+#define IDC_FONTOUTLINE1                1106
+#define IDC_FONTOUTLINE2                1107
+#define IDC_FONTOUTLINE3                1108
+#define IDC_FONTOUTLINE4                1109
+#define IDC_FONTOUTLINE5                1110
+#define IDC_FONTOUTLINE6                1111
+#define IDC_FONTOUTLINE7                1112
+#define IDC_FONTOUTLINE8                1113
+#define IDC_FONTOUTLINE9                1114
+#define IDC_FONTOUTLINE_CAPTION         1115
+#define IDC_FONTOUTLINE_TEXT            1116
 #define ID_SHOWHELP                     40007
 #define ID_SHOWPLAYLIST                 40008
 #define ID_QUIT                         40009
@@ -915,7 +926,7 @@
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        104
 #define _APS_NEXT_COMMAND_VALUE         40011
-#define _APS_NEXT_CONTROL_VALUE         1104
+#define _APS_NEXT_CONTROL_VALUE         1117
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

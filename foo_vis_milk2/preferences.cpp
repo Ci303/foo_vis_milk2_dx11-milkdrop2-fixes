@@ -28,14 +28,15 @@ struct font_dialog_row_t
     int bold;
     int italics;
     int aa;
+    int outline;
 };
 
 constexpr font_dialog_row_t g_font_dialog_rows[MAX_EXTRA_FONTS] = {
-    {IDC_FONT_NAME_5, IDC_FONT5, IDC_FONTSIZE5, IDC_FONTBOLD5, IDC_FONTITAL5, IDC_FONTAA5},
-    {IDC_FONT_NAME_6, IDC_FONT6, IDC_FONTSIZE6, IDC_FONTBOLD6, IDC_FONTITAL6, IDC_FONTAA6},
-    {IDC_FONT_NAME_7, IDC_FONT7, IDC_FONTSIZE7, IDC_FONTBOLD7, IDC_FONTITAL7, IDC_FONTAA7},
-    {IDC_FONT_NAME_8, IDC_FONT8, IDC_FONTSIZE8, IDC_FONTBOLD8, IDC_FONTITAL8, IDC_FONTAA8},
-    {IDC_FONT_NAME_9, IDC_FONT9, IDC_FONTSIZE9, IDC_FONTBOLD9, IDC_FONTITAL9, IDC_FONTAA9},
+    {IDC_FONT_NAME_5, IDC_FONT5, IDC_FONTSIZE5, IDC_FONTBOLD5, IDC_FONTITAL5, IDC_FONTAA5, IDC_FONTOUTLINE5},
+    {IDC_FONT_NAME_6, IDC_FONT6, IDC_FONTSIZE6, IDC_FONTBOLD6, IDC_FONTITAL6, IDC_FONTAA6, IDC_FONTOUTLINE6},
+    {IDC_FONT_NAME_7, IDC_FONT7, IDC_FONTSIZE7, IDC_FONTBOLD7, IDC_FONTITAL7, IDC_FONTAA7, IDC_FONTOUTLINE7},
+    {IDC_FONT_NAME_8, IDC_FONT8, IDC_FONTSIZE8, IDC_FONTBOLD8, IDC_FONTITAL8, IDC_FONTAA8, IDC_FONTOUTLINE8},
+    {IDC_FONT_NAME_9, IDC_FONT9, IDC_FONTSIZE9, IDC_FONTBOLD9, IDC_FONTITAL9, IDC_FONTAA9, IDC_FONTOUTLINE9},
 };
 
 constexpr int g_font_combo_ids[] = {
@@ -93,6 +94,8 @@ static cfg_bool cfg_bShowPressF1ForHelp(guid_cfg_bShowPressF1ForHelp, default_bS
 static cfg_bool cfg_bSkipCompShader(guid_cfg_bSkipCompShader, default_bSkipCompShader);
 static cfg_bool cfg_allow_page_tearing_fs(guid_cfg_allow_page_tearing_fs, default_allow_page_tearing_fs);
 static cfg_bool cfg_bSongTitleAnims(guid_cfg_bSongTitleAnims, default_bSongTitleAnims);
+static cfg_bool cfg_bSongTitleOutline(guid_cfg_bSongTitleOutline, default_bSongTitleOutline);
+static cfg_int cfg_nFontOutlineMask(guid_cfg_nFontOutlineMask, static_cast<int64_t>(default_nFontOutlineMask));
 static cfg_bool cfg_bAutoGamma(guid_cfg_bAutoGamma, default_bAutoGamma);
 static cfg_bool cfg_bHardCutsDisabled(guid_cfg_bHardCutsDisabled, default_bHardCutsDisabled);
 static cfg_bool cfg_bShowFPS(guid_cfg_bShowFPS, default_bShowFPS);
@@ -143,6 +146,29 @@ static advconfig_checkbox_factory cfg_bDebugOutput("Debug output", "milk2.bDebug
 static advconfig_string_factory cfg_szPresetDir("Preset directory", "milk2.szPresetDir", guid_cfg_szPresetDir, guid_advconfig_branch, order_szPresetDir, "", advconfig_entry_string::flag_is_folder_path);
 // clang-format on
 
+uint32_t font_outline_bit(const int fontIndex)
+{
+    return (fontIndex >= 0 && fontIndex < NUM_BASIC_FONTS + NUM_EXTRA_FONTS) ? (1u << fontIndex) : 0u;
+}
+
+uint32_t normalize_font_outline_mask(uint32_t mask)
+{
+    const uint32_t validMask = (1u << (NUM_BASIC_FONTS + NUM_EXTRA_FONTS)) - 1u;
+    return mask & validMask;
+}
+
+uint32_t get_font_outline_mask()
+{
+    return normalize_font_outline_mask(static_cast<uint32_t>(static_cast<int64_t>(cfg_nFontOutlineMask)));
+}
+
+void set_font_outline_mask(uint32_t mask)
+{
+    mask = normalize_font_outline_mask(mask);
+    cfg_nFontOutlineMask = static_cast<int64_t>(mask);
+    cfg_bSongTitleOutline = (mask & font_outline_bit(SONGTITLE_FONT)) != 0;
+}
+
 font_info_store_t load_font_info_store()
 {
     return cfg_stFontInfo.get();
@@ -189,6 +215,7 @@ void hide_font_dialog_row(HWND dialog, const font_dialog_row_t& row)
     ::ShowWindow(::GetDlgItem(dialog, row.bold), SW_HIDE);
     ::ShowWindow(::GetDlgItem(dialog, row.italics), SW_HIDE);
     ::ShowWindow(::GetDlgItem(dialog, row.aa), SW_HIDE);
+    ::ShowWindow(::GetDlgItem(dialog, row.outline), SW_HIDE);
 }
 
 void layout_font_dialog(HWND dialog)
@@ -219,6 +246,7 @@ void layout_font_dialog(HWND dialog)
     const int verticalOffset = hiddenRows * rowPitch;
     ::SetWindowPos(dialog, NULL, 0, 0, dialogRect.right - dialogRect.left, dialogRect.bottom - dialogRect.top - verticalOffset, SWP_NOMOVE | SWP_NOZORDER);
     offset_dialog_control(dialog, IDC_FONT_TEXT, 0, -verticalOffset);
+    offset_dialog_control(dialog, IDC_FONTOUTLINE_TEXT, 0, -verticalOffset);
     offset_dialog_control(dialog, IDOK, 0, -verticalOffset);
     offset_dialog_control(dialog, IDCANCEL, 0, -verticalOffset);
 }
@@ -712,7 +740,13 @@ void milk2_preferences_page::OnButtonPushed(UINT uNotifyCode, int nID, CWindow w
         case ID_FONTS:
             {
                 FontDlg dlg; INT_PTR ret = dlg.DoModal(get_wnd(), reinterpret_cast<LPARAM>(this));
-                if (ret == IDOK/* && HasChanged()*/) {}
+                if (ret == IDOK)
+                {
+                    const uint32_t outlineMask = get_font_outline_mask();
+                    g_plugin.SetFontOutlineMask(outlineMask);
+                    g_plugin.m_bSongTitleOutline = (outlineMask & font_outline_bit(SONGTITLE_FONT)) != 0;
+                    OnChanged();
+                }
             }
             break;
         case ID_BLACKLIST:
@@ -1536,8 +1570,8 @@ static int CALLBACK EnumFontsProc(
     return 1;
 }
 
-#define InitFont(n, m) InitFontI(&fonts[n - 1], IDC_FONT##n, IDC_FONTSIZE##n, IDC_FONTBOLD##n, IDC_FONTITAL##n, IDC_FONTAA##n, hdlg, IDC_FONT_NAME_##n, m)
-void milk2_preferences_page::InitFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2, DWORD bold_id, DWORD ital_id, DWORD aa_id, HWND hdlg, DWORD ctrl4, wchar_t* szFontName)
+#define InitFont(n, m) InitFontI(&fonts[n - 1], IDC_FONT##n, IDC_FONTSIZE##n, IDC_FONTBOLD##n, IDC_FONTITAL##n, IDC_FONTAA##n, IDC_FONTOUTLINE##n, hdlg, IDC_FONT_NAME_##n, m, n - 1)
+void milk2_preferences_page::InitFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2, DWORD bold_id, DWORD ital_id, DWORD aa_id, DWORD outline_id, HWND hdlg, DWORD ctrl4, wchar_t* szFontName, int fontIndex)
 {
     HWND namebox = ctrl4 ? ::GetDlgItem(hdlg, ctrl4) : NULL;
     HWND fontbox = ::GetDlgItem(hdlg, ctrl1);
@@ -1547,6 +1581,7 @@ void milk2_preferences_page::InitFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2
     ::ShowWindow(::GetDlgItem(hdlg, bold_id), SW_NORMAL);
     ::ShowWindow(::GetDlgItem(hdlg, ital_id), SW_NORMAL);
     ::ShowWindow(::GetDlgItem(hdlg, aa_id), SW_NORMAL);
+    ::ShowWindow(::GetDlgItem(hdlg, outline_id), SW_NORMAL);
     if (namebox && szFontName && szFontName[0])
     {
         ::ShowWindow(namebox, SW_NORMAL);
@@ -1579,10 +1614,11 @@ void milk2_preferences_page::InitFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2
     ::CheckDlgButton(hdlg, bold_id, fi->bBold);
     ::CheckDlgButton(hdlg, ital_id, fi->bItalic);
     ::CheckDlgButton(hdlg, aa_id, fi->bAntiAliased);
+    ::CheckDlgButton(hdlg, outline_id, (get_font_outline_mask() & font_outline_bit(fontIndex)) != 0);
 }
 
-#define SaveFont(n) SaveFontI(&fonts[n - 1], IDC_FONT##n, IDC_FONTSIZE##n, IDC_FONTBOLD##n, IDC_FONTITAL##n, IDC_FONTAA##n, hdlg)
-void milk2_preferences_page::SaveFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2, DWORD bold_id, DWORD ital_id, DWORD aa_id, HWND hdlg)
+#define SaveFont(n) SaveFontI(&fonts[n - 1], IDC_FONT##n, IDC_FONTSIZE##n, IDC_FONTBOLD##n, IDC_FONTITAL##n, IDC_FONTAA##n, IDC_FONTOUTLINE##n, hdlg, n - 1, outlineMask)
+void milk2_preferences_page::SaveFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2, DWORD bold_id, DWORD ital_id, DWORD aa_id, DWORD outline_id, HWND hdlg, int fontIndex, uint32_t& outlineMask)
 {
     HWND fontbox = ::GetDlgItem(hdlg, ctrl1);
     HWND sizebox = ::GetDlgItem(hdlg, ctrl2);
@@ -1603,6 +1639,10 @@ void milk2_preferences_page::SaveFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2
     fi->bBold = static_cast<bool>(::IsDlgButtonChecked(hdlg, bold_id)); //DlgItemIsChecked(hdlg, bold_id);
     fi->bItalic = static_cast<bool>(::IsDlgButtonChecked(hdlg, ital_id)); //DlgItemIsChecked(hdlg, ital_id);
     fi->bAntiAliased = static_cast<bool>(::IsDlgButtonChecked(hdlg, aa_id)); //DlgItemIsChecked(hdlg, aa_id);
+    if (::IsDlgButtonChecked(hdlg, outline_id))
+        outlineMask |= font_outline_bit(fontIndex);
+    else
+        outlineMask &= ~font_outline_bit(fontIndex);
 }
 
 void milk2_preferences_page::ScootControl(HWND hwnd, int ctrl_id, int dx, int dy)
@@ -1699,6 +1739,7 @@ BOOL milk2_preferences_page::PluginShellFontDialogProc(HWND hdlg, UINT msg, WPAR
                     case IDOK:
                         {
                             td_fontinfo fonts[NUM_BASIC_FONTS + NUM_EXTRA_FONTS]{};
+                            uint32_t outlineMask = get_font_outline_mask();
                             SaveFont(1);
                             SaveFont(2);
                             SaveFont(3);
@@ -1718,6 +1759,7 @@ BOOL milk2_preferences_page::PluginShellFontDialogProc(HWND hdlg, UINT msg, WPAR
 #if (NUM_EXTRA_FONTS >= 5)
                             SaveFont(9);
 #endif
+                            set_font_outline_mask(outlineMask);
                             store_font_info(fonts);
                         }
                         ::EndDialog(hdlg, id);
@@ -1780,6 +1822,8 @@ void milk2_config::reset()
     //settings.m_bShowPressF1ForHelp;
     //settings.m_bShowMenuToolTips;
     settings.m_bSongTitleAnims = cfg_bSongTitleAnims;
+    settings.m_fontOutlineMask = get_font_outline_mask();
+    settings.m_bSongTitleOutline = (settings.m_fontOutlineMask & font_outline_bit(SONGTITLE_FONT)) != 0;
 
     settings.m_bShowFPS = default_bShowFPS;
     settings.m_bShowRating = default_bShowRating;
@@ -2040,6 +2084,7 @@ void milk2_config::build(ui_element_config_builder& builder, const bool full_res
         cfg_bShowPressF1ForHelp = settings.m_show_press_f1_msg;
         //builder << settings.m_bShowMenuToolTips;
         cfg_bSongTitleAnims = settings.m_bSongTitleAnims;
+        set_font_outline_mask(settings.m_fontOutlineMask);
         cfg_bSkipCompShader = settings.m_bSkipCompShader;
 
         cfg_bShowFPS = default_bShowFPS;

@@ -175,6 +175,23 @@ int CPluginShell::GetFontHeight(eFontIndex idx) const
 
     return 0;
 }
+void CPluginShell::SetFontOutlineMask(uint32_t fontOutlineMask)
+{
+    m_fontOutlineMask = fontOutlineMask;
+    for (int i = 0; i < NUM_BASIC_FONTS + NUM_EXTRA_FONTS; i++)
+    {
+        if (m_dwrite_font[i])
+            m_dwrite_font[i]->SetTextOutline((m_fontOutlineMask & (1u << i)) != 0);
+    }
+}
+bool CPluginShell::IsFontOutlined(eFontIndex idx) const
+{
+    const int index = static_cast<int>(idx);
+    return index >= static_cast<int>(eFontIndex::SIMPLE_FONT) &&
+           index <= static_cast<int>(eFontIndex::EXTRA_5) &&
+           index < NUM_BASIC_FONTS + NUM_EXTRA_FONTS &&
+           (m_fontOutlineMask & (1u << index)) != 0;
+}
 int CPluginShell::GetBitDepth() const { return m_lpDX->GetBitDepth(); };
 D3D11Shim* CPluginShell::GetDevice() const { return m_lpDX->m_lpDevice.get(); };
 
@@ -201,6 +218,7 @@ int CPluginShell::AllocateFonts()
                 m_fontinfo[i].bItalic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
                 DWRITE_TEXT_ALIGNMENT_LEADING
             );
+        m_dwrite_font[i]->SetTextOutline((m_fontOutlineMask & (1u << i)) != 0);
     }
 
 #if 0

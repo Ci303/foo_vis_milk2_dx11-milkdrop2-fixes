@@ -2,6 +2,15 @@
 
 ## Release History
 
+### 0.2.1.17 - 2026-04-19
+
+Animated text outline and font settings update for the foobar2000 x64 component.
+
+- Added an `OL` option to the font settings dialog so each text type can enable or disable the black outline independently.
+- Kept animated song title outline behaviour tied to the `Animated Song` font row.
+- Improved the font settings dialog layout for the new outline column and explanatory help text.
+- Made animated title texture clearing and draw state more explicit so some presets do not show the title as a white rectangle.
+
 ### 0.2.1.16 - 2026-04-19
 
 Preset blacklist import/export update for the foobar2000 x64 component.

@@ -114,6 +114,8 @@ typedef struct
     //bool m_bShowPressF1ForHelp;
     //bool m_bShowMenuToolTips;
     bool m_bSongTitleAnims;
+    bool m_bSongTitleOutline;
+    uint32_t m_fontOutlineMask;
 
     bool m_bShowFPS;
     bool m_bShowRating;

@@ -87,6 +87,12 @@ static constexpr GUID guid_cfg_nMaxPSVersion = {
 static constexpr GUID guid_cfg_bSongTitleAnims = {
     0x7ff565aa, 0x8402, 0x4ae0, {0x99, 0xc7, 0x11, 0x18, 0x44, 0x1d, 0xee, 0xc2}
 }; // {7FF565AA-8402-4AE0-99C7-1118441DEEC2}
+static constexpr GUID guid_cfg_bSongTitleOutline = {
+    0x1b2f3ff5, 0x50e0, 0x469a, {0xbf, 0x6d, 0xb6, 0x28, 0x5f, 0x99, 0x84, 0x6f}
+}; // {1B2F3FF5-50E0-469A-BF6D-B6285F99846F}
+static constexpr GUID guid_cfg_nFontOutlineMask = {
+    0xc578d3f8, 0x2e74, 0x49d8, {0xb4, 0xb5, 0x50, 0x16, 0x4b, 0x3e, 0xa9, 0x18}
+}; // {C578D3F8-2E74-49D8-B4B5-50164B3EA918}
 static constexpr GUID guid_cfg_fSongTitleAnimDuration = {
     0xe539e22c, 0x2c41, 0x4238, {0xae, 0xa9, 0x52, 0x25, 0xda, 0x29, 0xba, 0xcf}
 }; // {E539E22C-2C41-4238-AEA9-5225DA29BACF}
@@ -212,6 +218,8 @@ static constexpr bool default_bDebugOutput = false;
 static constexpr bool default_bShowPressF1ForHelp = true;
 //static constexpr bool default_bShowMenuToolTips;
 static constexpr bool default_bSongTitleAnims = true;
+static constexpr bool default_bSongTitleOutline = true;
+static constexpr uint32_t default_nFontOutlineMask = default_bSongTitleOutline ? (1u << SONGTITLE_FONT) : 0u;
 static constexpr bool default_bShowFPS = false;
 static constexpr bool default_bShowRating = false;
 static constexpr bool default_bShowPresetInfo = false;
@@ -381,8 +389,8 @@ class milk2_preferences_page : public preferences_page_instance, public CDialogI
     void UpdateMaxFps(int screenmode) const;
     void SaveMaxFps(int screenmode) const;
     void OpenToEdit(LPWSTR szDefault, LPCWSTR szFilename);
-    void InitFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2, DWORD bold_id, DWORD ital_id, DWORD aa_id, HWND hdlg, DWORD ctrl4, wchar_t* szFontName);
-    void SaveFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2, DWORD bold_id, DWORD ital_id, DWORD aa_id, HWND hdlg);
+    void InitFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2, DWORD bold_id, DWORD ital_id, DWORD aa_id, DWORD outline_id, HWND hdlg, DWORD ctrl4, wchar_t* szFontName, int fontIndex);
+    void SaveFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2, DWORD bold_id, DWORD ital_id, DWORD aa_id, DWORD outline_id, HWND hdlg, int fontIndex, uint32_t& outlineMask);
 
     const preferences_page_callback::ptr m_callback;
     bool m_resetpage;

@@ -64,10 +64,12 @@ class TextStyle
     void SetFontWeight(DWRITE_FONT_WEIGHT fontWeight);
     void SetFontStyle(DWRITE_FONT_STYLE fontStyle);
     void SetTextAlignment(DWRITE_TEXT_ALIGNMENT textAlignment);
+    void SetTextOutline(bool hasOutline);
 
     IDWriteTextFormat* GetTextFormat(IDWriteFactory* dwriteFactory);
 
     bool HasTextFormatChanged() const { return (m_textFormat == nullptr); }
+    bool HasTextOutline() const { return m_hasOutline; }
 
   private:
     std::wstring m_fontName;
@@ -78,6 +80,7 @@ class TextStyle
     DWRITE_PARAGRAPH_ALIGNMENT m_paragraphAlignment;
     DWRITE_WORD_WRAPPING m_wordWrapping;
     DWRITE_TRIMMING_GRANULARITY m_trimmingGranularity;
+    bool m_hasOutline;
 
     Microsoft::WRL::ComPtr<IDWriteTextFormat> m_textFormat;
 };

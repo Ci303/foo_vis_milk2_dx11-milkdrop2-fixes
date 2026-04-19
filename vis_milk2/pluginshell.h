@@ -105,6 +105,9 @@ class CPluginShell : public DX::IDeviceNotify
     // ------------------------------------------------------------
     TextStyle* GetFont(eFontIndex idx); // returns a D3DX font handle for drawing text; see "shell_defines.h" for the definition of the 'eFontIndex' enum.
     int GetFontHeight(eFontIndex idx) const; // returns the height of the font, in pixels; see "shell_defines.h" for the definition of the 'eFontIndex' enum.
+    void SetFontOutlineMask(uint32_t fontOutlineMask);
+    uint32_t GetFontOutlineMask() const { return m_fontOutlineMask; }
+    bool IsFontOutlined(eFontIndex idx) const;
     static inline FLOAT GetAlpha(DWORD color) { return static_cast<FLOAT>(((color & 0xFF000000) >> 24) / 255.0f); }
     CTextManager m_text;
 
@@ -167,6 +170,7 @@ class CPluginShell : public DX::IDeviceNotify
     int m_back_buffer_count;         // 2
     int m_min_feature_level;
     td_fontinfo m_fontinfo[NUM_BASIC_FONTS + NUM_EXTRA_FONTS];
+    uint32_t m_fontOutlineMask = 1u << SONGTITLE_FONT;
     DXGI_SAMPLE_DESC m_multisample_fs;
 
   private:
