@@ -1893,6 +1893,10 @@ void milk2_ui_element::OnKillFocus(CWindow wndFocus)
 
     MILK2_CONSOLE_LOG("OnKillFocus ", GetWnd())
     UnregisterFocusHotkeys();
+    KillTimer(ID_CLICK_TIMER);
+    m_pending_single_click = false;
+    m_click_pause_confirmation_required = true;
+    m_click_pause_confirmation_pending = false;
     //g_plugin.m_bMilkdropScrollLockState = GetKeyState(VK_SCROLL) & 1;
     //SetScrollLock(g_plugin.m_bOrigScrollLockState);
 }
@@ -1933,7 +1937,8 @@ void milk2_ui_element::OnLButtonDown(UINT nFlags, CPoint point)
     UNREFERENCED_PARAMETER(nFlags);
     UNREFERENCED_PARAMETER(point);
 
-    const bool hadFocus = (::GetFocus() == get_wnd());
+    const HWND focus = ::GetFocus();
+    const bool hadFocus = (focus == get_wnd()) || ::IsChild(get_wnd(), focus);
     if (!hadFocus)
         ::SetFocus(get_wnd());
 
@@ -1942,6 +1947,21 @@ void milk2_ui_element::OnLButtonDown(UINT nFlags, CPoint point)
 
     KillTimer(ID_CLICK_TIMER);
     m_pending_single_click = false;
+
+    const DWORD now = GetTickCount();
+    const bool confirmationWasPending = m_click_pause_confirmation_pending;
+    if (ConsumeClickPauseConfirmation(now))
+    {
+        m_pending_single_click = true;
+        SetTimer(ID_CLICK_TIMER, GetDoubleClickTime(), nullptr);
+        return;
+    }
+
+    if (!hadFocus || m_click_pause_confirmation_required || confirmationWasPending)
+    {
+        QueueClickPauseConfirmation(now);
+        return;
+    }
 
     m_pending_single_click = true;
     SetTimer(ID_CLICK_TIMER, GetDoubleClickTime(), nullptr);

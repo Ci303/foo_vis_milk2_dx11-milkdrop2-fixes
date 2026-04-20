@@ -92,8 +92,8 @@
 #include <vis_milk2/dxcontext.h>
 #include <vis_milk2/utility.h>
 
-#define TIMER_TP // Thread pool timer
-//#define TIMER_32 // Win32 timer
+//#define TIMER_TP // Thread pool timer
+#define TIMER_32 // Win32 timer
 //#define TIMER_DX // DirectX step timer
 #if !defined(TIMER_TP) && !defined(TIMER_32) && !defined(TIMER_DX)
 #error Missing timer selection.

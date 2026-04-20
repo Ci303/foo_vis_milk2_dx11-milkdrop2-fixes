@@ -160,8 +160,11 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     bool m_minimized;
     bool m_focus_hotkeys_registered;
     bool m_pending_single_click;
+    bool m_click_pause_confirmation_required;
+    bool m_click_pause_confirmation_pending;
     UINT m_blacklist_load_retries;
     DWORD m_last_left_double_click_tick;
+    DWORD m_click_pause_confirmation_tick;
     enum class pending_animated_text_kind
     {
         none,
@@ -187,6 +190,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
 #endif
     static constexpr UINT_PTR ID_CLICK_TIMER = 2;
     static constexpr UINT_PTR ID_BLACKLIST_TIMER = 3;
+    static constexpr DWORD ID_CLICK_CONFIRM_TIMEOUT_MS = 3500;
     static constexpr UINT ID_BLACKLIST_RETRY_DELAY_MS = 50;
     static constexpr UINT ID_BLACKLIST_MAX_RETRIES = 20;
 
@@ -345,6 +349,9 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     // clang-format on
 
     // Text
+    bool ConsumeClickPauseConfirmation(DWORD now) noexcept;
+    void QueueClickPauseConfirmation(DWORD now);
+    void TogglePlaybackFromClick();
     void QueueStatusText(const wchar_t* text, float duration = 1.6f, float fadeTime = 0.35f);
     void QueueSongTitle();
     void FlushPendingAnimatedText();

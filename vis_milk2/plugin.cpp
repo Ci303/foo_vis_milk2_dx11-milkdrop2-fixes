@@ -653,6 +653,8 @@ void CPlugin::MilkDropPreInitialize()
     //texmgr m_texmgr; // for user sprites
 
     m_supertext.bRedrawSuperText = false;
+    m_supertext.nFontSizeUsed = 0;
+    m_supertext.nTextWidthUsed = 0;
     m_supertext.fStartTime = -1.0f;
 
     // Other initialization.
@@ -3298,31 +3300,31 @@ void CPlugin::CleanUpMilkDropDX11(int /* final_cleanup */)
 
     if (m_verts != NULL)
     {
-        delete m_verts;
+        delete[] m_verts;
         m_verts = NULL;
     }
 
     if (m_verts_temp != NULL)
     {
-        delete m_verts_temp;
+        delete[] m_verts_temp;
         m_verts_temp = NULL;
     }
 
     if (m_vertinfo != NULL)
     {
-        delete m_vertinfo;
+        delete[] m_vertinfo;
         m_vertinfo = NULL;
     }
 
     if (m_indices_list != NULL)
     {
-        delete m_indices_list;
+        delete[] m_indices_list;
         m_indices_list = NULL;
     }
 
     if (m_indices_strip != NULL)
     {
-        delete m_indices_strip;
+        delete[] m_indices_strip;
         m_indices_strip = NULL;
     }
 
@@ -7162,6 +7164,8 @@ void CPlugin::LaunchCustomMessage(int nMsgNum)
 
     m_supertext.bRedrawSuperText = true;
     m_supertext.bIsSongTitle = false;
+    m_supertext.nFontSizeUsed = 0;
+    m_supertext.nTextWidthUsed = 0;
     wcscpy_s(m_supertext.szText, m_customMessage[nMsgNum].szText);
 
     // Regular properties.
@@ -7229,6 +7233,7 @@ void CPlugin::LaunchSongTitleAnim(bool refreshCurrentTitle)
     m_supertext.bRedrawSuperText = true;
     m_supertext.bIsSongTitle = true;
     m_supertext.nFontSizeUsed = 0;
+    m_supertext.nTextWidthUsed = 0;
     wcscpy_s(m_supertext.nFontFace, m_fontinfo[SONGTITLE_FONT].szFace);
     m_supertext.fFontSize = static_cast<float>(m_fontinfo[SONGTITLE_FONT].nSize);
     m_supertext.bBold = m_fontinfo[SONGTITLE_FONT].bBold;
@@ -7252,6 +7257,7 @@ void CPlugin::LaunchStatusText(const wchar_t* text, float duration, float fadeTi
     m_supertext.bRedrawSuperText = true;
     m_supertext.bIsSongTitle = true;
     m_supertext.nFontSizeUsed = 0;
+    m_supertext.nTextWidthUsed = 0;
     wcscpy_s(m_supertext.szText, text);
     wcscpy_s(m_supertext.nFontFace, m_fontinfo[SONGTITLE_FONT].szFace);
     m_supertext.fFontSize = static_cast<float>(m_fontinfo[SONGTITLE_FONT].nSize);

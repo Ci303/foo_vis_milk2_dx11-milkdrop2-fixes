@@ -59,8 +59,12 @@ void log_runtime_exception(const char* where) noexcept
 template <typename Callback>
 bool run_plugin_locked(const char* where, Callback&& callback, bool wait_for_lock = false) noexcept
 {
+#ifdef TIMER_TP
     constexpr DWORD max_blocking_lock_wait_ms = 250;
     bool lock_held = false;
+#else
+    UNREFERENCED_PARAMETER(wait_for_lock);
+#endif
     bool callback_attempted = false;
     try
     {
@@ -248,18 +252,23 @@ milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_ins
     m_minimized = false;
     m_focus_hotkeys_registered = false;
     m_pending_single_click = false;
+    m_click_pause_confirmation_required = false;
+    m_click_pause_confirmation_pending = false;
     m_blacklist_load_retries = 0;
     m_last_left_double_click_tick = 0;
+    m_click_pause_confirmation_tick = 0;
     m_pending_animated_text_kind = pending_animated_text_kind::none;
     m_pending_animated_status_duration = 1.6f;
     m_pending_animated_status_fade_time = 0.35f;
+    m_last_time = 0.0;
 #if defined(TIMER_TP)
     m_tpTimer = nullptr;
 #elif defined(TIMER_32)
-    m_last_time = 0.0;
+    m_last_refresh = 0;
 #endif
     m_refresh_interval = get_refresh_interval_ms(default_max_fps_fs);
     m_art_data = std::make_unique<artFetchData>();
+    m_art_data->size = sizeof(artFetchData);
 
     m_pwd = L".\\";
     set_configuration(config);
@@ -402,6 +411,12 @@ int milk2_ui_element::OnCreate(LPCREATESTRUCT cs)
     {
         StartTimer();
     }
+#elif defined(TIMER_32)
+    else
+    {
+        m_last_refresh = GetTickCount64();
+        SetTimer(ID_REFRESH_TIMER, m_refresh_interval, nullptr);
+    }
 #endif
     MILK2_CONSOLE_LOG("OnCreate1 ", r.right, ", ", r.left, ", ", r.top, ", ", r.bottom, ", ", GetWnd())
 
@@ -422,6 +437,8 @@ void milk2_ui_element::OnDestroy()
     StopTimer();
     EnterCriticalSection(&s_cs);
     bool delete_cs = false;
+#elif defined(TIMER_32)
+    KillTimer(ID_REFRESH_TIMER);
 #elif defined(TIMER_DX)
     message_loop_v2::get()->remove_idle_handler(this);
 #endif
@@ -443,9 +460,7 @@ void milk2_ui_element::OnDestroy()
         s_in_toggle = false;
         s_was_topmost = false;
         s_milk2 = false;
-#if defined(TIMER_32)
-        KillTimer(ID_REFRESH_TIMER);
-#elif defined(TIMER_TP)
+#ifdef TIMER_TP
         delete_cs = true;
 #endif
         wcscpy_s(s_config.settings.m_szPresetDir, g_plugin.GetPresetDir()); // save last "Load Preset" menu directory
@@ -480,12 +495,7 @@ void milk2_ui_element::OnTimer(UINT_PTR nIDEvent)
             if (m_last_left_double_click_tick != 0 && now - m_last_left_double_click_tick <= GetDoubleClickTime())
                 return;
 
-            const bool was_playing = m_playback_control->is_playing() && !m_playback_control->is_paused();
-            m_playback_control->toggle_pause();
-            if (was_playing)
-                QueueStatusText(L"Paused");
-            else
-                QueueSongTitle();
+            TogglePlaybackFromClick();
         }
         return;
     }
@@ -507,8 +517,11 @@ void milk2_ui_element::OnTimer(UINT_PTR nIDEvent)
 
     MILK2_CONSOLE_LOG_LIMIT("OnTimer ", GetWnd())
 #ifdef TIMER_32
-    KillTimer(ID_REFRESH_TIMER);
-    InvalidateRect(NULL, TRUE);
+    if (nIDEvent == ID_REFRESH_TIMER)
+    {
+        KillTimer(ID_REFRESH_TIMER);
+        InvalidateRect(NULL, TRUE);
+    }
 #endif
 }
 
@@ -599,7 +612,9 @@ void milk2_ui_element::OnMove(CPoint ptPos)
     MILK2_CONSOLE_LOG("OnMove ", GetWnd())
     if (m_milk2)
     {
+#ifdef TIMER_TP
         bool lock_held = false;
+#endif
         try
         {
 #ifdef TIMER_TP
@@ -653,7 +668,9 @@ void milk2_ui_element::OnSize(UINT nType, CSize size)
             return;
         normalize_render_size(width, height);
         MILK2_CONSOLE_LOG("OnSize1 ", nType, ", ", size.cx, ", ", size.cy, ", ", GetWnd())
+#ifdef TIMER_TP
         bool lock_held = false;
+#endif
         try
         {
 #ifdef TIMER_TP
@@ -690,7 +707,9 @@ void milk2_ui_element::OnExitSizeMove()
     m_in_sizemove = false;
     if (m_milk2)
     {
+#ifdef TIMER_TP
         bool lock_held = false;
+#endif
         RECT rc{};
         WIN32_OP_D(GetClientRect(&rc));
         int width = rc.right - rc.left;
@@ -834,7 +853,14 @@ void milk2_ui_element::OnLButtonDblClk(UINT nFlags, CPoint point)
 
     KillTimer(ID_CLICK_TIMER);
     m_pending_single_click = false;
-    m_last_left_double_click_tick = GetTickCount();
+    const DWORD now = GetTickCount();
+    if (ConsumeClickPauseConfirmation(now))
+    {
+        TogglePlaybackFromClick();
+        return;
+    }
+
+    m_last_left_double_click_tick = now;
 
     MILK2_CONSOLE_LOG("OnLButtonDblClk ", GetWnd())
     ToggleFullScreen();
@@ -867,6 +893,8 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
     //menu.AppendMenu(MF_STRING, menu.GetSubMenu(0), TEXT("Winamp"));
     KillTimer(ID_CLICK_TIMER);
     m_pending_single_click = false;
+    m_click_pause_confirmation_required = true;
+    m_click_pause_confirmation_pending = false;
 
     const std::wstring currentPreset = g_plugin.GetCurrentPresetFilename();
     const UINT presetItemFlags = currentPreset.empty() ? (MF_STRING | MF_GRAYED) : MF_STRING;
@@ -1152,11 +1180,14 @@ LRESULT milk2_ui_element::OnMilk2Message(UINT uMsg, WPARAM wParam, LPARAM lParam
     else if (lParam == IPC_FETCH_ALBUMART)
     {
         MILK2_CONSOLE_LOG("IPC_FETCH_ALBUMART")
+        m_art_data->size = sizeof(artFetchData);
+        constexpr size_t art_type_capacity = sizeof(m_art_data->type) / sizeof(m_art_data->type[0]);
+        std::fill_n(&m_art_data->type[0], art_type_capacity, L'\0');
         if (m_art_file.empty())
         {
             m_art_data->imgData = m_raster.data();
             m_art_data->imgDataLen = static_cast<int>(m_raster.size());
-            m_art_data->type[0] = L'j'; m_art_data->type[1] = L'p'; m_art_data->type[2] = L'g'; m_art_data->type[3] = L'\0';
+            wcscpy_s(m_art_data->type, L"jpg");
             m_art_data->gracenoteFileId = nullptr;
         }
         else
@@ -1165,8 +1196,8 @@ LRESULT milk2_ui_element::OnMilk2Message(UINT uMsg, WPARAM wParam, LPARAM lParam
             m_art_data->imgDataLen = 0;
             m_art_data->gracenoteFileId = m_art_file.data();
             std::wstring ext = GetExtension(m_art_file);
-            std::copy_n(ext.begin(), ext.size(), &m_art_data->type[0]);
-            std::fill_n(&m_art_data->type[0] + ext.size() + 1, 10 - ext.size(), L'\0');
+            const size_t chars_to_copy = (std::min)(ext.size(), art_type_capacity - 1);
+            std::copy_n(ext.begin(), chars_to_copy, &m_art_data->type[0]);
         }
         s_config.settings.m_artData = m_art_data.get();
 
@@ -1226,7 +1257,9 @@ LRESULT milk2_ui_element::OnConfigurationChange(UINT uMsg, WPARAM wParam, LPARAM
     MILK2_CONSOLE_LOG("OnConfigurationChange ", GetWnd())
     if (uMsg != WM_CONFIG_CHANGE)
         return 1;
+#ifdef TIMER_TP
     bool lock_held = false;
+#endif
     try
     {
         switch (wParam)
@@ -1243,6 +1276,10 @@ LRESULT milk2_ui_element::OnConfigurationChange(UINT uMsg, WPARAM wParam, LPARAM
                     g_plugin.PanelSettings(&s_config.settings);
 #ifdef TIMER_TP
                     StartTimer();
+#elif defined(TIMER_32)
+                    KillTimer(ID_REFRESH_TIMER);
+                    m_last_refresh = GetTickCount64();
+                    SetTimer(ID_REFRESH_TIMER, m_refresh_interval, nullptr);
 #endif
                     if (s_milk2 && m_milk2)
                     {
@@ -1284,7 +1321,9 @@ LRESULT milk2_ui_element::OnConfigurationChange(UINT uMsg, WPARAM wParam, LPARAM
 // Initialize the Direct3D resources required to run.
 bool milk2_ui_element::Initialize(HWND window, int width, int height)
 {
+#ifdef TIMER_TP
     bool lock_held = false;
+#endif
     try
     {
         g_hWindow = get_wnd();
@@ -1936,6 +1975,55 @@ void milk2_ui_element::QueueStatusText(const wchar_t* text, float duration, floa
     m_pending_animated_status_fade_time = fadeTime;
 }
 
+bool milk2_ui_element::ConsumeClickPauseConfirmation(DWORD now) noexcept
+{
+    if (!m_click_pause_confirmation_pending)
+        return false;
+
+    if (now - m_click_pause_confirmation_tick > ID_CLICK_CONFIRM_TIMEOUT_MS)
+    {
+        m_click_pause_confirmation_pending = false;
+        return false;
+    }
+
+    m_click_pause_confirmation_required = false;
+    m_click_pause_confirmation_pending = false;
+    return true;
+}
+
+void milk2_ui_element::QueueClickPauseConfirmation(DWORD now)
+{
+    m_click_pause_confirmation_required = false;
+    m_click_pause_confirmation_pending = true;
+    m_click_pause_confirmation_tick = now;
+
+    if (!m_playback_control->is_playing())
+    {
+        QueueStatusText(L"Click again for play/pause?", 2.4f, 0.35f);
+    }
+    else if (m_playback_control->is_paused())
+    {
+        QueueStatusText(L"Click again to resume?", 2.4f, 0.35f);
+    }
+    else
+    {
+        QueueStatusText(L"Click again to pause?", 2.4f, 0.35f);
+    }
+}
+
+void milk2_ui_element::TogglePlaybackFromClick()
+{
+    m_click_pause_confirmation_required = false;
+    m_click_pause_confirmation_pending = false;
+
+    const bool was_playing = m_playback_control->is_playing() && !m_playback_control->is_paused();
+    m_playback_control->toggle_pause();
+    if (was_playing)
+        QueueStatusText(L"Paused");
+    else
+        QueueSongTitle();
+}
+
 void milk2_ui_element::QueueSongTitle()
 {
     std::lock_guard<std::mutex> lock(m_pending_animated_text_mutex);
@@ -2002,6 +2090,7 @@ void milk2_ui_element::StopTimer() noexcept
     SetThreadpoolTimer(m_tpTimer, NULL, 0, 0);
     WaitForThreadpoolTimerCallbacks(m_tpTimer, TRUE);
     CloseThreadpoolTimer(m_tpTimer);
+    m_tpTimer = nullptr;
 }
 
 // Handles a timer tick.

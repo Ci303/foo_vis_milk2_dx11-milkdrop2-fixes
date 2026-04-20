@@ -39,6 +39,27 @@
 
 static constexpr float VERT_CLIP = 0.75f; //1.0f, 0.45f - warning: top/bottom can get clipped if less than 0.65/0.4!
 
+namespace
+{
+float supertext_target_height_px(int width, int height, float configured_font_size) noexcept
+{
+    const float safe_width = static_cast<float>((std::max)(1, width));
+    const float safe_height = static_cast<float>((std::max)(1, height));
+    const float diagonal_basis = std::sqrt(safe_width * safe_height);
+    const float user_scale = std::clamp(configured_font_size / static_cast<float>(EXTRA_FONT_2_DEFAULT_SIZE), 0.65f, 1.8f);
+    const float base_height = std::clamp(diagonal_basis * 0.055f, 18.0f, 150.0f);
+    const float height_limit = (std::min)(safe_height * 0.16f, 180.0f);
+    return std::clamp(base_height * user_scale, 14.0f, (std::max)(18.0f, height_limit));
+}
+
+float supertext_outline_px(int width, int height, bool outlined) noexcept
+{
+    const float diagonal_basis = std::sqrt(static_cast<float>((std::max)(1, width)) * static_cast<float>((std::max)(1, height)));
+    const float base = diagonal_basis / 900.0f;
+    return std::clamp(base * (outlined ? 1.35f : 1.0f), 1.25f, outlined ? 3.5f : 2.5f);
+}
+}
+
 // This function evaluates whether the floating-point
 // control word is set to single precision/round to nearest/
 // exceptions disabled. If not, the function changes the
@@ -305,6 +326,7 @@ bool CPlugin::RenderStringToTitleTexture()
         {
             // Do actual drawing and set `m_supertext.nFontSizeUsed`; use 'lo' size.
             int h = m_text.DrawD2DText(gdi_font.get(), &m_ddsTitle, szTextToDraw, &temp, /*DT_NOPREFIX |*/ DT_SINGLELINE | DT_CENTER | DT_CALCRECT, textColor, false);
+            const int measured_width = (std::max)(1, static_cast<int>(std::lround(temp.right - temp.left)));
             temp.left = 0.0f;
             temp.right = static_cast<FLOAT>(m_nTitleTexSizeX); // now allow text to go all the way over, since actually drawing!
             temp.top = static_cast<FLOAT>(m_nTitleTexSizeY / 2 - h / 2);
@@ -314,6 +336,7 @@ bool CPlugin::RenderStringToTitleTexture()
             m_ddsTitle.Render(pRenderTarget.Get(), m_lpDX->GetDWriteFactory());
             hr = pRenderTarget->EndDraw();
             m_supertext.nFontSizeUsed = m_text.DrawD2DText(gdi_font.get(), &m_ddsTitle, szTextToDraw, &temp, /*DT_NOPREFIX |*/ DT_SINGLELINE | DT_CENTER, textColor, false);
+            m_supertext.nTextWidthUsed = measured_width;
             m_ddsTitle.ReleaseDeviceDependentResources();
 
             ret = true;
@@ -389,6 +412,7 @@ bool CPlugin::RenderStringToTitleTexture()
         // Measure once at the fitted size; if the title is still too wide even at the
         // minimum allowed font, clip the tail as a last resort instead of rendering nothing.
         int h = 0;
+        int measured_width = 1;
         for (int it = 0; it < 6; it++)
         {
             temp = rect;
@@ -406,6 +430,7 @@ bool CPlugin::RenderStringToTitleTexture()
             h = m_text.DrawD2DText(gdi_font.get(), &m_ddsTitle, str, &temp, DT_SINGLELINE | DT_CALCRECT, textColor, false);
 
             const float width = temp.right - temp.left;
+            measured_width = (std::max)(1, static_cast<int>(std::lround(width)));
             if (width <= rect.right - rect.left)
                 break;
 
@@ -429,6 +454,7 @@ bool CPlugin::RenderStringToTitleTexture()
         m_ddsTitle.Render(pRenderTarget.Get(), m_lpDX->GetDWriteFactory());
         hr = pRenderTarget->EndDraw();
         m_supertext.nFontSizeUsed = m_text.DrawD2DText(gdi_font.get(), &m_ddsTitle, str, &temp, DT_SINGLELINE | DT_CENTER, textColor, false);
+        m_supertext.nTextWidthUsed = measured_width;
         m_ddsTitle.ReleaseDeviceDependentResources();
 
         ret = true;
@@ -4331,13 +4357,34 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
     if (m_supertext.bIsSongTitle)
     {
         // Positioning.
-        float fSizeX = 50.0f / static_cast<float>(m_supertext.nFontSizeUsed) * std::pow(1.5f, m_supertext.fFontSize - 2.0f);
-        float fSizeY = fSizeX * m_nTitleTexSizeY / static_cast<float>(m_nTitleTexSizeX); //* m_nWidth / static_cast<float>(m_nHeight);
+        const float safe_w = static_cast<float>((std::max)(1, w));
+        const float safe_h = static_cast<float>((std::max)(1, h));
+        const float inv_aspect_y = (std::max)(0.001f, m_fInvAspectY);
+        const float text_height_px = static_cast<float>((std::max)(1, m_supertext.nFontSizeUsed));
+        const float text_width_px = static_cast<float>((std::max)(1, m_supertext.nTextWidthUsed));
+        const float max_text_width_px = safe_w * 0.88f;
+        float target_text_height_px = supertext_target_height_px(w, h, m_supertext.fFontSize);
+        target_text_height_px = (std::min)(target_text_height_px, max_text_width_px * text_height_px / text_width_px);
+        target_text_height_px = (std::max)(12.0f, target_text_height_px);
 
-        if (fSizeX > 0.88f)
+        float display_texture_height_px = target_text_height_px * static_cast<float>(m_nTitleTexSizeY) / text_height_px;
+        float fSizeY = display_texture_height_px / (safe_h * inv_aspect_y);
+        float fSizeX = fSizeY * static_cast<float>(m_nTitleTexSizeX) * inv_aspect_y * safe_h /
+                       (static_cast<float>(m_nTitleTexSizeY) * safe_w);
+
+        const float max_width_fraction = 0.92f;
+        const float max_height_fraction = 0.34f;
+        if (fSizeX > max_width_fraction)
         {
-            fSizeY *= 0.88f / fSizeX;
-            fSizeX = 0.88f;
+            const float scale = max_width_fraction / fSizeX;
+            fSizeX *= scale;
+            fSizeY *= scale;
+        }
+        if (fSizeY * inv_aspect_y > max_height_fraction)
+        {
+            const float scale = max_height_fraction / (fSizeY * inv_aspect_y);
+            fSizeX *= scale;
+            fSizeY *= scale;
         }
 
         // FIXME
@@ -4491,8 +4538,9 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
     for (i = 0; i < 128; i++)
         baseVertices[i] = v3[i];
 
-    constexpr float outlinePixels = 2.0f;
-    constexpr std::pair<float, float> outlineOffsets[] = {
+    const bool useTitleOutline = m_supertext.bIsSongTitle && IsFontOutlined(SONGTITLE_FONT);
+    const float outlinePixels = supertext_outline_px(w, h, useTitleOutline);
+    const std::pair<float, float> outlineOffsets[] = {
         {-outlinePixels, -outlinePixels},
         {0.0f, -outlinePixels},
         {outlinePixels, -outlinePixels},
@@ -4502,8 +4550,6 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
         {0.0f, outlinePixels},
         {outlinePixels, outlinePixels},
     };
-
-    const bool useTitleOutline = m_supertext.bIsSongTitle && IsFontOutlined(SONGTITLE_FONT);
     const int shadowPasses = useTitleOutline ? static_cast<int>(std::size(outlineOffsets)) : 1;
 
     for (int it = 0; it < shadowPasses + 1; it++)
@@ -4542,19 +4588,19 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
         {
             if (useTitleOutline)
             {
-                offset_x = outlineOffsets[it].first / static_cast<float>(m_nTitleTexSizeX);
-                offset_y = outlineOffsets[it].second / static_cast<float>(m_nTitleTexSizeY);
+                offset_x = outlineOffsets[it].first * 2.0f / static_cast<float>((std::max)(1, w));
+                offset_y = outlineOffsets[it].second * 2.0f / static_cast<float>((std::max)(1, h));
             }
             else
             {
-                offset_x = 2.0f / static_cast<float>(m_nTitleTexSizeX);
-                offset_y = 2.0f / static_cast<float>(m_nTitleTexSizeY);
+                offset_x = outlinePixels * 2.0f / static_cast<float>((std::max)(1, w));
+                offset_y = outlinePixels * 2.0f / static_cast<float>((std::max)(1, h));
             }
         }
         else if (!useTitleOutline)
         {
-            offset_x = -2.0f / static_cast<float>(m_nTitleTexSizeX);
-            offset_y = -2.0f / static_cast<float>(m_nTitleTexSizeY);
+            offset_x = -outlinePixels * 2.0f / static_cast<float>((std::max)(1, w));
+            offset_y = -outlinePixels * 2.0f / static_cast<float>((std::max)(1, h));
         }
 
         for (i = 0; i < 128; i++)
