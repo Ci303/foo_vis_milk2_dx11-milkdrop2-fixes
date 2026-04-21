@@ -252,6 +252,7 @@ milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_ins
     m_minimized = false;
     m_focus_hotkeys_registered = false;
     m_pending_single_click = false;
+    m_render_due_from_timer = false;
     m_click_pause_confirmation_required = false;
     m_click_pause_confirmation_pending = false;
     m_blacklist_load_retries = 0;
@@ -306,6 +307,7 @@ void milk2_ui_element::set_configuration(ui_element_config::ptr p_data)
     if (s_milk2)
         return;
 
+    s_config.init();
     ui_element_config_parser parser(p_data);
     s_config.parse(parser);
 }
@@ -414,8 +416,7 @@ int milk2_ui_element::OnCreate(LPCREATESTRUCT cs)
 #elif defined(TIMER_32)
     else
     {
-        m_last_refresh = GetTickCount64();
-        SetTimer(ID_REFRESH_TIMER, m_refresh_interval, nullptr);
+        RestartRefreshTimer();
     }
 #endif
     MILK2_CONSOLE_LOG("OnCreate1 ", r.right, ", ", r.left, ", ", r.top, ", ", r.bottom, ", ", GetWnd())
@@ -520,6 +521,7 @@ void milk2_ui_element::OnTimer(UINT_PTR nIDEvent)
     if (nIDEvent == ID_REFRESH_TIMER)
     {
         KillTimer(ID_REFRESH_TIMER);
+        m_render_due_from_timer = true;
         InvalidateRect(NULL, TRUE);
     }
 #endif
@@ -595,7 +597,11 @@ BOOL milk2_ui_element::OnEraseBkgnd(CDCHandle dc)
         }
     }
 #ifdef TIMER_32
-    Tick();
+    if (m_render_due_from_timer)
+    {
+        m_render_due_from_timer = false;
+        Tick();
+    }
 #endif
 #endif
 #if 0
@@ -854,12 +860,8 @@ void milk2_ui_element::OnLButtonDblClk(UINT nFlags, CPoint point)
     KillTimer(ID_CLICK_TIMER);
     m_pending_single_click = false;
     const DWORD now = GetTickCount();
-    if (ConsumeClickPauseConfirmation(now))
-    {
-        TogglePlaybackFromClick();
-        return;
-    }
-
+    m_click_pause_confirmation_required = false;
+    m_click_pause_confirmation_pending = false;
     m_last_left_double_click_tick = now;
 
     MILK2_CONSOLE_LOG("OnLButtonDblClk ", GetWnd())
@@ -1272,14 +1274,12 @@ LRESULT milk2_ui_element::OnConfigurationChange(UINT uMsg, WPARAM wParam, LPARAM
 #endif
                     s_config.reset();
                     m_script.reset();
-                    m_refresh_interval = get_refresh_interval_ms(s_config.settings.m_max_fps_fs);
                     g_plugin.PanelSettings(&s_config.settings);
+                    ApplyFrameRateLimit();
 #ifdef TIMER_TP
                     StartTimer();
 #elif defined(TIMER_32)
-                    KillTimer(ID_REFRESH_TIMER);
-                    m_last_refresh = GetTickCount64();
-                    SetTimer(ID_REFRESH_TIMER, m_refresh_interval, nullptr);
+                    RestartRefreshTimer();
 #endif
                     if (s_milk2 && m_milk2)
                     {
@@ -1342,6 +1342,7 @@ bool milk2_ui_element::Initialize(HWND window, int width, int height)
         }
 
         g_plugin.SetWinampWindow(window);
+        ApplyFrameRateLimit();
 
         if (!s_milk2)
         {
@@ -1582,6 +1583,25 @@ void milk2_ui_element::GetDefaultSize(int& width, int& height) const noexcept
     height = 480;
 }
 
+void milk2_ui_element::ApplyFrameRateLimit() noexcept
+{
+    s_config.refresh_frame_rate();
+#ifdef TIMER_32
+    m_refresh_interval = get_refresh_interval_ms(s_config.settings.m_max_fps_fs);
+#endif
+    g_plugin.SetFoobarFullscreenFrameLimit(s_fullscreen ? s_config.settings.m_max_fps_fs : 0);
+}
+
+#ifdef TIMER_32
+void milk2_ui_element::RestartRefreshTimer() noexcept
+{
+    m_render_due_from_timer = false;
+    KillTimer(ID_REFRESH_TIMER);
+    m_last_refresh = GetTickCount64();
+    SetTimer(ID_REFRESH_TIMER, m_refresh_interval, nullptr);
+}
+#endif
+
 void milk2_ui_element::SetPwd(std::wstring pwd) noexcept
 {
     m_pwd.assign(pwd);
@@ -1623,6 +1643,10 @@ void milk2_ui_element::ToggleFullScreen()
             }
 #endif
             s_fullscreen = !s_fullscreen;
+            ApplyFrameRateLimit();
+#ifdef TIMER_32
+            RestartRefreshTimer();
+#endif
             s_in_toggle = true;
             SetTopMost();
             static_api_ptr_t<ui_element_common_methods_v2>()->toggle_fullscreen(g_get_guid(), core_api::get_main_window());

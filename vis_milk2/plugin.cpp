@@ -872,9 +872,9 @@ bool CPlugin::PanelSettings(plugin_config* settings)
     //m_multisample_w = {settings->m_multisample_w.Count, 0U};
 
     //m_start_fullscreen = settings->m_start_fullscreen;
-    // The foobar2000 component wrapper already paces rendering. Keeping the
-    // legacy shell limiter active here causes the requested cap to be applied
-    // twice, which undershoots badly in the embedded panel.
+    // The foobar2000 component wrapper paces embedded rendering. The wrapper
+    // enables this shell limiter only while its UI element is actually
+    // fullscreen, where external paints can otherwise bypass the timer cadence.
     m_max_fps_fs = 0;
     m_show_press_f1_msg = settings->m_show_press_f1_msg;
     m_allow_page_tearing_fs = settings->m_allow_page_tearing_fs;
@@ -961,6 +961,11 @@ bool CPlugin::PanelSettings(plugin_config* settings)
     memcpy_s(m_fontinfo, sizeof(m_fontinfo), settings->m_fontinfo, sizeof(settings->m_fontinfo));
 
     return true;
+}
+
+void CPlugin::SetFoobarFullscreenFrameLimit(uint32_t max_fps) noexcept
+{
+    m_max_fps_fs = static_cast<int>(max_fps);
 }
 #endif
 

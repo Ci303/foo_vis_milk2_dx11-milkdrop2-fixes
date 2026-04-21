@@ -11,6 +11,8 @@
 #include "config.h"
 #include <vis_milk2/plugin.h>
 
+#include <sdk/configStore.h>
+
 #include <fstream>
 
 extern HWND g_hWindow;
@@ -19,6 +21,41 @@ namespace
 {
 using font_info_store_t = F<NUM_BASIC_FONTS + NUM_EXTRA_FONTS>;
 using font_array_t = td_fontinfo[NUM_BASIC_FONTS + NUM_EXTRA_FONTS];
+
+class config_store_int
+{
+public:
+    config_store_int(const GUID& guid, int64_t initVal) : m_guid(guid), m_initVal(initVal) {}
+
+    int64_t get() const
+    {
+        return fb2k::configStore::get()->getConfigInt(formatName().get_ptr(), m_initVal);
+    }
+
+    void set(int64_t value) const
+    {
+        fb2k::configStore::get()->setConfigInt(formatName().get_ptr(), value);
+    }
+
+    operator int64_t() const
+    {
+        return get();
+    }
+
+    void operator=(int64_t value)
+    {
+        set(value);
+    }
+
+private:
+    pfc::string8 formatName() const
+    {
+        return pfc::format("cfg_var.", pfc::print_guid(m_guid));
+    }
+
+    GUID m_guid;
+    int64_t m_initVal;
+};
 
 struct font_dialog_row_t
 {
@@ -114,7 +151,7 @@ static cfg_bool cfg_bShowAlbum(guid_cfg_bShowAlbum, default_bShowAlbum);
 static cfg_bool cfg_bEnableMouseWheelVolume(guid_cfg_bEnableMouseWheelVolume, default_bEnableMouseWheelVolume);
 static cfg_bool cfg_bEnableMouseClickPlayPause(guid_cfg_bEnableMouseClickPlayPause, default_bEnableMouseClickPlayPause);
 static cfg_bool cfg_bEnableHDR(guid_cfg_bEnableHDR, default_bEnableHDR);
-static cfg_int cfg_max_fps_fs(guid_cfg_max_fps_fs, static_cast<int64_t>(default_max_fps_fs));
+static config_store_int cfg_max_fps_fs(guid_cfg_max_fps_fs, static_cast<int64_t>(default_max_fps_fs));
 static cfg_int cfg_n16BitGamma(guid_cfg_n16BitGamma, static_cast<int64_t>(default_n16BitGamma));
 static cfg_int cfg_nMaxBytes(guid_cfg_nMaxBytes, static_cast<int64_t>(default_nMaxBytes));
 static cfg_int cfg_nMaxImages(guid_cfg_nMaxImages, static_cast<int64_t>(default_nMaxImages));
@@ -1806,7 +1843,7 @@ void milk2_config::reset()
     settings.m_multisample_fs = {1u, 0u};
 
     //settings.m_start_fullscreen;
-    settings.m_max_fps_fs = static_cast<uint32_t>(cfg_max_fps_fs);
+    refresh_frame_rate();
     settings.m_show_press_f1_msg = static_cast<uint32_t>(cfg_bShowPressF1ForHelp);
     settings.m_allow_page_tearing_fs = static_cast<uint32_t>(cfg_allow_page_tearing_fs);
     //settings.m_save_cpu;
@@ -1898,6 +1935,11 @@ void milk2_config::reset()
 
     //--- Fonts
     update_fonts();
+}
+
+void milk2_config::refresh_frame_rate()
+{
+    settings.m_max_fps_fs = static_cast<uint32_t>(cfg_max_fps_fs);
 }
 
 // Initializes all font dialog variables.
@@ -2065,7 +2107,9 @@ void milk2_config::build(ui_element_config_builder& builder, const bool full_res
         //builder << m_multisample_w;
 
         //builder << settings.m_start_fullscreen;
-        cfg_max_fps_fs = settings.m_max_fps_fs;
+        // FPS cap is owned by the cfg store/preferences page. get_configuration()
+        // can be called during layout/fullscreen churn with stale panel state, so
+        // do not write settings.m_max_fps_fs back here.
         //builder << settings.m_show_press_f1_msg;
         cfg_allow_page_tearing_fs = settings.m_allow_page_tearing_fs;
         //builder << settings.m_minimize_winamp;

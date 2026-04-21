@@ -44,6 +44,8 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Fixed the center title animation path used by `Show Track Title`, automatic track changes, and the `Track Title` / `Paused` overlays so they do not overwrite each other or render duplicate/tiny fallback text.
 - Changed the `F3` track-time overlay to show minutes and seconds without fractional milliseconds.
 - Added crash diagnostics and minidump logging under `<foobar2000 profile folder>\milkdrop2\crashlogs` to help investigate intermittent runtime crashes.
+- Fixed FPS cap persistence so a saved capped value such as `60` is not replaced by stale legacy `0`/Unlimited state at runtime.
+- Split embedded and fullscreen frame pacing so embedded rendering uses the foobar2000 UI timer cap while fullscreen also enables MilkDrop's internal fullscreen limiter.
 
 ## Current Behaviour and Limits
 
@@ -52,7 +54,8 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Presets, textures, custom messages and custom sprites still use the `milkdrop2` profile directory.
 - Older presets can still fail, crash, hang, or remain black if they depend on unsupported EEL1 syntax, old shader assumptions, missing texture packs, or other compatibility issues. The blacklist is intended to help filter those presets out over time.
 - This is currently tested mainly on foobar2000 v2 x64, although the project can still be built for other targets present in the solution.
-- Max frame rate settings do not work, setting to unlimited produces 65fps; setting to 60 will produce up to 45fps.
+- FPS cap state is split by display mode. In embedded panels, the configured max frame rate drives the foobar2000 UI timer. In fullscreen, the same configured cap is also applied to MilkDrop's internal fullscreen limiter so fullscreen no longer runs uncapped when a fixed value such as `60` is selected.
+- `Unlimited` stores as `0` internally and intentionally disables both the embedded timer cap and the fullscreen MilkDrop limiter. Use `Unlimited` for high-refresh fullscreen testing when you want MilkDrop to run above 60 FPS.
 
 ## How To Install and Use It
 
@@ -62,7 +65,7 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Current public packages are x64 builds intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
 - Import `foo_vis_milk2.fb2k-component` in **File > Preferences > Components > Install...**.
-- Current release packages are named like `foo_vis_milk2-0.2.1.17.fb2k-component`.
+- Current release packages are named like `foo_vis_milk2-0.2.1.19.fb2k-component`.
 - Restart foobar2000 after the component is installed.
 
 ### 2. Add presets and textures
@@ -96,7 +99,12 @@ Example:
   - optional mouse wheel volume and single-click play/pause controls
   - preset blacklist editing
 
-For refresh rates above 60 FPS, use `Unlimited`. The other higher frame-rate settings are not currently working correctly in this fork and fixing them is outside the current scope of this project.
+For refresh rates above 60 FPS, use `Unlimited`. Fixed-rate values are useful when you want the visualizer paced near a specific cap such as 60 FPS; `Unlimited` is intended for high-refresh displays and uncapped fullscreen testing.
+
+FPS behaviour is mode-aware:
+
+- Embedded panel: fixed FPS values pace the foobar2000 UI timer; `Unlimited` stores as `0` and lets the panel run as fast as the host paint/present path allows.
+- Fullscreen: fixed FPS values also enable MilkDrop's internal fullscreen limiter; `Unlimited` stores as `0` and disables that limiter for high-refresh displays.
 
 ### 4. Optional custom files
 
@@ -151,6 +159,7 @@ The current public release line includes the following user-visible behaviour ch
 - `F3` time display without fractional milliseconds.
 - Crash diagnostics/minidump logging for intermittent runtime crash investigation.
 - Preferences dialog layout fixes for the newer settings.
+- FPS cap persistence and mode-aware embedded/fullscreen pacing.
 - Known-bad preset filtering remains ongoing; some presets may still crash, hang, or render as a black screen until they are identified and blacklisted.
 
 ## Releases
@@ -238,7 +247,7 @@ Additional repository notes:
 - Typical foobar2000 x64 deployment path: `<foobar2000 profile folder>\user-components-x64\foo_vis_milk2\`
 - Runtime presets, textures and INI files are read from: `<foobar2000 profile folder>\milkdrop2\`
 - This repository is for the stable DirectX 11 foobar2000 component. Experimental DX12 work is intentionally out of scope here.
-- Higher-than-60 FPS fixed-rate options in the preferences UI are not currently considered supported here; `Unlimited` is the intended setting for high-refresh displays.
+- Embedded and fullscreen FPS caps now use separate pacing paths. Capped values pace embedded rendering through the foobar2000 UI timer and fullscreen rendering through MilkDrop's fullscreen limiter; `Unlimited` stores as `0` and is the intended setting for high-refresh uncapped fullscreen use.
 
 ### Build Notes
 

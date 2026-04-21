@@ -160,6 +160,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     bool m_minimized;
     bool m_focus_hotkeys_registered;
     bool m_pending_single_click;
+    bool m_render_due_from_timer;
     bool m_click_pause_confirmation_required;
     bool m_click_pause_confirmation_pending;
     UINT m_blacklist_load_retries;
@@ -257,6 +258,10 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
 
     // Properties
     void GetDefaultSize(int& width, int& height) const noexcept;
+    void ApplyFrameRateLimit() noexcept;
+#ifdef TIMER_32
+    void RestartRefreshTimer() noexcept;
+#endif
     void SetPwd(std::wstring pwd) noexcept;
     void UpdateChannelMode();
     void ToggleFullScreen();

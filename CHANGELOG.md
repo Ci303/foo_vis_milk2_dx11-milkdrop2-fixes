@@ -2,6 +2,25 @@
 
 ## Release History
 
+### 0.2.1.19 - 2026-04-21
+
+FPS preference and fullscreen pacing update for the foobar2000 x64 component.
+
+- Fixed the max frame rate preference being restored as `0`/Unlimited at runtime even when the foobar2000 SQLite config still stored a capped value such as `60`.
+- Moved the FPS cap preference read path off the SDK `cfg_int` wrapper for this setting so stale legacy component configuration cannot override the modern config-store value in memory.
+- Kept embedded panel rendering paced by the foobar2000 UI timer using the configured cap.
+- Applied MilkDrop's internal fullscreen limiter only while the UI element is actually fullscreen, so fullscreen honours capped values without double-limiting embedded rendering.
+- Removed the temporary FPS diagnostic console logging used to verify the embedded/fullscreen cap behaviour.
+
+### 0.2.1.18 - 2026-04-20
+
+Timer, fullscreen click, and animated text scaling update for the foobar2000 x64 component.
+
+- Moved the default render timer to the Win32/UI-thread timer path to avoid worker-thread rendering into foobar, HWND, and Direct3D paths.
+- Fixed album-art metadata buffer handling and render buffer array cleanup.
+- Added click-to-pause confirmation after context-menu use or when the visualizer was not already focused.
+- Improved animated title and status text scaling and outline offsets across panel and fullscreen resolutions.
+
 ### 0.2.1.17 - 2026-04-19
 
 Animated text outline and font settings update for the foobar2000 x64 component.

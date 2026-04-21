@@ -506,6 +506,7 @@ class milk2_config
     uint32_t get_sentinel() const;
     void init();
     void reset();
+    void refresh_frame_rate();
     void parse(ui_element_config_parser& parser);
     void build(ui_element_config_builder& builder, const bool full_restore) const;
     void persist_runtime_settings() const;

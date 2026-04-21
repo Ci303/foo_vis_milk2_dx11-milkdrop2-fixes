@@ -581,6 +581,7 @@ class CPlugin : public CPluginShell
     void WriteRealtimeConfig(); // called on Finish()
 #else
     bool PanelSettings(plugin_config* settings);
+    void SetFoobarFullscreenFrameLimit(uint32_t max_fps) noexcept;
 #endif
     void LoadRandomPreset(float fBlendTime);
     void LoadPreset(const wchar_t* szPresetFilename, float fBlendTime);
