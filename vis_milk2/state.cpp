@@ -1083,31 +1083,30 @@ static void ReadCode(FILE* f, char* pStr, const char* prefix)
 
     int line = 1;
     size_t char_pos = 0;
-    bool bDone = false;
-
-    while (!bDone)
+    while (true)
     {
         sprintf_s(szLineName, "%s%d", prefix, line);
 
         GetFastString(szLineName, "~!@#$", szLine, MAX_BIGSTRING_LEN, f); // FIXME
         len = strlen(szLine);
 
-        if ((strcmp(szLine, "~!@#$") == 0) ||              // if the key was missing,
-            (len >= MAX_BIGSTRING_LEN - 1 - char_pos - 1)) // or if out of space
+        if (strcmp(szLine, "~!@#$") == 0) // if the key was missing
+            break;
+
+        if (len >= MAX_BIGSTRING_LEN - 1 - char_pos - 1) // or if out of space
+            break;
+
         {
-            bDone = true;
-        }
-        else
-        {
+            size_t chars_written = len;
             sprintf_s(&pStr[char_pos], MAX_BIGSTRING_LEN - char_pos, "%s%c", (szLine[0] == '`') ? &szLine[1] : szLine, LINEFEED_CONTROL_CHAR);
             if (szLine[0] == '`')
-                len--;
+                chars_written--;
+            char_pos += chars_written + 1;
         }
 
-        char_pos += len + 1;
         line++;
     }
-    pStr[char_pos++] = '\0'; // null-terminate
+    pStr[char_pos] = '\0'; // null-terminate
 
     /*
     // Read in and compile arbitrary expressions.

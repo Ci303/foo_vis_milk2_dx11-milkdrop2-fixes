@@ -182,6 +182,7 @@ bool CConstantTable::SetMatrix(LPCSTR handle, XMMATRIX* matrix)
 
 bool CConstantTable::ApplyChanges(ID3D11DeviceContext* pContext)
 {
+    bool applied = false;
     for (size_t i = 0; i < m_ConstantBuffers.size(); i++)
     {
         if (!m_ConstantBuffers[i].HasChanges())
@@ -198,12 +199,13 @@ bool CConstantTable::ApplyChanges(ID3D11DeviceContext* pContext)
             {
                 memcpy(static_cast<unsigned char*>(res.pData) + var->Description.StartOffset, var->Value, var->Description.Size);
                 var->IsDirty = false;
+                applied = true;
             }
         }
 
         pContext->Unmap(m_ConstantBuffers[i].Data, 0);
     }
-    return false;
+    return applied;
 }
 
 ShaderVariable* CConstantTable::GetVariableByIndex(size_t index)

@@ -868,18 +868,28 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                     TogglePlaylist();
                 return;
             case VK_UP:
+                if (g_plugin.m_playlist_pos < 0)
+                    g_plugin.m_playlist_pos = 0;
                 if (GetKeyState(VK_SHIFT) & mask)
-                    g_plugin.m_playlist_pos -= 10 * static_cast<LRESULT>(nRepCnt);
+                    g_plugin.m_playlist_pos -= std::min(g_plugin.m_playlist_pos, 10 * static_cast<LRESULT>(nRepCnt));
                 else
-                    g_plugin.m_playlist_pos -= nRepCnt;
+                    g_plugin.m_playlist_pos -= std::min(g_plugin.m_playlist_pos, static_cast<LRESULT>(nRepCnt));
                 SetSelectionSingle(static_cast<size_t>(g_plugin.m_playlist_pos));
                 return;
             case VK_DOWN:
-                if (GetKeyState(VK_SHIFT) & mask)
-                    g_plugin.m_playlist_pos += 10 * static_cast<LRESULT>(nRepCnt);
-                else
-                    g_plugin.m_playlist_pos += nRepCnt;
-                SetSelectionSingle(static_cast<size_t>(g_plugin.m_playlist_pos));
+                {
+                    const size_t count = api->activeplaylist_get_item_count();
+                    if (count == 0)
+                        return;
+                    const LRESULT max_pos = static_cast<LRESULT>(count - 1);
+                    if (g_plugin.m_playlist_pos < 0)
+                        g_plugin.m_playlist_pos = 0;
+                    if (GetKeyState(VK_SHIFT) & mask)
+                        g_plugin.m_playlist_pos = std::min(max_pos, g_plugin.m_playlist_pos + 10 * static_cast<LRESULT>(nRepCnt));
+                    else
+                        g_plugin.m_playlist_pos = std::min(max_pos, g_plugin.m_playlist_pos + static_cast<LRESULT>(nRepCnt));
+                    SetSelectionSingle(static_cast<size_t>(g_plugin.m_playlist_pos));
+                }
                 return;
             case VK_HOME:
                 g_plugin.m_playlist_pos = 0;
@@ -888,6 +898,8 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
             case VK_END:
                 {
                     const size_t count = api->activeplaylist_get_item_count();
+                    if (count == 0)
+                        return;
                     g_plugin.m_playlist_pos = count - 1;
                     SetSelectionSingle(static_cast<size_t>(g_plugin.m_playlist_pos));
                 }

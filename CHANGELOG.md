@@ -2,6 +2,17 @@
 
 ## Release History
 
+### 0.2.1.20 - 2026-04-22
+
+Crash-stability and shader-state correctness update for the foobar2000 x64 component.
+
+- Fixed unsafe shader state moves that copied or zeroed non-trivial shader parameter objects, which could corrupt the shader parameter registry or leak/release COM objects incorrectly during preset changes and fallback shader use.
+- Fixed shader recompilation cleanup so failed pixel/vertex shader creation releases bytecode and constant-table state instead of leaving stale objects behind.
+- Fixed preset and sprite code-line loading so oversized or missing lines stop cleanly without advancing past the destination buffer.
+- Fixed shader constant values for render target height, mip level height, and audio average channels.
+- Fixed playlist keyboard navigation and selection refresh paths so empty playlists and out-of-range indices are ignored instead of wrapping to invalid positions.
+- Fixed constant-table dirty tracking so `ApplyChanges()` reports whether a GPU constant buffer update actually occurred.
+
 ### 0.2.1.19 - 2026-04-21
 
 FPS preference and fullscreen pacing update for the foobar2000 x64 component.

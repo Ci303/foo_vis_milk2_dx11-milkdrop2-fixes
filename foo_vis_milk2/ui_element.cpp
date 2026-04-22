@@ -1977,12 +1977,20 @@ void milk2_ui_element::UpdatePlaylist()
 {
     auto api = playlist_manager::get();
     size_t total = api->activeplaylist_get_item_count();
+    bool found = false;
     for (size_t i = 0; i < total; ++i)
     {
         if (api->activeplaylist_is_item_selected(i))
         {
             g_plugin.m_playlist_pos = i;
+            found = true;
+            break;
         }
+    }
+    if (!found)
+    {
+        const size_t focus = api->activeplaylist_get_focus_item();
+        g_plugin.m_playlist_pos = (focus != pfc::infinite_size && focus < total) ? static_cast<LRESULT>(focus) : 0;
     }
     g_plugin.m_playlist_top_idx = -1;
 }
@@ -2192,6 +2200,9 @@ void milk2_ui_element::SetSelectionSingle(size_t idx, bool toggle, bool focus, b
 {
     auto api = playlist_manager::get();
     const size_t total = api->activeplaylist_get_item_count();
+    if (idx >= total)
+        return;
+
     const size_t idx_focus = api->activeplaylist_get_focus_item();
     //if (idx_focus == pfc::infinite_size)
     //    return;

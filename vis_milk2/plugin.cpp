@@ -116,6 +116,51 @@ volatile bool g_bThreadAlive;     // set true by MAIN thread, and set false upon
 volatile int g_bThreadShouldQuit; // set by MAIN thread to flag 2nd thread that it wants it to exit.
 static CRITICAL_SECTION g_cs;
 
+static void ClearPShaderSet(PShaderSet& shaders)
+{
+    shaders.comp.Clear();
+    shaders.warp.Clear();
+}
+
+static void ClearVShaderSet(VShaderSet& shaders)
+{
+    shaders.comp.Clear();
+    shaders.warp.Clear();
+}
+
+static void TransferPShaderInfo(PShaderInfo& dst, PShaderInfo& src)
+{
+    if (&dst == &src)
+        return;
+
+    dst.Clear();
+    dst.ptr = src.ptr;
+    dst.CT = src.CT;
+    dst.params = src.params;
+
+    src.ptr = nullptr;
+    src.CT = nullptr;
+    src.params.Clear();
+}
+
+static void TransferPShaderSet(PShaderSet& dst, PShaderSet& src)
+{
+    TransferPShaderInfo(dst.warp, src.warp);
+    TransferPShaderInfo(dst.comp, src.comp);
+}
+
+static void CopyPShaderInfo(PShaderInfo& dst, const PShaderInfo& src)
+{
+    dst.Clear();
+    dst.ptr = src.ptr;
+    dst.CT = src.CT;
+    dst.params = src.params;
+    if (dst.ptr)
+        dst.ptr->AddRef();
+    if (dst.CT)
+        dst.CT->AddRef();
+}
+
 #define IsAlphabetChar(x) ((x >= 'a' && x <= 'z') || (x >= 'A' && x <= 'Z'))
 #define IsAlphanumericChar(x) ((x >= 'a' && x <= 'z') || (x >= 'A' && x <= 'Z') || (x >= '0' && x <= '9') || x == '.')
 #define IsNumericChar(x) (x >= '0' && x <= '9')
@@ -394,9 +439,7 @@ static void OnUserEditedWarpShaders(LPARAM param1, LPARAM param2)
     if (!g_plugin.RecompilePShader(g_plugin.m_pState->m_szWarpShadersText, &g_plugin.m_shaders.warp, SHADER_WARP, false, g_plugin.m_pState->m_nWarpPSVersion))
     {
         // Switch to fallback.
-        g_plugin.m_fallbackShaders_ps.warp.ptr->AddRef();
-        g_plugin.m_fallbackShaders_ps.warp.CT->AddRef();
-        g_plugin.m_shaders.warp = g_plugin.m_fallbackShaders_ps.warp;
+        CopyPShaderInfo(g_plugin.m_shaders.warp, g_plugin.m_fallbackShaders_ps.warp);
     }
 }
 
@@ -411,9 +454,7 @@ static void OnUserEditedCompShaders(LPARAM param1, LPARAM param2)
     if (!g_plugin.RecompilePShader(g_plugin.m_pState->m_szCompShadersText, &g_plugin.m_shaders.comp, SHADER_COMP, false, g_plugin.m_pState->m_nCompPSVersion))
     {
         // Switch to fallback.
-        g_plugin.m_fallbackShaders_ps.comp.ptr->AddRef();
-        g_plugin.m_fallbackShaders_ps.comp.CT->AddRef();
-        g_plugin.m_shaders.comp = g_plugin.m_fallbackShaders_ps.comp;
+        CopyPShaderInfo(g_plugin.m_shaders.comp, g_plugin.m_fallbackShaders_ps.comp);
     }
 }
 
@@ -541,12 +582,16 @@ void CPlugin::MilkDropPreInitialize()
     //m_ps_warp = NULL;
     //m_vs_comp = NULL;
     //m_ps_comp = NULL;
-    ZeroMemory(&m_shaders, sizeof(PShaderSet));
-    ZeroMemory(&m_OldShaders, sizeof(PShaderSet));
-    ZeroMemory(&m_NewShaders, sizeof(PShaderSet));
-    ZeroMemory(&m_fallbackShaders_vs, sizeof(VShaderSet));
-    ZeroMemory(&m_fallbackShaders_ps, sizeof(PShaderSet));
-    ZeroMemory(m_BlurShaders, sizeof(m_BlurShaders));
+    ClearPShaderSet(m_shaders);
+    ClearPShaderSet(m_OldShaders);
+    ClearPShaderSet(m_NewShaders);
+    ClearVShaderSet(m_fallbackShaders_vs);
+    ClearPShaderSet(m_fallbackShaders_ps);
+    for (auto& shader : m_BlurShaders)
+    {
+        shader.vs.Clear();
+        shader.ps.Clear();
+    }
     m_bWarpShaderLock = false;
     m_bCompShaderLock = false;
     m_bNeedRescanTexturesDir = true;
@@ -2223,15 +2268,18 @@ void PShaderInfo::Clear()
 CShaderParamsList global_CShaderParams_master_list;
 CShaderParams::CShaderParams()
 {
-    global_CShaderParams_master_list.shrink_to_fit(); // HACK!!! Exception thrown on 7th allocation. [read access violation. _Pnext was 0x4.]
     global_CShaderParams_master_list.push_back(this);
 }
 
 CShaderParams::~CShaderParams()
 {
     for (auto it = global_CShaderParams_master_list.begin(); it != global_CShaderParams_master_list.end();)
+    {
         if (*it == this)
-            global_CShaderParams_master_list.erase(it);
+            it = global_CShaderParams_master_list.erase(it);
+        else
+            ++it;
+    }
     texsize_params.clear();
 }
 
@@ -2848,8 +2896,7 @@ void CShaderParams::CacheParams(CConstantTable* pCT, bool /* bHardErrors */)
 
 bool CPlugin::RecompileVShader(const char* szShadersText, VShaderInfo* si, int shaderType, bool bHardErrors)
 {
-    SafeRelease(si->ptr);
-    ZeroMemory(si, sizeof(VShaderInfo));
+    si->Clear();
 
     // LOAD SHADER
     if (!LoadShaderFromMemory(szShadersText, "VS", "vs_4_0_level_9_1", &si->CT, (void**)&si->ptr, shaderType, bHardErrors && (GetScreenMode() == WINDOWED)))
@@ -2866,8 +2913,7 @@ bool CPlugin::RecompilePShader(const char* szShadersText, PShaderInfo* si, int s
 {
     assert(m_nMaxPSVersion > 0);
 
-    SafeRelease(si->ptr);
-    ZeroMemory(si, sizeof(PShaderInfo));
+    si->Clear();
 
     // Load shader.
     // Note: ps_1_4 required for dependent texture lookups.
@@ -2911,9 +2957,7 @@ bool CPlugin::LoadShaders(PShaderSet* sh, CState* pState, bool bTick)
         {
             m_lastPresetUsedFallback = true;
             // Switch to fallback shader.
-            m_fallbackShaders_ps.warp.ptr->AddRef();
-            m_fallbackShaders_ps.warp.CT->AddRef();
-            memcpy_s(&sh->warp, sizeof(PShaderInfo), &m_fallbackShaders_ps.warp, sizeof(PShaderInfo));
+            CopyPShaderInfo(sh->warp, m_fallbackShaders_ps.warp);
             // Cancel any slow-preset-load.
             //m_nLoadingPreset = 1000;
         }
@@ -2929,9 +2973,7 @@ bool CPlugin::LoadShaders(PShaderSet* sh, CState* pState, bool bTick)
         {
             m_lastPresetUsedFallback = true;
             // Switch to fallback shader.
-            m_fallbackShaders_ps.comp.ptr->AddRef();
-            m_fallbackShaders_ps.comp.CT->AddRef();
-            memcpy(&sh->comp, &m_fallbackShaders_ps.comp, sizeof(PShaderInfo));
+            CopyPShaderInfo(sh->comp, m_fallbackShaders_ps.comp);
             // Cancel any slow-preset-load.
             //m_nLoadingPreset = 1000;
         }
@@ -2970,7 +3012,7 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
         default: strcpy_s(szWhichShader, "(unknown)"); break;
     }
 
-    ID3DBlob* pShaderByteCode;
+    ID3DBlob* pShaderByteCode = nullptr;
     //wchar_t title[64] = {0};
 
     *ppShader = NULL;
@@ -3006,6 +3048,8 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
         {
             if (*s == LINEFEED_CONTROL_CHAR)
             {
+                if (writePos + 2 >= ARRAYSIZE(szShaderText))
+                    return false;
                 *d++ = '\r';
                 writePos++;
                 *d++ = '\n';
@@ -3013,6 +3057,8 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
             }
             else
             {
+                if (writePos + 1 >= ARRAYSIZE(szShaderText))
+                    return false;
                 *d++ = *s;
                 writePos++;
             }
@@ -3067,10 +3113,14 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
         // Seek to "shader_body" and replace it with spaces.
         while (*p && strncmp(p, "shader_body", 11))
             p++;
-        if (p)
+        if (*p)
         {
             for (int i = 0; i < 11; i++)
                 *p++ = ' ';
+        }
+        else
+        {
+            p = nullptr;
         }
 
         if (p)
@@ -3154,6 +3204,12 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
         //    MessageBox(GetPluginWindow(), temp, WASABI_API_LNGSTRINGW_BUF(IDS_MILKDROP_ERROR, title, 64), MB_OK | MB_SETFOREGROUND | MB_TOPMOST);
         //else
         //    AddError(temp, 8.0f, ERR_PRESET, true);
+        if (*ppConstTable)
+        {
+            (*ppConstTable)->Release();
+            *ppConstTable = nullptr;
+        }
+        SafeRelease(pShaderByteCode);
         return false;
     }
 
@@ -5754,13 +5810,8 @@ void CPlugin::LoadPreset(const wchar_t* szPresetFilename, float fBlendTime)
         m_fPresetStartTime = GetTime();
         m_fNextPresetTime = -1.0f; // flags UpdateTime() to recompute this
 
-        // Release stuff from `m_OldShaders`, then move m_shaders to `m_OldShaders`, then load the new shaders.
-        SafeRelease(m_OldShaders.comp.ptr);
-        SafeRelease(m_OldShaders.warp.ptr);
-        SafeRelease(m_OldShaders.comp.CT);
-        SafeRelease(m_OldShaders.warp.CT);
-        m_OldShaders = m_shaders;
-        ZeroMemory(&m_shaders, sizeof(PShaderSet));
+        // Release stuff from `m_OldShaders`, then move `m_shaders` to `m_OldShaders`, then load the new shaders.
+        TransferPShaderSet(m_OldShaders, m_shaders);
 
         m_lastPresetUsedFallback = false;
         LoadShaders(&m_shaders, m_pState, false);
@@ -5775,9 +5826,7 @@ void CPlugin::LoadPreset(const wchar_t* szPresetFilename, float fBlendTime)
     else
     {
         // Set up to load the preset (and especially compile shaders) a little bit at a time.
-        SafeRelease(m_NewShaders.comp.ptr);
-        SafeRelease(m_NewShaders.warp.ptr);
-        ZeroMemory(&m_NewShaders, sizeof(PShaderSet));
+        ClearPShaderSet(m_NewShaders);
 
         DWORD ApplyFlags = STATE_ALL;
         ApplyFlags ^= (m_bWarpShaderLock ? STATE_WARP : 0);
@@ -5831,12 +5880,9 @@ void CPlugin::LoadPresetTick()
         m_fPresetStartTime = GetTime();
         m_fNextPresetTime = -1.0f; // flags `UpdateTime()` to recompute this
 
-        // Release stuff from `m_OldShaders`, then move `m_shaders` to `m_OldShaders`, then load the new shaders.
-        SafeRelease(m_OldShaders.comp.ptr);
-        SafeRelease(m_OldShaders.warp.ptr);
-        m_OldShaders = m_shaders;
-        m_shaders = m_NewShaders;
-        ZeroMemory(&m_NewShaders, sizeof(PShaderSet));
+        // Release stuff from `m_OldShaders`, then move `m_shaders` to `m_OldShaders`, then use the new shaders.
+        TransferPShaderSet(m_OldShaders, m_shaders);
+        TransferPShaderSet(m_shaders, m_NewShaders);
 
         // End slow-preset-load mode.
         m_nLoadingPreset = 0;
@@ -7341,9 +7387,8 @@ bool CPlugin::LaunchSprite(int nSpriteNum, int nSlot, const std::wstring& filena
 
         int line = 1;
         size_t char_pos = 0;
-        bool bDone = false;
 
-        while (!bDone)
+        while (true)
         {
             if (n == 0)
                 sprintf_s(szLineName, "init_%d", line);
@@ -7353,20 +7398,20 @@ bool CPlugin::LaunchSprite(int nSpriteNum, int nSlot, const std::wstring& filena
             GetPrivateProfileStringA(sectionA, szLineName, "~!@#$", szTemp, 8192, AutoChar(m_szImgIniFile));
             len = strlen(szTemp);
 
-            if ((strcmp(szTemp, "~!@#$") == 0) || // if the key was missing,
-                (len >= 8191 - char_pos - 1))     // or if out of space
-            {
-                bDone = true;
-            }
-            else
+            if (strcmp(szTemp, "~!@#$") == 0) // if the key was missing
+                break;
+
+            if (len >= 8191 - char_pos - 1) // or if out of space
+                break;
+
             {
                 sprintf_s(&pStr[char_pos], 8192 - char_pos, "%s%c", szTemp, LINEFEED_CONTROL_CHAR);
+                char_pos += len + 1;
             }
 
-            char_pos += len + 1;
             line++;
         }
-        pStr[char_pos++] = '\0'; // null-terminate
+        pStr[char_pos] = '\0'; // null-terminate
     }
 
     if (nSlot == -1)
