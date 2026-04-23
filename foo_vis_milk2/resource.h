@@ -916,6 +916,8 @@
 #define IDC_FONTOUTLINE_CAPTION         1115
 #define IDC_FONTOUTLINE_TEXT            1116
 #define IDC_FORMAT_INFO                 1117
+#define IDC_FORMAT_INFO_EXAMPLES_LABEL  1118
+#define IDC_FORMAT_INFO_COMMON_LABEL    1119
 #define ID_SHOWHELP                     40007
 #define ID_SHOWPLAYLIST                 40008
 #define ID_QUIT                         40009

@@ -2,6 +2,14 @@
 
 ## Release History
 
+### 0.2.1.22 - 2026-04-23
+
+Format-info readability follow-up for the foobar2000 x64 component.
+
+- Tightened the `Format Info...` dialog spacing so the `Examples:` section sits closer to the introductory title-format text.
+- Rendered the `Title display format`, `Examples:`, `Common fields:`, and `Artwork display format` section headers in bold for faster scanning in the dark-mode dialog.
+- Refreshed the README notes for the title/artwork format fields and current public package naming.
+
 ### 0.2.1.21 - 2026-04-23
 
 Title-format and preferences layout update for the foobar2000 x64 component.

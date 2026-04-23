@@ -802,12 +802,33 @@ void milk2_preferences_page::OnButtonPushed(UINT uNotifyCode, int nID, CWindow w
 BOOL FormatInfoDlg::OnInitDialog(CWindow, LPARAM)
 {
     m_dark.AddDialogWithControls(*this);
+    LOGFONT lf = {};
+    HFONT baseFont = GetFont();
+    if (!baseFont)
+        baseFont = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+    if (baseFont && GetObject(baseFont, sizeof(lf), &lf) == sizeof(lf))
+    {
+        lf.lfWeight = FW_BOLD;
+        m_header_font = CreateFontIndirect(&lf);
+    }
+    if (m_header_font)
+    {
+        GetDlgItem(IDC_TITLE_FORMAT_LABEL).SetFont(m_header_font, TRUE);
+        GetDlgItem(IDC_FORMAT_INFO_EXAMPLES_LABEL).SetFont(m_header_font, TRUE);
+        GetDlgItem(IDC_FORMAT_INFO_COMMON_LABEL).SetFont(m_header_font, TRUE);
+        GetDlgItem(IDC_ARTWORK_FORMAT_LABEL).SetFont(m_header_font, TRUE);
+    }
     CenterWindow(GetParent());
     return TRUE;
 }
 
 void FormatInfoDlg::OnDestroy()
 {
+    if (m_header_font)
+    {
+        DeleteObject(m_header_font);
+        m_header_font = nullptr;
+    }
     m_dark.clear();
 }
 

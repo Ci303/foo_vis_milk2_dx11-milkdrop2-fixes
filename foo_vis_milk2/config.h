@@ -464,6 +464,7 @@ class FormatInfoDlg : public CDialogImpl<FormatInfoDlg>
     void OnCloseCmd(UINT, int nID, CWindow);
 
     fb2k::CDarkModeHooks m_dark;
+    HFONT m_header_font = nullptr;
 };
 
 class PresetBlacklistDlg : public CDialogImpl<PresetBlacklistDlg>
