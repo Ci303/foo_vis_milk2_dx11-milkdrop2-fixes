@@ -6,63 +6,61 @@ Port of Winamp's MilkDrop 2 visualization library from its original DirectX 9 ve
 
 The original upstream project at `jecassis/foo_vis_milk2` is end-of-life.
 
-This repository is an independent continuation focused on keeping the foobar2000 component usable on current systems, especially foobar2000 v2 and x64 installs. It keeps the upstream code and licensing intact, but documents and carries the practical fixes that were needed in day-to-day use.
+This repository is an independent continuation focused on keeping the foobar2000 component usable on current systems, especially foobar2000 v2 and x64 installs. It preserves upstream licensing and attribution, but carries the fixes and usability work needed for day-to-day use.
 
-This is not a new renderer or a redesign of MilkDrop. The aim is to keep the DirectX 11 foobar2000 port working reliably, make the preferences pages easier to use, and fix regressions that showed up in real use, whilst adding extra functionality.
-
-Existing licensing and attribution are preserved under MPL-2.0.
+This is not a new renderer or a redesign of MilkDrop. The goal is to keep the DirectX 11 foobar2000 port stable, usable, and maintainable.
 
 ## Photosensitivity Warning
 
 MilkDrop presets can contain rapid flashing, strobing, high-contrast motion, intense colour changes, and fast full-screen movement. These visuals may trigger seizures, migraines, dizziness, nausea, or discomfort in people with photosensitive epilepsy or other visual sensitivities.
 
-## What Has Been Fixed Here
+## Current Status
 
-This repository already includes the DirectX 11 foobar2000 port from upstream. On top of that, the recent maintenance work in this branch focuses on the following:
+This branch already includes the upstream DirectX 11 foobar2000 port. Recent maintenance work is focused on four areas.
 
-- Dark mode work for the foobar2000 preferences pages, including the font selection dialog.
-- Preference page cleanup so controls fit properly, focus behaves more predictably, and broken or misleading UI elements have been corrected.
-- Preference page layout updates for the new mouse control options so the right-hand settings column renders cleanly on current foobar2000 builds.
-- Restored working title and time display shortcuts.
-- Shortcut handling aligned with the on-screen help overlay so the documented keys match actual behaviour.
-- Reworked the built-in help overlay so it lays out on-screen more cleanly and includes the newer mouse controls and clearer playback shortcut guidance.
-- Refined the help overlay into a stable left-anchored two-column layout and fixed the embedded text loading so stray characters are not rendered.
-- Stabilised the song time display so the elapsed and remaining time do not jump around as the timer updates.
+### UI and Preferences
+
+- Dark mode support for the foobar2000 preferences pages, including the font selection dialog.
+- Preference layout cleanup so newer controls fit properly and the right-hand settings column renders cleanly on current foobar2000 builds.
 - Fixed album art and font dialog issues in the preferences UI.
-- Fixed album artwork toggle persistence so it now remembers the selected state across restarts.
-- Improved custom message and sprite helper behaviour so the related settings buttons work with the expected `milk2_msg.ini` and `milk2_img.ini` files.
-- Improved panel resize, fullscreen transitions, and settings-apply handling to avoid freezes and bad reinitialisation behaviour.
-- Added safer startup preset handling so the component remembers the last working preset instead of repeatedly restoring a broken one.
-- Fixed startup behaviour where some remembered presets could open in a degraded state because they required shader fallback on launch.
-- Reworked the legacy wait-string editor path used by preset, wave and shape code editing to avoid unsafe buffer aliasing and cursor/render edge-case bugs.
-- Improved long song title rendering so oversized titles scale down to fit and fall back to ellipsis clipping instead of disappearing.
-- Added optional mouse wheel volume control and optional single-click play/pause, with a short `Playing` / `Paused` overlay that follows the current animated song-title font settings.
-- Added preset blacklisting, including a `Never Show Again` runtime action, a blacklist manager dialog, and persistent blacklist storage in the `milkdrop2` profile folder.
-- Added preset blacklist import/export so blacklist text files can be merged in or saved out from the blacklist manager.
-- Refined the mouse focus/playback interaction so accidental first-click pauses are less likely when MilkDrop has just regained focus.
-- Hardened album-art sprite replacement, blacklist preset replacement, and play/pause overlay launching around the render lock to reduce crashes during rapid track or preset changes.
-- Fixed the center title animation path used by `Show Track Title`, automatic track changes, and the `Track Title` / `Paused` overlays so they do not overwrite each other or render duplicate/tiny fallback text.
-- Changed the `F3` track-time overlay to show minutes and seconds without fractional milliseconds.
-- Added crash diagnostics and minidump logging under `<foobar2000 profile folder>\milkdrop2\crashlogs` to help investigate intermittent runtime crashes.
-- Fixed FPS cap persistence so a saved capped value such as `60` is not replaced by stale legacy `0`/Unlimited state at runtime.
-- Split embedded and fullscreen frame pacing so embedded rendering uses the foobar2000 UI timer cap while fullscreen also enables MilkDrop's internal fullscreen limiter.
-- Fixed embedded-panel song title formatting so the configured title display format is compiled and applied instead of falling back to a hardcoded default title pattern.
-- Reset cached title-format scripts when MilkDrop preferences change so edits to `%artist%`, `%album%`, `$crlf()`, and related foobar2000 title-format fields take effect immediately.
-- Added a dark-mode-aware `Format Info...` dialog for the title and artwork display format fields.
-- Reworked the current preferences layout so the newer playback and formatting controls fit cleanly without clipped labels or awkward alignment.
-- Stopped mirroring MilkDrop's upper-right status and warning overlay messages into the foobar2000 console in release builds, reducing routine console-log noise during normal use.
+- Embedded-panel title formatting now honours the configured title format and refreshes cleanly after preference edits.
+- `Format Info...` is now a dark-mode-aware builder for title and artwork format fields, with examples, common metadata fields, and direct insertion back into the main preferences fields.
+
+### Playback and Overlay Behaviour
+
+- Restored working title and time display shortcuts.
+- Help overlay updated and aligned with the actual keyboard and mouse behaviour.
+- `F3` time display now shows `m:ss` or `h:mm:ss` without fractional milliseconds.
+- Long song titles scale down to fit before falling back to ellipsis clipping.
+- Center title animations no longer fight with `Playing` / `Paused` overlays or automatic title updates.
+- Optional mouse wheel volume control and optional single-click play/pause have been added.
+
+### Stability and Preset Handling
+
+- Safer startup preset handling so the component remembers the last working preset instead of repeatedly restoring a broken one.
+- Improved startup handling for presets that require shader fallback.
+- Safer text-editor handling for preset, wave, and shape code editing.
+- Render-lock hardening around album-art updates, blacklist preset replacement, and play/pause overlay launching.
+- Persistent preset blacklist support, including `Never Show Again`, blacklist manager editing, and import/export.
+
+### Diagnostics and Runtime Noise
+
+- Crash diagnostics and minidump logging under `<foobar2000 profile folder>\milkdrop2\crashlogs`.
+- Reduced release-build foobar2000 console noise from routine MilkDrop status and warning overlays.
 
 ## Current Behaviour and Limits
 
 - Default UI only. Columns UI is not supported.
 - foobar2000 preferences are used for most component settings.
-- Presets, textures, custom messages and custom sprites still use the `milkdrop2` profile directory.
-- Older presets can still fail, crash, hang, or remain black if they depend on unsupported EEL1 syntax, old shader assumptions, missing texture packs, or other compatibility issues. The blacklist is intended to help filter those presets out over time.
-- This is currently tested mainly on foobar2000 v2 x64, although the project can still be built for other targets present in the solution.
-- FPS cap state is split by display mode. In embedded panels, the configured max frame rate drives the foobar2000 UI timer. In fullscreen, the same configured cap is also applied to MilkDrop's internal fullscreen limiter so fullscreen no longer runs uncapped when a fixed value such as `60` is selected.
-- `Unlimited` stores as `0` internally and intentionally disables both the embedded timer cap and the fullscreen MilkDrop limiter. Use `Unlimited` for high-refresh fullscreen testing when you want MilkDrop to run above 60 FPS.
+- Presets, textures, custom messages, and custom sprites still use the `milkdrop2` profile directory.
+- Older presets can still fail, crash, hang, or remain black if they depend on unsupported EEL1 syntax, old shader assumptions, missing texture packs, or other compatibility issues.
+- This project is currently tested mainly on foobar2000 v2 x64, although the solution can still be built for other targets.
+- FPS cap behaviour is split by display mode:
+  - Embedded panels use the foobar2000 UI timer cap.
+  - Fullscreen also enables MilkDrop's internal fullscreen limiter.
+  - `Unlimited` stores as `0` internally and disables both caps.
 
-## How To Install and Use It
+## Install and Use
 
 ### 1. Install the component
 
@@ -77,8 +75,8 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 
 - Presets go in `<foobar2000 profile folder>\milkdrop2\presets`.
 - Texture packs go in `<foobar2000 profile folder>\milkdrop2\textures`.
-- If you use presets from large packs, install the matching texture pack as well. A lot of "blank", flat-colour, or obviously broken starts are simply missing textures.
-- If you want to bootstrap the recommended packs automatically, run [tools/install-milkdrop-resources.ps1](tools/install-milkdrop-resources.ps1). By default it targets `%AppData%\foobar2000-v2` and installs the recommended preset and texture repositories into the correct `milkdrop2` folders.
+- If you use presets from large packs, install the matching texture pack as well. Many "blank" or obviously broken starts are just missing textures.
+- To bootstrap the recommended packs automatically, run [tools/install-milkdrop-resources.ps1](tools/install-milkdrop-resources.ps1). By default it targets `%AppData%\foobar2000-v2` and installs the recommended preset and texture repositories into the correct `milkdrop2` folders.
 
 Useful preset sources:
 
@@ -92,26 +90,27 @@ Example:
 .\tools\install-milkdrop-resources.ps1
 ```
 
-### 3. Open MilkDrop in foobar2000
+### 3. Configure it
 
 - Add the MilkDrop visualisation element to a Default UI layout, or open it from the visualisations area if your layout already includes it.
 - Open **Preferences > Visualisations > MilkDrop** to configure:
-  - preset timing
-  - hard cuts
+  - preset timing and hard cuts
   - title display
+  - album artwork display
   - image cache
   - fonts
-  - optional mouse wheel volume and single-click play/pause controls
+  - optional mouse controls
   - preset blacklist editing
 
-For refresh rates above 60 FPS, use `Unlimited`. Fixed-rate values are useful when you want the visualizer paced near a specific cap such as 60 FPS; `Unlimited` is intended for high-refresh displays and uncapped fullscreen testing.
+Title display format uses normal foobar2000 title formatting. Artwork display format can be left blank to use standard foobar2000 album art, or set to a full image path or a title-formatting script that returns one. The preferences page includes a `Format Info...` builder with examples, common fields, and direct insertion into either format box.
 
-Title display format uses normal foobar2000 title formatting. Artwork display format can be left blank to use standard foobar2000 album art, or set to a full image path or a title-formatting script that returns one. The preferences page includes a `Format Info...` dialog with examples for both fields, and its text can be selected and copied.
+For refresh rates above 60 FPS, use `Unlimited`. Fixed-rate values are useful when you want the visualiser paced near a specific cap such as 60 FPS.
 
 FPS behaviour is mode-aware:
 
-- Embedded panel: fixed FPS values pace the foobar2000 UI timer; `Unlimited` stores as `0` and lets the panel run as fast as the host paint/present path allows.
-- Fullscreen: fixed FPS values also enable MilkDrop's internal fullscreen limiter; `Unlimited` stores as `0` and disables that limiter for high-refresh displays.
+- Embedded panel: fixed FPS values pace the foobar2000 UI timer.
+- Fullscreen: fixed FPS values also enable MilkDrop's internal fullscreen limiter.
+- `Unlimited`: stores as `0` and disables those caps.
 
 ### 4. Optional custom files
 
@@ -124,7 +123,7 @@ If those files are blank or missing, normal playback still works. They are only 
 
 - `F1`: show help
 - `F2`: song title
-- `F3`: time display, formatted as `m:ss` or `h:mm:ss`
+- `F3`: time display
 - `F4`: preset name
 - `F5`: frames per second
 - `F6`: preset rating
@@ -140,37 +139,14 @@ The full shortcut list is also shown in the built-in help overlay.
 - Single left click can toggle play/pause when **Enable single-click play/pause** is turned on.
 - Double click still toggles fullscreen.
 - When single-click play/pause is enabled, MilkDrop shows a short `Paused` overlay using the current animated song-title font settings.
-- The play/pause overlay uses the same center animated text path as track-title animations and temporarily prevents the automatic track title from overwriting it.
 
 ### 7. Preset blacklist
 
 - Right click the visualiser and choose `Never Show Again` to blacklist the current preset immediately.
 - The current preset name at the top of the context menu can open the preset file location in Explorer.
-- Blacklisted presets are skipped permanently until they are removed from the blacklist manager in preferences.
+- Blacklisted presets are skipped until they are removed from the blacklist manager in preferences.
 - The blacklist manager can open an existing blacklisted file in Explorer and can browse the preset folder to add new `.milk` files.
 - The blacklist is stored at `<foobar2000 profile folder>\milkdrop2\preset-blacklist.txt`.
-
-## Current Release State
-
-The current public release line includes the following user-visible behaviour changes beyond the original DirectX 11 foobar2000 port:
-
-- Safer preset, wave and shape code editing in the built-in text editor path.
-- Persisted album artwork display state.
-- Song titles that scale down to fit before falling back to ellipsis clipping.
-- Optional mouse controls for volume and play/pause.
-- Persistent preset blacklist management and direct preset file access from the context menu.
-- Blacklist manager improvements including preset-folder browsing, safer preferences integration, and reliable replacement preset loading after `Never Show Again`.
-- Stable built-in help overlay formatting with current keyboard and mouse shortcut information.
-- Render-lock hardening for album-art updates, blacklist replacement preset loads, and play/pause status overlays.
-- Center title animation fixes for manual title display, automatic track changes, and `Playing` / `Paused` overlays.
-- `F3` time display without fractional milliseconds.
-- Crash diagnostics/minidump logging for intermittent runtime crash investigation.
-- Preferences dialog layout fixes for the newer settings.
-- FPS cap persistence and mode-aware embedded/fullscreen pacing.
-- Embedded-panel title formatting that honours the configured format string and updates cleanly after preference edits.
-- A dark-mode-aware `Format Info...` dialog with a built-in title/artwork format builder, example loading, and direct field insertion.
-- Reduced release-build console noise from routine MilkDrop status and warning overlays.
-- Known-bad preset filtering remains ongoing; some presets may still crash, hang, or render as a black screen until they are identified and blacklisted.
 
 ## Releases
 
@@ -178,114 +154,45 @@ GitHub Releases are the preferred distribution point for this repository.
 
 - Release assets are named to make the target architecture obvious.
 - Current public releases are focused on x64 foobar2000 builds first.
-- If you need a different target from the solution, build it locally from source using the instructions below.
+- See [CHANGELOG](CHANGELOG.md) for per-release details.
 
 ## Building
 
 Prerequisites to build the `foo_vis_milk2.dll` component for foobar2000:
 
-- [foobar2000 SDK](https://www.foobar2000.org/SDK): download the latest version and uncompress the contents in the `external/` folder and apply the [patch](external/fb2ksdk.patch).
-- [NS-EEL2](https://github.com/justinfrankel/WDL/tree/main/WDL/eel2) (included in [WDL](https://www.cockos.com/wdl/)): the files required to build the DLL are included in this repository.
-- [projectM EEL](https://github.com/projectM-visualizer/projectm-eval): clone the repository into the `external/` folder, checkout the `HEAD` of the `master` branch and apply the [patch](external/pmeel.patch). _This is the default expression evaluation library._
-- [DirectXTK](https://github.com/Microsoft/DirectXTK): the files required to build the DLL are fetched via the NuGet package manager.
-- [Windows Template Library (WTL)](https://wtl.sourceforge.io/): the files required to build the DLL are fetched via the NuGet package manager.
-- [Visual Studio 2022](https://visualstudio.microsoft.com/vs/): open the [`foo_vis_milk2`](foo_vis_milk2.sln) solution, set `foo_vis_milk2` as the Startup Project, install WTL and DirectXTK as NuGet packages, select a configuration, and build the solution.
+- [foobar2000 SDK](https://www.foobar2000.org/SDK): download the latest version, uncompress it into `external/`, and apply the [patch](external/fb2ksdk.patch).
+- [NS-EEL2](https://github.com/justinfrankel/WDL/tree/main/WDL/eel2): included in this repository.
+- [projectM EEL](https://github.com/projectM-visualizer/projectm-eval): clone into `external/`, checkout `master`, and apply the [patch](external/pmeel.patch).
+- [DirectXTK](https://github.com/Microsoft/DirectXTK): fetched via NuGet.
+- [Windows Template Library (WTL)](https://wtl.sourceforge.io/): fetched via NuGet.
+- [Visual Studio 2022](https://visualstudio.microsoft.com/vs/): open [`foo_vis_milk2.sln`](foo_vis_milk2.sln), set `foo_vis_milk2` as the Startup Project, install the NuGet packages, select a configuration, and build.
 
-> Import the Visual Studio [installation configuration](.vsconfig) file to install required components such as the [Windows SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/), [Active Template Library (ATL)](https://learn.microsoft.com/en-us/cpp/atl/atl-com-desktop-components) and [NuGet Package Manager](https://www.nuget.org/).
+> Import the Visual Studio [installation configuration](.vsconfig) file to install required components such as the Windows SDK, ATL, and NuGet Package Manager.
 
-Refer to the [build pipeline](.github/workflows/build.yml) jobs for a step-by-step guide on how to build. _Only x86 and x64 Intel architecture platforms are tested._
+Additional references:
 
-See [CHANGELOG](CHANGELOG.md) for additional details.
+- [BUILDING](BUILDING.md)
+- [TESTING](TESTING.md)
+- [CHANGELOG](CHANGELOG.md)
+- [LICENSES](LICENSES.md)
+- [.github/workflows/build.yml](.github/workflows/build.yml)
 
-See [BUILDING](BUILDING.md) for solution build instructions.
-
-See [TESTING](TESTING.md) for an outline of how to run a simple unit test and collect runtime coverage.
-
-See [LICENSES](LICENSES.md) for third-party license details.
-
-## Project Features
-
-- Uses DirectX 11.1 (Direct3D 11.1, DXGI 1.6, Direct2D 1.1, DirectWrite 1.1) for rendering.
-- Supports the Default User Interface (Default UI) only.
-- Configurable through foobar2000 preferences instead of `.ini` files.
-- Can build 32-bit and 64-bit x86 component configurations as well as ARM64 and ARM64EC.
-- Built for foobar2000 2.0 and later with latest Windows 11 SDK (10.0.26100.0) and MSVC (v143).
-- Updated all library dependencies to their latest available releases.
-- Deprecated or insecure functions have been rewritten and most unused functionality removed.
-- `vis_milk2` has been upgraded to use more modern C++ alongside the move to DirectX 11.
-- Tested on foobar2000 v2.1.6 (x86 32-bit and x86 64-bit) and Microsoft Windows 11 (Build 26100.1742).
-- Intel architecture versions support Windows 7 SP1 or later and ARM architecture versions support Windows 10 or later.
-  - However, some features such as hybrid graphics, high DPI displays and HDR might not work if the DXGI version required to support them is not on the system.
-
-## Repository Notes
-
-The build assumes the following directory structure:
-
-```text
- .github\ -> contains the continuous integration build pipeline.
- Bin\ -> generated by Visual Studio to contain the final DLLs and PDBs.
- component\ -> generated by the packaging script to layout the component prior to archiving and compression.
- data\ -> contains static files to be included in the component package.
-     pdbs\ -> generated by the packaging script and contains the PDBs for each release.
-     foo_vis_milk2-*.fb2k-component -> generated by the packaging script and are the packaged component releases.
- external\ -> contains external library dependencies.
-     directxtk_desktop_2019.*\ -> from NuGet, contains the DirectX Tool Kit (DirectXTK) for x86, x64 and ARM64EC.
-     directxtk_desktop_win10.*\ -> from NuGet, the DirectX Tool Kit (DirectXTK) for ARM64.
-     eel2\ -> contains the Nullsoft Expression Evaluator Library (NS-EEL).
-     foobar2000\ -> contains most of the foobar2000 SDK download.
-         component_client\ -> from the foobar2000 SDK, generates the DLL entrypoint function for the component.
-         helpers\ -> from the foobar2000 SDK, constains a library of various helper code for the component.
-         sdk\ -> from the foobar2000 SDK, contains declarations of services and various service-specific helper code.
-         shared\ -> from the foobar2000 SDK, contains the various utility code used by foobar2000 components.
-     libppui\ -> from the foobar2000 SDK, contains a library of helper code, mainly Windows UI code.
-     nu\ -> contains the Nullsoft utilities.
-     pfc\ -> from the foobar2000 SDK, a class library used by the foobar2000 SDK.
-     projectm-eval\ -> from GitHub, contains the projectM expression evaluation library.
-     winamp\ -> contains header files, shader files and documentation from the Winamp release.
-         data\ -> contains the Winamp pixel and vertex shaders.
-         docs\ -> contains the MilkDrop 2 documentation.
-     wtl.*\ -> from NuGet, the Windows Template Library (WTL).
- foo_vis_milk2\ -> contains the foobar2000 component code.
- Obj\ -> generated by Visual Studio to contain the intermediate build object files.
- tools\ -> contains the packaging and formatting scripts.
- vis_milk2\ -> contains the MilkDrop 2 visualization library code.
-```
-
-Additional repository notes:
+## Developer Notes
 
 - Main x64 build output: `Bin\x64\Release\foo_vis_milk2.dll`
 - Typical foobar2000 x64 deployment path: `<foobar2000 profile folder>\user-components-x64\foo_vis_milk2\`
-- Runtime presets, textures and INI files are read from: `<foobar2000 profile folder>\milkdrop2\`
+- Runtime presets, textures, and INI files are read from: `<foobar2000 profile folder>\milkdrop2\`
+- The solution can still build x86, x64, ARM64, and ARM64EC, but public releases are currently focused on x64 first.
+- The project uses DirectX 11.1 for rendering and targets foobar2000 2.0 and later.
 - This repository is for the stable DirectX 11 foobar2000 component. Experimental DX12 work is intentionally out of scope here.
-- Embedded and fullscreen FPS caps now use separate pacing paths. Capped values pace embedded rendering through the foobar2000 UI timer and fullscreen rendering through MilkDrop's fullscreen limiter; `Unlimited` stores as `0` and is the intended setting for high-refresh uncapped fullscreen use.
 
-### Build Notes
+## Upstream Background
 
-- Removed `/d2notypeopt` Visual C++ compiler option as it is applied by default on Visual Studio 2019 version 16.6 and later. ([1](https://hydrogenaud.io/index.php/topic,108411.0.html), [2](https://developercommunity.visualstudio.com/t/invalid-function-call-de-virtualization/1125222))
-- Built all targets using v143 Platform Toolset for as `/arch` being "Not set" should default to `/arch:SSE2` on Visual Studio 2022 version 17.10 and later. ([1](https://hydrogenaud.io/index.php/topic,125795.0.html), [2](https://developercommunity.visualstudio.com/t/Cannot-disable-AVX-and-AVX2-in-VS-2022/10497078))
+MilkDrop 2 (`vis_milk2`) is a music visualiser originally written for Winamp. Relative to the original source release, the upstream foobar2000 DirectX 11 port already did the heavy lifting:
 
-## MilkDrop 2
+- ported the renderer from DirectX 9 to DirectX 11.1
+- moved text layout and rendering to DirectWrite and Direct2D
+- modernised the project for current Visual Studio toolchains
+- cleaned up a large amount of legacy code and dependency handling
 
-MilkDrop 2 (`vis_milk2`) is a music visualizer - a "plug-in" to the Winamp music player. The changes to the [MilkDrop 2 source code release](https://sourceforge.net/projects/milkdrop2/) from 5/13/13 (version 2.25c) include:
-
-- Porting VMS from DirectX 9 to Direct X 11.1. DirectX 11.1 is Direct3D 11.1, DXGI 1.6, Direct2D 1.1, and DirectWrite 1.1.
-- Porting text layout and rendering from D3DX9 and GDI to DirectWrite and Direct2D, respectively.
-- Building DLL with Visual Studio 2022 (v143) Platform Toolset.
-- Minor bug and typo fixing so that the plug-in can be used in Winamp and foobar2000 music players without crashing.
-- Fixing of string resources to flow consistently with Segoe UI spacing and sizing.
-- Minor cleaning and updating of configuration panel to match functioning features and UI modifications.
-- Developer experience improvements, such as:
-  - Updated dependencies to latest available versions.
-  - Refactored EEL2 and DirectXTK into separate projects.
-  - PCH and multiprocessor compile enabled for fast builds.
-  - Buildable with C++20 compiler, including the address sanitizer and fuzzer. Builds clean using `/W4` (level 1,2,3,4 compiler warnings) and `/WX` (treat compiler warnings as errors) build options.
-  - All character string and memory manipulation functions migrated to use their respective secure CRT versions.
-  - Several utility functions and container classes replaced with their STL equivalents.
-  - Enabled and added x86 and ARM 64-bit builds (x64, ARM64 and ARM64EC platforms) in addition to the upgraded x86 32-bit (Win32 platform) one. The 64-bit DLLs are not as extensively tested since most music players are still 32-bit applications.
-  - Added a minimal unit test with associated infrastructure and some API service mock classes to test DLL initialization.
-  - Added CI pipeline (GitHub Actions).
-  - Enforced more consistent formatting (with ClangFormat), line endings, and file encodings. Important notes:
-    - `*.rc` encoding was kept as "Western European (Windows) - Codepage 1252".
-    - `*.vcxproj/*.sln` encoding was kept as "Unicode (UTF-8 with signature/BOM) - Codepage 65001".
-    - All other text files use "Unicode (UTF-8 without signature) - Codepage 65001". All text files use CRLF line endings.
-  - Updated comments and consolidated documentation.
+This repository keeps that port working in current foobar2000 installs and focuses on maintenance, fixes, usability work, and release packaging rather than redesigning the visualiser itself.
