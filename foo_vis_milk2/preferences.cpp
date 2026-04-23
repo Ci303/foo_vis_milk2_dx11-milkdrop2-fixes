@@ -80,6 +80,88 @@ constexpr int g_font_combo_ids[] = {
     IDC_FONT1, IDC_FONT2, IDC_FONT3, IDC_FONT4, IDC_FONT5, IDC_FONT6, IDC_FONT7, IDC_FONT8, IDC_FONT9,
 };
 
+constexpr const wchar_t* g_format_example_1 = L"[%artist%$crlf()]%title%";
+constexpr const wchar_t* g_format_example_2 = L"[%artist%$crlf()][%album%$crlf()]%title%";
+
+struct format_field_entry_t
+{
+    const wchar_t* label;
+    const wchar_t* token;
+};
+
+constexpr format_field_entry_t g_format_field_entries[] = {
+    {L"track artist", L"%artist%"},
+    {L"track title", L"%title%"},
+    {L"album title", L"%album%"},
+    {L"album artist", L"%album artist%"},
+    {L"year / date", L"%date%"},
+    {L"track number", L"%tracknumber%"},
+    {L"disc number", L"%discnumber%"},
+    {L"genre", L"%genre%"},
+    {L"duration", L"%length%"},
+    {L"codec / format", L"%codec%"},
+    {L"bitrate / quality", L"%bitrate%"},
+    {L"sample rate", L"%samplerate%"},
+    {L"bit depth", L"%bitspersample%"},
+    {L"channels", L"%channels%"},
+    {L"file name", L"%filename_ext%"},
+    {L"file path", L"%path%"},
+};
+
+bool copy_text_to_clipboard(HWND owner, const wchar_t* text)
+{
+    if (!text)
+        return false;
+
+    if (!OpenClipboard(owner))
+        return false;
+
+    bool copied = false;
+    do
+    {
+        if (!EmptyClipboard())
+            break;
+
+        const size_t bytes = (wcslen(text) + 1) * sizeof(wchar_t);
+        HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes);
+        if (!memory)
+            break;
+
+        void* locked = GlobalLock(memory);
+        if (!locked)
+        {
+            GlobalFree(memory);
+            break;
+        }
+
+        memcpy(locked, text, bytes);
+        GlobalUnlock(memory);
+
+        if (!SetClipboardData(CF_UNICODETEXT, memory))
+        {
+            GlobalFree(memory);
+            break;
+        }
+
+        copied = true;
+    } while (false);
+
+    CloseClipboard();
+    return copied;
+}
+
+std::wstring get_window_text(HWND wnd)
+{
+    const int length = ::GetWindowTextLength(wnd);
+    if (length <= 0)
+        return {};
+
+    std::wstring text(static_cast<size_t>(length) + 1, L'\0');
+    ::GetWindowText(wnd, text.data(), length + 1);
+    text.resize(static_cast<size_t>(length));
+    return text;
+}
+
 constexpr int g_hidden_pref_controls[] = {
     IDC_CB_SCROLLON4,
     IDC_CB_AUTOGAMMA2,
@@ -793,7 +875,7 @@ void milk2_preferences_page::OnButtonPushed(UINT uNotifyCode, int nID, CWindow w
             break;
         case IDC_FORMAT_INFO:
             {
-                FormatInfoDlg dlg; dlg.DoModal(get_wnd());
+                FormatInfoDlg dlg(get_wnd()); dlg.DoModal(get_wnd());
             }
             break;
     }
@@ -808,6 +890,12 @@ BOOL FormatInfoDlg::OnInitDialog(CWindow, LPARAM)
         baseFont = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
     if (baseFont && GetObject(baseFont, sizeof(lf), &lf) == sizeof(lf))
     {
+        LOGFONT monoLf = lf;
+        wcscpy_s(monoLf.lfFaceName, LF_FACESIZE, L"Consolas");
+        monoLf.lfWeight = FW_NORMAL;
+        monoLf.lfPitchAndFamily = FIXED_PITCH | FF_MODERN;
+        m_monospace_font = CreateFontIndirect(&monoLf);
+
         lf.lfWeight = FW_BOLD;
         m_header_font = CreateFontIndirect(&lf);
     }
@@ -818,11 +906,20 @@ BOOL FormatInfoDlg::OnInitDialog(CWindow, LPARAM)
         GetDlgItem(IDC_FORMAT_INFO_COMMON_LABEL).SetFont(m_header_font, TRUE);
         GetDlgItem(IDC_ARTWORK_FORMAT_LABEL).SetFont(m_header_font, TRUE);
     }
+    if (m_monospace_font)
+    {
+        GetDlgItem(IDC_FORMAT_INFO_EXAMPLES_TEXT).SetFont(m_monospace_font, TRUE);
+        GetDlgItem(IDC_FORMAT_INFO_EXAMPLE_2_TEXT).SetFont(m_monospace_font, TRUE);
+        GetDlgItem(IDC_FORMAT_INFO_COMMON_TEXT).SetFont(m_monospace_font, TRUE);
+        GetDlgItem(IDC_FORMAT_INFO_BUILDER_TEXT).SetFont(m_monospace_font, TRUE);
+    }
     const int copyableControls[] = {
         IDC_FORMAT_INFO_TITLE_TEXT,
         IDC_FORMAT_INFO_EXAMPLES_TEXT,
+        IDC_FORMAT_INFO_EXAMPLE_2_TEXT,
         IDC_FORMAT_INFO_COMMON_TEXT,
         IDC_FORMAT_INFO_ARTWORK_TEXT,
+        IDC_FORMAT_INFO_BUILDER_TEXT,
     };
     for (int id : copyableControls)
     {
@@ -832,6 +929,13 @@ BOOL FormatInfoDlg::OnInitDialog(CWindow, LPARAM)
             control.SendMessage(EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELPARAM(0, 0));
         }
     }
+    CWindow fieldCombo = GetDlgItem(IDC_FORMAT_INFO_FIELD_COMBO);
+    for (const auto& entry : g_format_field_entries)
+    {
+        const int index = static_cast<int>(fieldCombo.SendMessage(CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(entry.label)));
+        fieldCombo.SendMessage(CB_SETITEMDATA, index, reinterpret_cast<LPARAM>(entry.token));
+    }
+    fieldCombo.SendMessage(CB_SETCURSEL, 0, 0);
     CenterWindow(GetParent());
     return TRUE;
 }
@@ -843,7 +947,71 @@ void FormatInfoDlg::OnDestroy()
         DeleteObject(m_header_font);
         m_header_font = nullptr;
     }
+    if (m_monospace_font)
+    {
+        DeleteObject(m_monospace_font);
+        m_monospace_font = nullptr;
+    }
     m_dark.clear();
+}
+
+void FormatInfoDlg::OnBuildCmd(UINT, int nID, CWindow)
+{
+    const auto appendBuilderText = [&](const wchar_t* text) {
+        if (!text)
+            return;
+
+        std::wstring builderText = get_window_text(GetDlgItem(IDC_FORMAT_INFO_BUILDER_TEXT));
+        builderText += text;
+        SetDlgItemText(IDC_FORMAT_INFO_BUILDER_TEXT, builderText.c_str());
+    };
+
+    const auto applyBuilderTo = [&](int controlId) {
+        if (!m_preferences_wnd)
+            return;
+
+        std::wstring builderText = get_window_text(GetDlgItem(IDC_FORMAT_INFO_BUILDER_TEXT));
+        ::SetDlgItemText(m_preferences_wnd, controlId, builderText.c_str());
+        EndDialog(IDOK);
+    };
+
+    switch (nID)
+    {
+    case IDC_FORMAT_INFO_LOAD_EXAMPLE_1:
+        SetDlgItemText(IDC_FORMAT_INFO_BUILDER_TEXT, g_format_example_1);
+        break;
+    case IDC_FORMAT_INFO_LOAD_EXAMPLE_2:
+        SetDlgItemText(IDC_FORMAT_INFO_BUILDER_TEXT, g_format_example_2);
+        break;
+    case IDC_FORMAT_INFO_ADD_FIELD:
+        {
+            CWindow fieldCombo = GetDlgItem(IDC_FORMAT_INFO_FIELD_COMBO);
+            const LRESULT selection = fieldCombo.SendMessage(CB_GETCURSEL, 0, 0);
+            if (selection != CB_ERR)
+            {
+                const auto token = reinterpret_cast<const wchar_t*>(fieldCombo.SendMessage(CB_GETITEMDATA, selection, 0));
+                appendBuilderText(token);
+            }
+        }
+        break;
+    case IDC_FORMAT_INFO_ADD_CRLF:
+        appendBuilderText(L"$crlf()");
+        break;
+    case IDC_FORMAT_INFO_CLEAR_BUILDER:
+        SetDlgItemText(IDC_FORMAT_INFO_BUILDER_TEXT, L"");
+        break;
+    case IDC_FORMAT_INFO_COPY_BUILDER:
+        copy_text_to_clipboard(m_hWnd, get_window_text(GetDlgItem(IDC_FORMAT_INFO_BUILDER_TEXT)).c_str());
+        break;
+    case IDC_FORMAT_INFO_USE_TITLE:
+        applyBuilderTo(IDC_TITLE_FORMAT);
+        break;
+    case IDC_FORMAT_INFO_USE_ARTWORK:
+        applyBuilderTo(IDC_ARTWORK_FORMAT);
+        break;
+    default:
+        break;
+    }
 }
 
 void FormatInfoDlg::OnCloseCmd(UINT, int nID, CWindow)

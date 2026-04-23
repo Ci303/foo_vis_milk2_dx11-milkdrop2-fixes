@@ -155,20 +155,31 @@ BEGIN
     COMBOBOX        IDC_TEXSIZECOMBO,204,282,99,87,CBS_DROPDOWNLIST | WS_DISABLED | WS_VSCROLL | WS_TABSTOP
 END
 
-IDD_FORMAT_INFO DIALOGEX 0, 0, 306, 190
+IDD_FORMAT_INFO DIALOGEX 0, 0, 306, 286
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Format Info"
     FONT 8, "Segoe UI", 400, 0, 0x1
     BEGIN
         LTEXT           "Title display format",IDC_TITLE_FORMAT_LABEL,7,7,292,10
-        CONTROL         "Uses foobar2000 title formatting. Type $crlf() literally to insert a line break.",IDC_FORMAT_INFO_TITLE_TEXT,"Edit",ES_MULTILINE | ES_READONLY | ES_NOHIDESEL | WS_TABSTOP,7,20,292,10
-        LTEXT           "Examples:",IDC_FORMAT_INFO_EXAMPLES_LABEL,7,31,292,10
-        CONTROL         "[%artist%$crlf()]%title%\r\n[%artist%$crlf()][%album%$crlf()]%title%",IDC_FORMAT_INFO_EXAMPLES_TEXT,"Edit",ES_MULTILINE | ES_READONLY | ES_NOHIDESEL | WS_TABSTOP,7,44,292,22
-        LTEXT           "Common fields:",IDC_FORMAT_INFO_COMMON_LABEL,7,71,292,10
-        CONTROL         "%artist% - track artist\r\n%title% - track title\r\n%album% - album title\r\n%album artist% - album artist",IDC_FORMAT_INFO_COMMON_TEXT,"Edit",ES_MULTILINE | ES_READONLY | ES_NOHIDESEL | WS_TABSTOP,7,84,292,38
-        LTEXT           "Artwork display format",IDC_ARTWORK_FORMAT_LABEL,7,129,292,10
-        CONTROL         "Leave blank to use foobar2000 album art. To override it, enter a full image path, or a title-formatting script that returns an image path.",IDC_FORMAT_INFO_ARTWORK_TEXT,"Edit",ES_MULTILINE | ES_READONLY | ES_NOHIDESEL | WS_TABSTOP,7,142,292,26
-        DEFPUSHBUTTON   "OK",IDOK,249,170,50,14
+        CONTROL         "Uses foobar2000 title formatting. Type $crlf() literally to insert a line break.",IDC_FORMAT_INFO_TITLE_TEXT,"Edit",ES_MULTILINE | ES_READONLY | ES_NOHIDESEL | WS_TABSTOP,7,20,292,18
+        LTEXT           "Examples:",IDC_FORMAT_INFO_EXAMPLES_LABEL,7,44,292,10
+        CONTROL         "[%artist%$crlf()]%title%",IDC_FORMAT_INFO_EXAMPLES_TEXT,"Edit",ES_AUTOHSCROLL | ES_READONLY | ES_NOHIDESEL | WS_TABSTOP,7,57,292,13
+        CONTROL         "[%artist%$crlf()][%album%$crlf()]%title%",IDC_FORMAT_INFO_EXAMPLE_2_TEXT,"Edit",ES_AUTOHSCROLL | ES_READONLY | ES_NOHIDESEL | WS_TABSTOP,7,73,292,13
+        PUSHBUTTON      "Load 1",IDC_FORMAT_INFO_LOAD_EXAMPLE_1,193,89,50,14
+        PUSHBUTTON      "Load 2",IDC_FORMAT_INFO_LOAD_EXAMPLE_2,249,89,50,14
+        LTEXT           "Common fields:",IDC_FORMAT_INFO_COMMON_LABEL,7,107,292,10
+        CONTROL         "%artist% - track artist\r\n%title% - track title\r\n%album% - album title\r\n%album artist% - album artist",IDC_FORMAT_INFO_COMMON_TEXT,"Edit",ES_MULTILINE | ES_READONLY | ES_NOHIDESEL | WS_TABSTOP,7,120,292,38
+        COMBOBOX        IDC_FORMAT_INFO_FIELD_COMBO,7,162,180,120,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+        PUSHBUTTON      "Add",IDC_FORMAT_INFO_ADD_FIELD,193,162,50,14
+        PUSHBUTTON      "Newline",IDC_FORMAT_INFO_ADD_CRLF,249,162,50,14
+        LTEXT           "Artwork display format",IDC_ARTWORK_FORMAT_LABEL,7,184,292,10
+        CONTROL         "Leave blank to use foobar2000 album art. To override it, enter a full image path, or a title-formatting script that returns an image path.",IDC_FORMAT_INFO_ARTWORK_TEXT,"Edit",ES_MULTILINE | ES_READONLY | ES_NOHIDESEL | WS_TABSTOP,7,197,292,26
+        LTEXT           "Builder",IDC_STATIC,7,226,292,10
+        EDITTEXT        IDC_FORMAT_INFO_BUILDER_TEXT,7,239,292,22,ES_MULTILINE | ES_AUTOVSCROLL | WS_TABSTOP
+        PUSHBUTTON      "Clear",IDC_FORMAT_INFO_CLEAR_BUILDER,7,266,50,14
+        PUSHBUTTON      "Copy",IDC_FORMAT_INFO_COPY_BUILDER,63,266,50,14
+        PUSHBUTTON      "Use Title",IDC_FORMAT_INFO_USE_TITLE,157,266,68,14
+        PUSHBUTTON      "Use Artwork",IDC_FORMAT_INFO_USE_ARTWORK,231,266,68,14
     END
 
 //IDD_PROPPAGE_1 DIALOGEX 0, 0, 320, 240

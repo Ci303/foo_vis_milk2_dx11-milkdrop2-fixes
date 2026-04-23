@@ -446,6 +446,8 @@ class FontDlg : public CDialogImpl<FontDlg>
 class FormatInfoDlg : public CDialogImpl<FormatInfoDlg>
 {
   public:
+    explicit FormatInfoDlg(HWND preferencesWnd) : m_preferences_wnd(preferencesWnd) {}
+
     enum format_info_dialog_id
     {
         IDD = IDD_FORMAT_INFO
@@ -454,6 +456,14 @@ class FormatInfoDlg : public CDialogImpl<FormatInfoDlg>
     BEGIN_MSG_MAP(FormatInfoDlg)
         MSG_WM_INITDIALOG(OnInitDialog)
         MSG_WM_DESTROY(OnDestroy)
+        COMMAND_ID_HANDLER_EX(IDC_FORMAT_INFO_LOAD_EXAMPLE_1, OnBuildCmd)
+        COMMAND_ID_HANDLER_EX(IDC_FORMAT_INFO_LOAD_EXAMPLE_2, OnBuildCmd)
+        COMMAND_ID_HANDLER_EX(IDC_FORMAT_INFO_ADD_FIELD, OnBuildCmd)
+        COMMAND_ID_HANDLER_EX(IDC_FORMAT_INFO_ADD_CRLF, OnBuildCmd)
+        COMMAND_ID_HANDLER_EX(IDC_FORMAT_INFO_CLEAR_BUILDER, OnBuildCmd)
+        COMMAND_ID_HANDLER_EX(IDC_FORMAT_INFO_COPY_BUILDER, OnBuildCmd)
+        COMMAND_ID_HANDLER_EX(IDC_FORMAT_INFO_USE_TITLE, OnBuildCmd)
+        COMMAND_ID_HANDLER_EX(IDC_FORMAT_INFO_USE_ARTWORK, OnBuildCmd)
         COMMAND_ID_HANDLER_EX(IDOK, OnCloseCmd)
         COMMAND_ID_HANDLER_EX(IDCANCEL, OnCloseCmd)
     END_MSG_MAP()
@@ -461,10 +471,13 @@ class FormatInfoDlg : public CDialogImpl<FormatInfoDlg>
   private:
     BOOL OnInitDialog(CWindow, LPARAM);
     void OnDestroy();
+    void OnBuildCmd(UINT, int nID, CWindow);
     void OnCloseCmd(UINT, int nID, CWindow);
 
     fb2k::CDarkModeHooks m_dark;
+    HWND m_preferences_wnd = nullptr;
     HFONT m_header_font = nullptr;
+    HFONT m_monospace_font = nullptr;
 };
 
 class PresetBlacklistDlg : public CDialogImpl<PresetBlacklistDlg>

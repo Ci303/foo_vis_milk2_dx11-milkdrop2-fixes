@@ -2,6 +2,14 @@
 
 ## Release History
 
+### 0.2.1.24 - 2026-04-23
+
+Format-info builder update for the foobar2000 x64 component.
+
+- Reworked the `Format Info...` dialog into a small builder that can load example layouts, append common title-format tokens from a dropdown, insert a newline token, and write the built result directly back into the title or artwork format field.
+- Expanded the builder dropdown with practical metadata and technical fields including date, track/disc numbers, genre, duration, codec, bitrate, sample rate, bit depth, channels, file name, and file path.
+- Renamed the builder `Add CRLF` action to `Newline` so the control matches what users are trying to do rather than the underlying foobar2000 token name.
+
 ### 0.2.1.23 - 2026-04-23
 
 Format-info copyability follow-up for the foobar2000 x64 component.

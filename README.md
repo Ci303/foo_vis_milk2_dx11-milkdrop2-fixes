@@ -70,7 +70,7 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Current public packages are x64 builds intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
 - Import `foo_vis_milk2.fb2k-component` in **File > Preferences > Components > Install...**.
-- Current release packages are named like `foo_vis_milk2-0.2.1.23.fb2k-component`.
+- Current release packages are named like `foo_vis_milk2-0.2.1.24.fb2k-component`.
 - Restart foobar2000 after the component is installed.
 
 ### 2. Add presets and textures
@@ -168,7 +168,7 @@ The current public release line includes the following user-visible behaviour ch
 - Preferences dialog layout fixes for the newer settings.
 - FPS cap persistence and mode-aware embedded/fullscreen pacing.
 - Embedded-panel title formatting that honours the configured format string and updates cleanly after preference edits.
-- A dark-mode-aware `Format Info...` dialog for title and artwork display format fields.
+- A dark-mode-aware `Format Info...` dialog with a built-in title/artwork format builder, example loading, and direct field insertion.
 - Reduced release-build console noise from routine MilkDrop status and warning overlays.
 - Known-bad preset filtering remains ongoing; some presets may still crash, hang, or render as a black screen until they are identified and blacklisted.
 
