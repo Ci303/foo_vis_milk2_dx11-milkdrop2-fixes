@@ -918,6 +918,10 @@
 #define IDC_FORMAT_INFO                 1117
 #define IDC_FORMAT_INFO_EXAMPLES_LABEL  1118
 #define IDC_FORMAT_INFO_COMMON_LABEL    1119
+#define IDC_FORMAT_INFO_TITLE_TEXT      1120
+#define IDC_FORMAT_INFO_EXAMPLES_TEXT   1121
+#define IDC_FORMAT_INFO_COMMON_TEXT     1122
+#define IDC_FORMAT_INFO_ARTWORK_TEXT    1123
 #define ID_SHOWHELP                     40007
 #define ID_SHOWPLAYLIST                 40008
 #define ID_QUIT                         40009
@@ -930,7 +934,7 @@
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        105
 #define _APS_NEXT_COMMAND_VALUE         40011
-#define _APS_NEXT_CONTROL_VALUE         1118
+#define _APS_NEXT_CONTROL_VALUE         1124
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

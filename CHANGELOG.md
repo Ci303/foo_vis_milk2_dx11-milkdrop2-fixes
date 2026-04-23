@@ -2,6 +2,14 @@
 
 ## Release History
 
+### 0.2.1.23 - 2026-04-23
+
+Format-info copyability follow-up for the foobar2000 x64 component.
+
+- Changed the `Format Info...` dialog body text blocks to read-only edit controls so users can select and copy the title-format examples, common fields, and artwork-format guidance.
+- Kept the bold section headers and tightened layout from `0.2.1.22` while making the dialog content more usable for copy/paste.
+- Refreshed the README notes for the current public package naming and format-info behavior.
+
 ### 0.2.1.22 - 2026-04-23
 
 Format-info readability follow-up for the foobar2000 x64 component.

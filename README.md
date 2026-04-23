@@ -70,7 +70,7 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Current public packages are x64 builds intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
 - Import `foo_vis_milk2.fb2k-component` in **File > Preferences > Components > Install...**.
-- Current release packages are named like `foo_vis_milk2-0.2.1.22.fb2k-component`.
+- Current release packages are named like `foo_vis_milk2-0.2.1.23.fb2k-component`.
 - Restart foobar2000 after the component is installed.
 
 ### 2. Add presets and textures
@@ -106,7 +106,7 @@ Example:
 
 For refresh rates above 60 FPS, use `Unlimited`. Fixed-rate values are useful when you want the visualizer paced near a specific cap such as 60 FPS; `Unlimited` is intended for high-refresh displays and uncapped fullscreen testing.
 
-Title display format uses normal foobar2000 title formatting. Artwork display format can be left blank to use standard foobar2000 album art, or set to a full image path or a title-formatting script that returns one. The preferences page includes a `Format Info...` dialog with examples for both fields.
+Title display format uses normal foobar2000 title formatting. Artwork display format can be left blank to use standard foobar2000 album art, or set to a full image path or a title-formatting script that returns one. The preferences page includes a `Format Info...` dialog with examples for both fields, and its text can be selected and copied.
 
 FPS behaviour is mode-aware:
 

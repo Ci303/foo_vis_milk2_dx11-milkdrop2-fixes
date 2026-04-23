@@ -818,6 +818,20 @@ BOOL FormatInfoDlg::OnInitDialog(CWindow, LPARAM)
         GetDlgItem(IDC_FORMAT_INFO_COMMON_LABEL).SetFont(m_header_font, TRUE);
         GetDlgItem(IDC_ARTWORK_FORMAT_LABEL).SetFont(m_header_font, TRUE);
     }
+    const int copyableControls[] = {
+        IDC_FORMAT_INFO_TITLE_TEXT,
+        IDC_FORMAT_INFO_EXAMPLES_TEXT,
+        IDC_FORMAT_INFO_COMMON_TEXT,
+        IDC_FORMAT_INFO_ARTWORK_TEXT,
+    };
+    for (int id : copyableControls)
+    {
+        CWindow control = GetDlgItem(id);
+        if (control)
+        {
+            control.SendMessage(EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELPARAM(0, 0));
+        }
+    }
     CenterWindow(GetParent());
     return TRUE;
 }

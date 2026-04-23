@@ -158,18 +158,18 @@ END
 IDD_FORMAT_INFO DIALOGEX 0, 0, 306, 190
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Format Info"
-FONT 8, "Segoe UI", 400, 0, 0x1
-BEGIN
-    LTEXT           "Title display format",IDC_TITLE_FORMAT_LABEL,7,7,292,10
-    LTEXT           "Uses foobar2000 title formatting. Type $crlf() literally to insert a line break.",IDC_STATIC,7,20,292,18
-    LTEXT           "Examples:",IDC_FORMAT_INFO_EXAMPLES_LABEL,7,34,292,10
-    LTEXT           "[%artist%$crlf()]%title%\n[%artist%$crlf()][%album%$crlf()]%title%",IDC_STATIC,7,47,292,22
-    LTEXT           "Common fields:",IDC_FORMAT_INFO_COMMON_LABEL,7,76,292,10
-    LTEXT           "%artist% - track artist\n%title% - track title\n%album% - album title\n%album artist% - album artist",IDC_STATIC,7,89,292,38
-    LTEXT           "Artwork display format",IDC_ARTWORK_FORMAT_LABEL,7,134,292,10
-    LTEXT           "Leave blank to use foobar2000 album art. To override it, enter a full image path, or a title-formatting script that returns an image path.",IDC_STATIC,7,147,292,18
-    DEFPUSHBUTTON   "OK",IDOK,249,170,50,14
-END
+    FONT 8, "Segoe UI", 400, 0, 0x1
+    BEGIN
+        LTEXT           "Title display format",IDC_TITLE_FORMAT_LABEL,7,7,292,10
+        CONTROL         "Uses foobar2000 title formatting. Type $crlf() literally to insert a line break.",IDC_FORMAT_INFO_TITLE_TEXT,"Edit",ES_MULTILINE | ES_READONLY | ES_NOHIDESEL | WS_TABSTOP,7,20,292,10
+        LTEXT           "Examples:",IDC_FORMAT_INFO_EXAMPLES_LABEL,7,31,292,10
+        CONTROL         "[%artist%$crlf()]%title%\r\n[%artist%$crlf()][%album%$crlf()]%title%",IDC_FORMAT_INFO_EXAMPLES_TEXT,"Edit",ES_MULTILINE | ES_READONLY | ES_NOHIDESEL | WS_TABSTOP,7,44,292,22
+        LTEXT           "Common fields:",IDC_FORMAT_INFO_COMMON_LABEL,7,71,292,10
+        CONTROL         "%artist% - track artist\r\n%title% - track title\r\n%album% - album title\r\n%album artist% - album artist",IDC_FORMAT_INFO_COMMON_TEXT,"Edit",ES_MULTILINE | ES_READONLY | ES_NOHIDESEL | WS_TABSTOP,7,84,292,38
+        LTEXT           "Artwork display format",IDC_ARTWORK_FORMAT_LABEL,7,129,292,10
+        CONTROL         "Leave blank to use foobar2000 album art. To override it, enter a full image path, or a title-formatting script that returns an image path.",IDC_FORMAT_INFO_ARTWORK_TEXT,"Edit",ES_MULTILINE | ES_READONLY | ES_NOHIDESEL | WS_TABSTOP,7,142,292,26
+        DEFPUSHBUTTON   "OK",IDOK,249,170,50,14
+    END
 
 //IDD_PROPPAGE_1 DIALOGEX 0, 0, 320, 240
 //STYLE DS_SETFONT | DS_FIXEDSYS | DS_CONTROL | WS_CHILD | WS_VISIBLE
