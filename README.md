@@ -46,6 +46,11 @@ This repository already includes the DirectX 11 foobar2000 port from upstream. O
 - Added crash diagnostics and minidump logging under `<foobar2000 profile folder>\milkdrop2\crashlogs` to help investigate intermittent runtime crashes.
 - Fixed FPS cap persistence so a saved capped value such as `60` is not replaced by stale legacy `0`/Unlimited state at runtime.
 - Split embedded and fullscreen frame pacing so embedded rendering uses the foobar2000 UI timer cap while fullscreen also enables MilkDrop's internal fullscreen limiter.
+- Fixed embedded-panel song title formatting so the configured title display format is compiled and applied instead of falling back to a hardcoded default title pattern.
+- Reset cached title-format scripts when MilkDrop preferences change so edits to `%artist%`, `%album%`, `$crlf()`, and related foobar2000 title-format fields take effect immediately.
+- Added a dark-mode-aware `Format Info...` dialog for the title and artwork display format fields.
+- Reworked the current preferences layout so the newer playback and formatting controls fit cleanly without clipped labels or awkward alignment.
+- Stopped mirroring MilkDrop's upper-right status and warning overlay messages into the foobar2000 console in release builds, reducing routine console-log noise during normal use.
 
 ## Current Behaviour and Limits
 
@@ -100,6 +105,8 @@ Example:
   - preset blacklist editing
 
 For refresh rates above 60 FPS, use `Unlimited`. Fixed-rate values are useful when you want the visualizer paced near a specific cap such as 60 FPS; `Unlimited` is intended for high-refresh displays and uncapped fullscreen testing.
+
+Title display format uses normal foobar2000 title formatting. Artwork display format can be left blank to use standard foobar2000 album art, or set to a full image path or a title-formatting script that returns one. The preferences page includes a `Format Info...` dialog with examples for both fields.
 
 FPS behaviour is mode-aware:
 
@@ -160,6 +167,9 @@ The current public release line includes the following user-visible behaviour ch
 - Crash diagnostics/minidump logging for intermittent runtime crash investigation.
 - Preferences dialog layout fixes for the newer settings.
 - FPS cap persistence and mode-aware embedded/fullscreen pacing.
+- Embedded-panel title formatting that honours the configured format string and updates cleanly after preference edits.
+- A dark-mode-aware `Format Info...` dialog for title and artwork display format fields.
+- Reduced release-build console noise from routine MilkDrop status and warning overlays.
 - Known-bad preset filtering remains ongoing; some presets may still crash, hang, or render as a black screen until they are identified and blacklisted.
 
 ## Releases
