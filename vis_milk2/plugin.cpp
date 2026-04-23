@@ -4999,7 +4999,7 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
         {
             SelectFont(SIMPLE_FONT);
             float t = GetTime();
-#ifdef _FOOBAR
+#if defined(_FOOBAR) && defined(_DEBUG)
             // https://learn.microsoft.com/en-us/windows/win32/dataxchg/using-data-copy
             ErrorCopy msg;
             COPYDATASTRUCT cds{};
@@ -5018,7 +5018,7 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
                     DWORD cb = 0;
                     DWORD z = 0xFF000000 | (cr << 16) | (cg << 8) | cb;
                     MilkDropTextOut_Box(buf, it->text, 0xFFFFFFFF, MTO_UPPER_RIGHT, true, it->bold ? z : 0xFF000000);
-#ifdef _FOOBAR
+#if defined(_FOOBAR) && defined(_DEBUG)
                     if (!it->printed)
                     {
                         _snwprintf_s(msg.error, 1024, L"%s ", it->msg.c_str());

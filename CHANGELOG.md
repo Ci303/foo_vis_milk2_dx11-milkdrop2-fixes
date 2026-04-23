@@ -10,6 +10,7 @@ Title-format and preferences layout update for the foobar2000 x64 component.
 - Reset the cached title-format script when MilkDrop preferences change, so edits to `%artist%`, `%album%`, `$crlf()`, and other foobar2000 title-format fields take effect without stale formatting.
 - Added a dark-mode-aware `Format Info...` dialog explaining title display and artwork display format usage.
 - Reworked the MilkDrop preferences layout to avoid clipped checkbox labels, place mouse playback controls with the other startup/playback options, and align the title/artwork format controls with the existing action buttons.
+- Stopped mirroring MilkDrop's upper-right status and warning overlay messages into the foobar2000 console in release builds, so routine preset scan and preset-script warnings no longer create desktop console log captures from this component.
 
 ### 0.2.1.20 - 2026-04-22
 
