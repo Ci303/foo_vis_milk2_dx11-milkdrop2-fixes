@@ -631,6 +631,7 @@
 #define IDS_ARTWORK_FORMAT_HELP         648
 #define IDD_PREFS                       700
 #define IDD_PRESET_BLACKLIST            701
+#define IDD_FORMAT_INFO                 702
 //#define IDC_CB_FOG                      1000
 //#define IDC_CB_SUPERTEX                 1001
 //#define IDC_CB_HELP_MSG                 1001
@@ -914,6 +915,7 @@
 #define IDC_FONTOUTLINE9                1114
 #define IDC_FONTOUTLINE_CAPTION         1115
 #define IDC_FONTOUTLINE_TEXT            1116
+#define IDC_FORMAT_INFO                 1117
 #define ID_SHOWHELP                     40007
 #define ID_SHOWPLAYLIST                 40008
 #define ID_QUIT                         40009
@@ -924,9 +926,9 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        104
+#define _APS_NEXT_RESOURCE_VALUE        105
 #define _APS_NEXT_COMMAND_VALUE         40011
-#define _APS_NEXT_CONTROL_VALUE         1117
+#define _APS_NEXT_CONTROL_VALUE         1118
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

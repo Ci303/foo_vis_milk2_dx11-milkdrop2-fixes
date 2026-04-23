@@ -2,6 +2,15 @@
 
 ## Release History
 
+### 0.2.1.21 - 2026-04-23
+
+Title-format and preferences layout update for the foobar2000 x64 component.
+
+- Fixed song title formatting in the embedded visualizer panel so the configured title display format is compiled instead of always falling back to the default `%title%` pattern.
+- Reset the cached title-format script when MilkDrop preferences change, so edits to `%artist%`, `%album%`, `$crlf()`, and other foobar2000 title-format fields take effect without stale formatting.
+- Added a dark-mode-aware `Format Info...` dialog explaining title display and artwork display format usage.
+- Reworked the MilkDrop preferences layout to avoid clipped checkbox labels, place mouse playback controls with the other startup/playback options, and align the title/artwork format controls with the existing action buttons.
+
 ### 0.2.1.20 - 2026-04-22
 
 Crash-stability and shader-state correctness update for the foobar2000 x64 component.

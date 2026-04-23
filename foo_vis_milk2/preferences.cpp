@@ -791,7 +791,29 @@ void milk2_preferences_page::OnButtonPushed(UINT uNotifyCode, int nID, CWindow w
                 PresetBlacklistDlg dlg; dlg.DoModal(core_api::get_main_window());
             }
             break;
+        case IDC_FORMAT_INFO:
+            {
+                FormatInfoDlg dlg; dlg.DoModal(get_wnd());
+            }
+            break;
     }
+}
+
+BOOL FormatInfoDlg::OnInitDialog(CWindow, LPARAM)
+{
+    m_dark.AddDialogWithControls(*this);
+    CenterWindow(GetParent());
+    return TRUE;
+}
+
+void FormatInfoDlg::OnDestroy()
+{
+    m_dark.clear();
+}
+
+void FormatInfoDlg::OnCloseCmd(UINT, int nID, CWindow)
+{
+    EndDialog(nID);
 }
 
 BOOL PresetBlacklistDlg::OnInitDialog(CWindow, LPARAM)

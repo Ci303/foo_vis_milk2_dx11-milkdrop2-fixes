@@ -1123,7 +1123,7 @@ LRESULT milk2_ui_element::OnMilk2Message(UINT uMsg, WPARAM wParam, LPARAM lParam
         //MILK2_CONSOLE_LOG("IPC_GET_PLAYING_TITLE")
         if (m_title.is_empty())
         {
-            pfc::string8 pattern = default_szTitleFormat;
+            pfc::string8 pattern = pfc::utf8FromWide(s_config.settings.m_szTitleFormat);
             static_api_ptr_t<titleformat_compiler>()->compile_safe_ex(m_title, pattern);
         }
 
@@ -1274,6 +1274,7 @@ LRESULT milk2_ui_element::OnConfigurationChange(UINT uMsg, WPARAM wParam, LPARAM
 #endif
                     s_config.reset();
                     m_script.reset();
+                    m_title.reset();
                     g_plugin.PanelSettings(&s_config.settings);
                     ApplyFrameRateLimit();
 #ifdef TIMER_TP

@@ -359,6 +359,7 @@ class milk2_preferences_page : public preferences_page_instance, public CDialogI
         COMMAND_HANDLER_EX(ID_MSG, BN_CLICKED, OnButtonPushed)
         COMMAND_HANDLER_EX(ID_FONTS, BN_CLICKED, OnButtonPushed)
         COMMAND_HANDLER_EX(ID_BLACKLIST, BN_CLICKED, OnButtonPushed)
+        COMMAND_HANDLER_EX(IDC_FORMAT_INFO, BN_CLICKED, OnButtonPushed)
     END_MSG_MAP()
     // clang-format on
 
@@ -440,6 +441,29 @@ class FontDlg : public CDialogImpl<FontDlg>
 
     BEGIN_MSG_MAP(FontDlg)
     END_MSG_MAP()
+};
+
+class FormatInfoDlg : public CDialogImpl<FormatInfoDlg>
+{
+  public:
+    enum format_info_dialog_id
+    {
+        IDD = IDD_FORMAT_INFO
+    };
+
+    BEGIN_MSG_MAP(FormatInfoDlg)
+        MSG_WM_INITDIALOG(OnInitDialog)
+        MSG_WM_DESTROY(OnDestroy)
+        COMMAND_ID_HANDLER_EX(IDOK, OnCloseCmd)
+        COMMAND_ID_HANDLER_EX(IDCANCEL, OnCloseCmd)
+    END_MSG_MAP()
+
+  private:
+    BOOL OnInitDialog(CWindow, LPARAM);
+    void OnDestroy();
+    void OnCloseCmd(UINT, int nID, CWindow);
+
+    fb2k::CDarkModeHooks m_dark;
 };
 
 class PresetBlacklistDlg : public CDialogImpl<PresetBlacklistDlg>
