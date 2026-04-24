@@ -14,7 +14,11 @@ Format-info builder update for the foobar2000 x64 component.
 - Fixed live font refresh for all fonts managed by the `Select Fonts` dialog so changes to face, size, bold, italic, and outline settings apply to the running overlay text without requiring stale DirectWrite font objects to be recreated later.
 - Fixed the `Animated Song Titles` font path so centered title and click-status text now honor the configured size, weight, style, and live updates from the font dialog.
 - Updated the `Select Fonts` dialog to push saved font changes into the running MilkDrop instance immediately instead of waiting for a later config refresh.
+- Added an optional separate `Click Prompts` font slot plus a `Use separate click prompt font` preference so click-to-play/pause confirmations can have their own face and size while still using the centered animated-text behavior.
+- Migrated saved font settings when the new click-prompt font slot was added so existing `Animated Song Titles` choices are preserved instead of falling back to defaults.
+- Rebalanced centered title sizing so the primary track-title animation renders larger than auxiliary click/status prompts in the active texture-based title path.
 - Split preset expression recompilation into staged load steps so rare heavy presets are less likely to hitch when they first load.
+- Reduced preset-list scan overhead by hashing the blacklist lookup, scanning a larger preset header up front, and avoiding more slow fallback INI reads during directory walks.
 - Applied advanced-preferences updates to the live runtime path instead of leaving them as restart-only changes.
 - Reused `_SUPERTEXT` device resources across frames so centered title/status animations stop recreating D3D state every render.
 - Guarded immediate and staged preset loading so failed preset imports no longer continue through partially initialized state.

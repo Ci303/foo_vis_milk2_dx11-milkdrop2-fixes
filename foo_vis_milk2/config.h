@@ -179,6 +179,9 @@ static constexpr GUID guid_cfg_bEnableMouseWheelVolume = {
 static constexpr GUID guid_cfg_bEnableMouseClickPlayPause = {
     0x1b4f7e91, 0x6c31, 0x44eb, {0x91, 0x1f, 0xeb, 0x4c, 0x65, 0xee, 0x3b, 0xf8}
 }; // {1B4F7E91-6C31-44EB-911F-EB4C65EE3BF8}
+static constexpr GUID guid_cfg_bSeparateClickPromptFont = {
+    0x2284aa89, 0x905e, 0x43bb, {0x95, 0x0d, 0xc0, 0x77, 0xcd, 0x78, 0x8c, 0x85}
+}; // {2284AA89-905E-43BB-950D-C077CD788C85}
 // Preferences derived from other settings or hidden.
 static constexpr GUID guid_cfg_bTexSizeWasAutoPow2 = {
     0xb85e5868, 0xde29, 0x40a1, {0x84, 0x14, 0x62, 0x2e, 0xb6, 0x82, 0xbc, 0xff}
@@ -219,7 +222,8 @@ static constexpr bool default_bShowPressF1ForHelp = true;
 //static constexpr bool default_bShowMenuToolTips;
 static constexpr bool default_bSongTitleAnims = true;
 static constexpr bool default_bSongTitleOutline = true;
-static constexpr uint32_t default_nFontOutlineMask = default_bSongTitleOutline ? (1u << SONGTITLE_FONT) : 0u;
+static constexpr bool default_bSeparateClickPromptFont = false;
+static constexpr uint32_t default_nFontOutlineMask = default_bSongTitleOutline ? ((1u << SONGTITLE_FONT) | (1u << CLICKPROMPT_FONT)) : 0u;
 static constexpr bool default_bShowFPS = false;
 static constexpr bool default_bShowRating = false;
 static constexpr bool default_bShowPresetInfo = false;
@@ -330,6 +334,7 @@ class milk2_preferences_page : public preferences_page_instance, public CDialogI
         COMMAND_HANDLER_EX(IDC_CB_NOCOMPSHADER, BN_CLICKED, OnButtonClick)
         COMMAND_HANDLER_EX(IDC_CB_MOUSE_WHEEL_VOLUME, BN_CLICKED, OnButtonClick)
         COMMAND_HANDLER_EX(IDC_CB_MOUSE_CLICK_PLAYPAUSE, BN_CLICKED, OnButtonClick)
+        COMMAND_HANDLER_EX(IDC_CB_SEPARATE_CLICK_PROMPT_FONT, BN_CLICKED, OnButtonClick)
         COMMAND_HANDLER_EX(IDC_W_MAXFPS2, CBN_SELCHANGE, OnComboChange)
         COMMAND_HANDLER_EX(IDC_FS_MAXFPS2, CBN_SELCHANGE, OnComboChange)
         COMMAND_HANDLER_EX(IDC_CB_WPT, BN_CLICKED, OnButtonClick)
@@ -390,7 +395,7 @@ class milk2_preferences_page : public preferences_page_instance, public CDialogI
     void UpdateMaxFps(int screenmode) const;
     void SaveMaxFps(int screenmode) const;
     void OpenToEdit(LPWSTR szDefault, LPCWSTR szFilename);
-    void InitFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2, DWORD bold_id, DWORD ital_id, DWORD aa_id, DWORD outline_id, HWND hdlg, DWORD ctrl4, wchar_t* szFontName, int fontIndex);
+    void InitFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2, DWORD bold_id, DWORD ital_id, DWORD aa_id, DWORD outline_id, HWND hdlg, DWORD ctrl4, const wchar_t* szFontName, int fontIndex);
     void SaveFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2, DWORD bold_id, DWORD ital_id, DWORD aa_id, DWORD outline_id, HWND hdlg, int fontIndex, uint32_t& outlineMask);
 
     const preferences_page_callback::ptr m_callback;

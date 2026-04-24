@@ -261,6 +261,7 @@ milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_ins
     m_pending_animated_text_kind = pending_animated_text_kind::none;
     m_pending_animated_status_duration = 1.6f;
     m_pending_animated_status_fade_time = 0.35f;
+    m_pending_animated_status_font = SONGTITLE_FONT;
     m_last_time = 0.0;
 #if defined(TIMER_TP)
     m_tpTimer = nullptr;
@@ -2006,7 +2007,7 @@ void milk2_ui_element::UpdatePlaylist()
     g_plugin.m_playlist_top_idx = -1;
 }
 
-void milk2_ui_element::QueueStatusText(const wchar_t* text, float duration, float fadeTime)
+void milk2_ui_element::QueueStatusText(const wchar_t* text, float duration, float fadeTime, int fontIndex)
 {
     if (!text || text[0] == L'\0')
         return;
@@ -2016,6 +2017,7 @@ void milk2_ui_element::QueueStatusText(const wchar_t* text, float duration, floa
     m_pending_animated_status_text = text;
     m_pending_animated_status_duration = duration;
     m_pending_animated_status_fade_time = fadeTime;
+    m_pending_animated_status_font = fontIndex;
 }
 
 bool milk2_ui_element::ConsumeClickPauseConfirmation(DWORD now) noexcept
@@ -2039,18 +2041,19 @@ void milk2_ui_element::QueueClickPauseConfirmation(DWORD now)
     m_click_pause_confirmation_required = false;
     m_click_pause_confirmation_pending = true;
     m_click_pause_confirmation_tick = now;
+    const int clickPromptFont = s_config.settings.m_bSeparateClickPromptFont ? CLICKPROMPT_FONT : SONGTITLE_FONT;
 
     if (!m_playback_control->is_playing())
     {
-        QueueStatusText(L"Click again to play", 2.4f, 0.35f);
+        QueueStatusText(L"Click again to play", 2.4f, 0.35f, clickPromptFont);
     }
     else if (m_playback_control->is_paused())
     {
-        QueueStatusText(L"Click again to resume", 2.4f, 0.35f);
+        QueueStatusText(L"Click again to resume", 2.4f, 0.35f, clickPromptFont);
     }
     else
     {
-        QueueStatusText(L"Click again to pause", 2.4f, 0.35f);
+        QueueStatusText(L"Click again to pause", 2.4f, 0.35f, clickPromptFont);
     }
 }
 
@@ -2062,7 +2065,10 @@ void milk2_ui_element::TogglePlaybackFromClick()
     const bool was_playing = m_playback_control->is_playing() && !m_playback_control->is_paused();
     m_playback_control->toggle_pause();
     if (was_playing)
-        QueueStatusText(L"Paused");
+    {
+        const int clickPromptFont = s_config.settings.m_bSeparateClickPromptFont ? CLICKPROMPT_FONT : SONGTITLE_FONT;
+        QueueStatusText(L"Paused", 1.6f, 0.35f, clickPromptFont);
+    }
     else
         QueueSongTitle();
 }
@@ -2080,6 +2086,7 @@ void milk2_ui_element::FlushPendingAnimatedText()
     std::wstring statusText;
     float duration = 1.6f;
     float fadeTime = 0.35f;
+    int fontIndex = SONGTITLE_FONT;
 
     {
         std::lock_guard<std::mutex> lock(m_pending_animated_text_mutex);
@@ -2090,6 +2097,7 @@ void milk2_ui_element::FlushPendingAnimatedText()
         statusText = m_pending_animated_status_text;
         duration = m_pending_animated_status_duration;
         fadeTime = m_pending_animated_status_fade_time;
+        fontIndex = m_pending_animated_status_font;
         m_pending_animated_text_kind = pending_animated_text_kind::none;
         m_pending_animated_status_text.clear();
     }
@@ -2097,7 +2105,7 @@ void milk2_ui_element::FlushPendingAnimatedText()
     if (kind == pending_animated_text_kind::song_title)
         g_plugin.LaunchSongTitleAnim(true);
     else if (!statusText.empty())
-        g_plugin.LaunchStatusText(statusText.c_str(), duration, fadeTime);
+        g_plugin.LaunchStatusText(statusText.c_str(), duration, fadeTime, static_cast<eFontIndex>(fontIndex));
 }
 
 bool milk2_ui_element::LaunchSongTitle()
@@ -2105,9 +2113,9 @@ bool milk2_ui_element::LaunchSongTitle()
     return run_plugin_locked("LaunchSongTitle", [] { g_plugin.LaunchSongTitleAnim(true); }, true);
 }
 
-bool milk2_ui_element::LaunchStatusText(const wchar_t* text, float duration, float fadeTime)
+bool milk2_ui_element::LaunchStatusText(const wchar_t* text, float duration, float fadeTime, int fontIndex)
 {
-    return run_plugin_locked("LaunchStatusText", [&] { g_plugin.LaunchStatusText(text, duration, fadeTime); }, true);
+    return run_plugin_locked("LaunchStatusText", [&] { g_plugin.LaunchStatusText(text, duration, fadeTime, static_cast<eFontIndex>(fontIndex)); }, true);
 }
 
 #ifdef TIMER_TP

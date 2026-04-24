@@ -125,7 +125,7 @@
 // by simply `#define`ing them here, UP TO A MAXIMUM OF 5.
 // Access the font by calling `GetFont(EXTRA_1)` for extra font #1,
 // `GetExtraFont(EXTRA_2)` for extra font #2, and so on.
-#define NUM_EXTRA_FONTS 2 // <- do not exceed 5 here!
+#define NUM_EXTRA_FONTS 3 // <- do not exceed 5 here!
 #define TOOLTIP_FONT EXTRA_1
 //#define EXTRA_FONT_1_NAME "Tooltips" <- Defined in the STRINGTABLE  resources
 #define EXTRA_FONT_1_DEFAULT_FACE L"Calibri"
@@ -140,6 +140,13 @@
 #define EXTRA_FONT_2_DEFAULT_BOLD 0
 #define EXTRA_FONT_2_DEFAULT_ITAL 1
 #define EXTRA_FONT_2_DEFAULT_AA 1
+#define CLICKPROMPT_FONT EXTRA_3
+#define EXTRA_FONT_3_NAME L"Click Prompts"
+#define EXTRA_FONT_3_DEFAULT_FACE EXTRA_FONT_2_DEFAULT_FACE
+#define EXTRA_FONT_3_DEFAULT_SIZE EXTRA_FONT_2_DEFAULT_SIZE
+#define EXTRA_FONT_3_DEFAULT_BOLD EXTRA_FONT_2_DEFAULT_BOLD
+#define EXTRA_FONT_3_DEFAULT_ITAL EXTRA_FONT_2_DEFAULT_ITAL
+#define EXTRA_FONT_3_DEFAULT_AA EXTRA_FONT_2_DEFAULT_AA
 
 #define WINDOWCAPTION SHORTNAME // caption that will appear on the plugin window
 #define DLLDESC LONGNAME        // description of this DLL, as it appears in Winamp's list of visualization plugins

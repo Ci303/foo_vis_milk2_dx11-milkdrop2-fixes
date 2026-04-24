@@ -75,6 +75,8 @@
 #include "pch.h"
 #include "plugin.h"
 
+#include <unordered_set>
+
 #include "defines.h"
 #include "shell_defines.h"
 #include "utility.h"
@@ -711,6 +713,7 @@ void CPlugin::MilkDropPreInitialize()
     m_supertext.bRedrawSuperText = false;
     m_supertext.nFontSizeUsed = 0;
     m_supertext.nTextWidthUsed = 0;
+    m_supertext.nFontIndex = -1;
     m_supertext.fStartTime = -1.0f;
 
     // Other initialization.
@@ -6132,6 +6135,124 @@ static char* NextLine(char* p)
     return s;
 }
 
+static bool TryParseLineIntValue(const char* line, int& value) noexcept
+{
+    if (!line)
+        return false;
+
+    const char* equals = strchr(line, '=');
+    if (!equals || !equals[1])
+        return false;
+
+    return (sscanf_s(equals + 1, "%d", &value) == 1);
+}
+
+static bool TryParseLineFloatValue(const char* line, float& value) noexcept
+{
+    if (!line)
+        return false;
+
+    const char* equals = strchr(line, '=');
+    if (!equals || !equals[1])
+        return false;
+
+    return (_sscanf_s_l(equals + 1, "%f", g_use_C_locale, &value) == 1);
+}
+
+static std::wstring MakeLowercaseCopy(std::wstring value)
+{
+    if (!value.empty())
+        CharLowerBuffW(value.data(), static_cast<DWORD>(value.size()));
+    return value;
+}
+
+static bool TryReadPresetListScanInfo(const wchar_t* presetPath, int nMaxPSVersion, float& fRating, bool& bRatingKnown)
+{
+    fRating = 3.0f;
+    bRatingKnown = false;
+
+    FILE* f = nullptr;
+    errno_t err = _wfopen_s(&f, presetPath, L"rb");
+    if (err || !f)
+        return false;
+
+    constexpr size_t PRESET_HEADER_SCAN_BYTES = 4096U;
+    char header[PRESET_HEADER_SCAN_BYTES + 1] = {};
+    const size_t bytesRead = fread(header, 1, PRESET_HEADER_SCAN_BYTES, f);
+    fclose(f);
+
+    if (bytesRead == 0)
+        return false;
+
+    header[bytesRead] = 0;
+
+    bool isMilkDrop2Preset = false;
+    int warpPSVersion = 2;
+    int compPSVersion = 2;
+    int headerLinesToInspect = 12;
+    for (char* line = header; line && headerLinesToInspect-- > 0; line = NextLine(line))
+    {
+        if (!isMilkDrop2Preset)
+        {
+            if (!strncmp(line, "MILKDROP_PRESET_VERSION", 23))
+            {
+                isMilkDrop2Preset = true;
+                continue;
+            }
+            break;
+        }
+
+        if (!strncmp(line, "PSVERSION_WARP", 14))
+        {
+            TryParseLineIntValue(line, warpPSVersion);
+        }
+        else if (!strncmp(line, "PSVERSION_COMP", 14))
+        {
+            TryParseLineIntValue(line, compPSVersion);
+        }
+        else if (!strncmp(line, "PSVERSION", 9))
+        {
+            int psVersion = 2;
+            if (TryParseLineIntValue(line, psVersion))
+            {
+                warpPSVersion = psVersion;
+                compPSVersion = psVersion;
+            }
+        }
+        else if (line[0] == '[')
+        {
+            break;
+        }
+    }
+
+    if (isMilkDrop2Preset && (warpPSVersion > nMaxPSVersion || compPSVersion > nMaxPSVersion))
+        return false;
+
+    bool inPreset00 = false;
+    for (char* line = header; line; line = NextLine(line))
+    {
+        if (!strncmp(line, "[preset00]", 10))
+        {
+            inPreset00 = true;
+            continue;
+        }
+
+        if (!inPreset00)
+            continue;
+
+        if (line[0] == '[')
+            break;
+
+        if (!strncmp(line, "fRating=", 8))
+        {
+            bRatingKnown = TryParseLineFloatValue(line, fRating);
+            break;
+        }
+    }
+
+    return true;
+}
+
 std::wstring CPlugin::NormalizePresetBlacklistEntry(const std::wstring& presetFilename)
 {
     std::wstring normalized = presetFilename;
@@ -6427,9 +6548,20 @@ retry:
 
     LeaveCriticalSection(&g_cs);
 
-    std::vector<std::wstring> presetBlacklist = g_plugin.GetPresetBlacklist();
+    std::unordered_set<std::wstring> presetBlacklist;
+    {
+        auto presetBlacklistEntries = g_plugin.GetPresetBlacklist();
+        presetBlacklist.reserve(presetBlacklistEntries.size());
+        for (auto& entry : presetBlacklistEntries)
+        {
+            std::wstring lowered = MakeLowercaseCopy(std::move(entry));
+            if (!lowered.empty())
+                presetBlacklist.insert(std::move(lowered));
+        }
+    }
 
     PresetList temp_presets;
+    temp_presets.reserve(256);
     int temp_nDirs = 0;
     int temp_nPresets = 0;
 
@@ -6457,9 +6589,7 @@ retry:
             size_t len = wcslen(fd.cFileName);
             if (len < 5 || wcscmp(fd.cFileName + len - 5, L".milk"))
                 bSkip = true;
-            else if (std::any_of(presetBlacklist.begin(), presetBlacklist.end(), [&fd](const std::wstring& entry) {
-                         return _wcsicmp(entry.c_str(), fd.cFileName) == 0;
-                     }))
+            else if (!presetBlacklist.empty() && presetBlacklist.find(MakeLowercaseCopy(fd.cFileName)) != presetBlacklist.end())
                 bSkip = true;
 
             // If it is `.milk`, make sure to know how to run its pixel shaders -
@@ -6472,81 +6602,13 @@ retry:
                 // If missing, assume it is 2.
                 wchar_t szFullPath[MAX_PATH];
                 swprintf_s(szFullPath, L"%s%s", szPresetDir, fd.cFileName);
-                FILE* f;
-                errno_t err = _wfopen_s(&f, szFullPath, L"r");
-                if (err)
+                bool bRatingKnown = false;
+                if (!TryReadPresetListScanInfo(szFullPath, nMaxPSVersion, fRating, bRatingKnown))
                     bSkip = true;
-                else
-                {
-                    constexpr size_t PRESET_HEADER_SCAN_BYTES = 160U;
-                    char szLine[PRESET_HEADER_SCAN_BYTES] = {0};
-                    char* p = szLine;
+                else if (!bRatingKnown)
+                    fRating = GetPrivateProfileFloat(L"preset00", L"fRating", 3.0f, szFullPath);
 
-                    int bytes_to_read = sizeof(szLine) - 1;
-                    size_t count = fread(szLine, bytes_to_read, 1, f);
-                    if (count < 1)
-                    {
-                        fseek(f, SEEK_SET, 0);
-                        count = fread(szLine, 1, bytes_to_read, f);
-                        szLine[count] = 0;
-                    }
-                    else
-                        szLine[bytes_to_read - 1] = 0;
-
-                    bool bScanForPreset00AndRating = false;
-                    bool bRatingKnown = false;
-
-                    // Try to read the PSVERSION and the fRating= value.
-                    // Most presets (unless hand-edited) will have these right at the top.
-                    // If not, [at least for fRating] use GetPrivateProfileFloat to search whole file.
-                    // Read line 1.
-                    //p = NextLine(p);//fgets(p, sizeof(p)-1, f);
-                    if (!strncmp(p, "MILKDROP_PRESET_VERSION", 23))
-                    {
-                        p = NextLine(p); //fgets(p, sizeof(p)-1, f);
-                        int ps_version = 2;
-                        if (p && !strncmp(p, "PSVERSION", 9))
-                        {
-                            sscanf_s(&p[10], "%d", &ps_version);
-                            if (ps_version > nMaxPSVersion)
-                                bSkip = true;
-                            else
-                            {
-                                p = NextLine(p); //fgets(p, sizeof(p)-1, f);
-                                bScanForPreset00AndRating = true;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        // otherwise it's a MilkDrop 1 preset - we can run it.
-                        bScanForPreset00AndRating = true;
-                    }
-
-                    // scan up to 10 more lines in the file, looking for [preset00] and fRating=...
-                    // (this is WAY faster than GetPrivateProfileFloat, when it works!)
-                    int reps = (bScanForPreset00AndRating) ? 10 : 0;
-                    for (int z = 0; z < reps; z++)
-                    {
-                        if (p && !strncmp(p, "[preset00]", 10))
-                        {
-                            p = NextLine(p);
-                            if (p && !strncmp(p, "fRating=", 8))
-                            {
-                                _sscanf_s_l(&p[8], "%f", g_use_C_locale, &fRating);
-                                bRatingKnown = true;
-                                break;
-                            }
-                        }
-                        p = NextLine(p);
-                    }
-
-                    fclose(f);
-
-                    if (!bRatingKnown)
-                        fRating = GetPrivateProfileFloat(L"preset00", L"fRating", 3.0f, szFullPath);
-                    fRating = std::max(0.0f, std::min(5.0f, fRating));
-                }
+                fRating = std::max(0.0f, std::min(5.0f, fRating));
             }
         }
 
@@ -7393,6 +7455,7 @@ void CPlugin::LaunchCustomMessage(int nMsgNum)
     m_supertext.bIsSongTitle = false;
     m_supertext.nFontSizeUsed = 0;
     m_supertext.nTextWidthUsed = 0;
+    m_supertext.nFontIndex = -1;
     wcscpy_s(m_supertext.szText, m_customMessage[nMsgNum].szText);
 
     // Regular properties.
@@ -7461,6 +7524,7 @@ void CPlugin::LaunchSongTitleAnim(bool refreshCurrentTitle)
     m_supertext.bIsSongTitle = true;
     m_supertext.nFontSizeUsed = 0;
     m_supertext.nTextWidthUsed = 0;
+    m_supertext.nFontIndex = SONGTITLE_FONT;
     wcscpy_s(m_supertext.nFontFace, m_fontinfo[SONGTITLE_FONT].szFace);
     m_supertext.fFontSize = static_cast<float>(m_fontinfo[SONGTITLE_FONT].nSize);
     m_supertext.bBold = m_fontinfo[SONGTITLE_FONT].bBold;
@@ -7476,20 +7540,24 @@ void CPlugin::LaunchSongTitleAnim(bool refreshCurrentTitle)
     m_supertext.fStartTime = GetTime();
 }
 
-void CPlugin::LaunchStatusText(const wchar_t* text, float duration, float fadeTime)
+void CPlugin::LaunchStatusText(const wchar_t* text, float duration, float fadeTime, eFontIndex fontIndex)
 {
     if (!text || text[0] == L'\0')
         return;
+
+    if (fontIndex < SIMPLE_FONT || fontIndex >= NUM_BASIC_FONTS + NUM_EXTRA_FONTS)
+        fontIndex = SONGTITLE_FONT;
 
     m_supertext.bRedrawSuperText = true;
     m_supertext.bIsSongTitle = true;
     m_supertext.nFontSizeUsed = 0;
     m_supertext.nTextWidthUsed = 0;
+    m_supertext.nFontIndex = fontIndex;
     wcscpy_s(m_supertext.szText, text);
-    wcscpy_s(m_supertext.nFontFace, m_fontinfo[SONGTITLE_FONT].szFace);
-    m_supertext.fFontSize = static_cast<float>(m_fontinfo[SONGTITLE_FONT].nSize);
-    m_supertext.bBold = m_fontinfo[SONGTITLE_FONT].bBold;
-    m_supertext.bItal = m_fontinfo[SONGTITLE_FONT].bItalic;
+    wcscpy_s(m_supertext.nFontFace, m_fontinfo[fontIndex].szFace);
+    m_supertext.fFontSize = static_cast<float>(m_fontinfo[fontIndex].nSize);
+    m_supertext.bBold = m_fontinfo[fontIndex].bBold;
+    m_supertext.bItal = m_fontinfo[fontIndex].bItalic;
     m_supertext.fX = 0.5f;
     m_supertext.fY = 0.5f;
     m_supertext.fGrowth = 1.0f;

@@ -177,6 +177,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     std::wstring m_pending_animated_status_text;
     float m_pending_animated_status_duration;
     float m_pending_animated_status_fade_time;
+    int m_pending_animated_status_font;
 
     DWORD m_refresh_interval;
     double m_last_time;
@@ -357,10 +358,10 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     bool ConsumeClickPauseConfirmation(DWORD now) noexcept;
     void QueueClickPauseConfirmation(DWORD now);
     void TogglePlaybackFromClick();
-    void QueueStatusText(const wchar_t* text, float duration = 1.6f, float fadeTime = 0.35f);
+    void QueueStatusText(const wchar_t* text, float duration = 1.6f, float fadeTime = 0.35f, int fontIndex = SONGTITLE_FONT);
     void QueueSongTitle();
     void FlushPendingAnimatedText();
-    bool LaunchStatusText(const wchar_t* text, float duration = 0.9f, float fadeTime = 0.25f);
+    bool LaunchStatusText(const wchar_t* text, float duration = 0.9f, float fadeTime = 0.25f, int fontIndex = SONGTITLE_FONT);
     bool LaunchSongTitle();
 };
 

@@ -148,6 +148,7 @@ typedef struct
     int bIsSongTitle;     // false for custom message, true for song title
     wchar_t szText[256];
     wchar_t nFontFace[128];
+    int nFontIndex;
     int bBold;
     int bItal;
     float fX;
@@ -608,7 +609,7 @@ class CPlugin : public CPluginShell
     void LaunchCustomMessage(int nMsgNum);
     void ReadCustomMessages();
     void LaunchSongTitleAnim(bool refreshCurrentTitle = false);
-    void LaunchStatusText(const wchar_t* text, float duration = 0.9f, float fadeTime = 0.25f);
+    void LaunchStatusText(const wchar_t* text, float duration = 0.9f, float fadeTime = 0.25f, eFontIndex fontIndex = SONGTITLE_FONT);
 
     bool RenderStringToTitleTexture();
     void ShowSongTitleAnim(int w, int h, float fProgress);

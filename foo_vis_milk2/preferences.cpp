@@ -232,6 +232,7 @@ static cfg_bool cfg_bEnableDownmix(guid_cfg_bEnableDownmix, default_bEnableDownm
 static cfg_bool cfg_bShowAlbum(guid_cfg_bShowAlbum, default_bShowAlbum);
 static cfg_bool cfg_bEnableMouseWheelVolume(guid_cfg_bEnableMouseWheelVolume, default_bEnableMouseWheelVolume);
 static cfg_bool cfg_bEnableMouseClickPlayPause(guid_cfg_bEnableMouseClickPlayPause, default_bEnableMouseClickPlayPause);
+static cfg_bool cfg_bSeparateClickPromptFont(guid_cfg_bSeparateClickPromptFont, default_bSeparateClickPromptFont);
 static cfg_bool cfg_bEnableHDR(guid_cfg_bEnableHDR, default_bEnableHDR);
 static config_store_int cfg_max_fps_fs(guid_cfg_max_fps_fs, static_cast<int64_t>(default_max_fps_fs));
 static cfg_int cfg_n16BitGamma(guid_cfg_n16BitGamma, static_cast<int64_t>(default_n16BitGamma));
@@ -290,7 +291,30 @@ void set_font_outline_mask(uint32_t mask)
 
 font_info_store_t load_font_info_store()
 {
-    return cfg_stFontInfo.get();
+    font_info_store_t store = _stFonts;
+    const auto configName = pfc::format("cfg_var.", pfc::print_guid(guid_cfg_stFontInfo));
+    const auto blob = fb2k::configStore::get()->getConfigBlob(configName, nullptr);
+    if (!blob.is_valid() || blob->size() == 0)
+        return store;
+
+    const size_t maxFontCount = NUM_BASIC_FONTS + NUM_EXTRA_FONTS;
+    const size_t storedFontCount = blob->size() / sizeof(td_fontinfo);
+    const size_t fontCountToCopy = std::min(storedFontCount, maxFontCount);
+    if (fontCountToCopy > 0)
+    {
+        memcpy_s(store.fontinfo, sizeof(store.fontinfo), blob->get_ptr(), fontCountToCopy * sizeof(td_fontinfo));
+    }
+
+    const bool migratedLegacyLayout = blob->size() != sizeof(store) || fontCountToCopy < maxFontCount;
+    if (migratedLegacyLayout)
+    {
+        if (fontCountToCopy <= CLICKPROMPT_FONT && fontCountToCopy > SONGTITLE_FONT)
+            store.fontinfo[CLICKPROMPT_FONT] = store.fontinfo[SONGTITLE_FONT];
+
+        cfg_stFontInfo.set(store);
+    }
+
+    return store;
 }
 
 void load_font_info(font_array_t& fonts)
@@ -516,6 +540,7 @@ BOOL milk2_preferences_page::OnInitDialog(CWindow, LPARAM)
     CheckDlgButton(IDC_CB_NOCOMPSHADER, static_cast<UINT>(cfg_bSkipCompShader));
     CheckDlgButton(IDC_CB_MOUSE_WHEEL_VOLUME, static_cast<UINT>(cfg_bEnableMouseWheelVolume));
     CheckDlgButton(IDC_CB_MOUSE_CLICK_PLAYPAUSE, static_cast<UINT>(cfg_bEnableMouseClickPlayPause));
+    CheckDlgButton(IDC_CB_SEPARATE_CLICK_PROMPT_FONT, static_cast<UINT>(cfg_bSeparateClickPromptFont));
 
     // Maximum FPS.
     CheckDlgButton(IDC_CB_FSPT, static_cast<UINT>(cfg_allow_page_tearing_fs));
@@ -1380,6 +1405,7 @@ void milk2_preferences_page::reset()
     CheckDlgButton(IDC_CB_NOCOMPSHADER, static_cast<UINT>(default_bSkipCompShader));
     CheckDlgButton(IDC_CB_MOUSE_WHEEL_VOLUME, static_cast<UINT>(default_bEnableMouseWheelVolume));
     CheckDlgButton(IDC_CB_MOUSE_CLICK_PLAYPAUSE, static_cast<UINT>(default_bEnableMouseClickPlayPause));
+    CheckDlgButton(IDC_CB_SEPARATE_CLICK_PROMPT_FONT, static_cast<UINT>(default_bSeparateClickPromptFont));
 
     CheckDlgButton(IDC_CB_FSPT, static_cast<UINT>(default_allow_page_tearing_fs));
     UpdateMaxFps(FULLSCREEN);
@@ -1452,6 +1478,7 @@ void milk2_preferences_page::apply()
     cfg_bSkipCompShader = static_cast<bool>(IsDlgButtonChecked(IDC_CB_NOCOMPSHADER));
     cfg_bEnableMouseWheelVolume = static_cast<bool>(IsDlgButtonChecked(IDC_CB_MOUSE_WHEEL_VOLUME));
     cfg_bEnableMouseClickPlayPause = static_cast<bool>(IsDlgButtonChecked(IDC_CB_MOUSE_CLICK_PLAYPAUSE));
+    cfg_bSeparateClickPromptFont = static_cast<bool>(IsDlgButtonChecked(IDC_CB_SEPARATE_CLICK_PROMPT_FONT));
 
     cfg_allow_page_tearing_fs = static_cast<bool>(IsDlgButtonChecked(IDC_CB_FSPT));
     SaveMaxFps(FULLSCREEN);
@@ -1555,6 +1582,7 @@ bool milk2_preferences_page::HasChanged() const
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_NOCOMPSHADER)) != cfg_bSkipCompShader) ||
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_MOUSE_WHEEL_VOLUME)) != cfg_bEnableMouseWheelVolume) ||
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_MOUSE_CLICK_PLAYPAUSE)) != cfg_bEnableMouseClickPlayPause) ||
+                            (static_cast<bool>(IsDlgButtonChecked(IDC_CB_SEPARATE_CLICK_PROMPT_FONT)) != cfg_bSeparateClickPromptFont) ||
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_FSPT)) != cfg_allow_page_tearing_fs) ||
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_HARDCUTS)) != cfg_bHardCutsDisabled) ||
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_AUTOGAMMA2)) != cfg_bAutoGamma) ||
@@ -1833,7 +1861,7 @@ static int CALLBACK EnumFontsProc(
 }
 
 #define InitFont(n, m) InitFontI(&fonts[n - 1], IDC_FONT##n, IDC_FONTSIZE##n, IDC_FONTBOLD##n, IDC_FONTITAL##n, IDC_FONTAA##n, IDC_FONTOUTLINE##n, hdlg, IDC_FONT_NAME_##n, m, n - 1)
-void milk2_preferences_page::InitFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2, DWORD bold_id, DWORD ital_id, DWORD aa_id, DWORD outline_id, HWND hdlg, DWORD ctrl4, wchar_t* szFontName, int fontIndex)
+void milk2_preferences_page::InitFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2, DWORD bold_id, DWORD ital_id, DWORD aa_id, DWORD outline_id, HWND hdlg, DWORD ctrl4, const wchar_t* szFontName, int fontIndex)
 {
     HWND namebox = ctrl4 ? ::GetDlgItem(hdlg, ctrl4) : NULL;
     HWND fontbox = ::GetDlgItem(hdlg, ctrl1);
@@ -2147,6 +2175,7 @@ void milk2_config::reset()
     settings.m_bShowAlbum = cfg_bShowAlbum;
     settings.m_bEnableMouseWheelVolume = cfg_bEnableMouseWheelVolume;
     settings.m_bEnableMouseClickPlayPause = cfg_bEnableMouseClickPlayPause;
+    settings.m_bSeparateClickPromptFont = cfg_bSeparateClickPromptFont;
     settings.m_bEnableHDR = default_bEnableHDR;
     settings.m_bSkipCompShader = static_cast<uint32_t>(cfg_bSkipCompShader);
     settings.m_nBackBufferFormat = default_nBackBufferFormat;
@@ -2418,6 +2447,7 @@ void milk2_config::build(ui_element_config_builder& builder, const bool full_res
         cfg_bShowAlbum = settings.m_bShowAlbum;
         cfg_bEnableMouseWheelVolume = settings.m_bEnableMouseWheelVolume;
         cfg_bEnableMouseClickPlayPause = settings.m_bEnableMouseClickPlayPause;
+        cfg_bSeparateClickPromptFont = settings.m_bSeparateClickPromptFont;
         cfg_bEnableHDR = settings.m_bEnableHDR;
 
         cfg_szTitleFormat = pfc::utf8FromWide(settings.m_szTitleFormat);
@@ -2433,5 +2463,6 @@ void milk2_config::persist_runtime_settings() const
     cfg_bShowAlbum = settings.m_bShowAlbum;
     cfg_bEnableMouseWheelVolume = settings.m_bEnableMouseWheelVolume;
     cfg_bEnableMouseClickPlayPause = settings.m_bEnableMouseClickPlayPause;
+    cfg_bSeparateClickPromptFont = settings.m_bSeparateClickPromptFont;
 }
 #pragma endregion

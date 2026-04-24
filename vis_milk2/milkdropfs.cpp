@@ -4355,10 +4355,12 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
 #ifdef _SUPERTEXT
     m_superTitle->CreateWindowSizeDependentResources(w, h);
     const float configured_font_size = (std::max)(1.0f, m_supertext.fFontSize);
+    const bool primary_song_title = m_supertext.bIsSongTitle && m_supertext.nFontIndex == SONGTITLE_FONT;
+    const float base_supertext_size = primary_song_title ? 128.0f : 96.0f;
     const float supertext_font_size = std::clamp(
-        96.0f * configured_font_size / static_cast<float>(EXTRA_FONT_2_DEFAULT_SIZE),
-        24.0f,
-        384.0f
+        base_supertext_size * configured_font_size / static_cast<float>(EXTRA_FONT_2_DEFAULT_SIZE),
+        primary_song_title ? 32.0f : 24.0f,
+        primary_song_title ? 448.0f : 384.0f
     );
     m_superTitle->SetTextFont(
         m_supertext.szText,
@@ -4375,10 +4377,13 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
         const float safe_w = static_cast<float>((std::max)(1, w));
         const float safe_h = static_cast<float>((std::max)(1, h));
         const float inv_aspect_y = (std::max)(0.001f, m_fInvAspectY);
+        const bool primary_song_title = m_supertext.nFontIndex == SONGTITLE_FONT;
         const float text_height_px = static_cast<float>((std::max)(1, m_supertext.nFontSizeUsed));
         const float text_width_px = static_cast<float>((std::max)(1, m_supertext.nTextWidthUsed));
         const float max_text_width_px = safe_w * 0.88f;
         float target_text_height_px = supertext_target_height_px(w, h, m_supertext.fFontSize);
+        if (primary_song_title)
+            target_text_height_px *= 1.35f;
         target_text_height_px = (std::min)(target_text_height_px, max_text_width_px * text_height_px / text_width_px);
         target_text_height_px = (std::max)(12.0f, target_text_height_px);
 
@@ -4387,8 +4392,8 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
         float fSizeX = fSizeY * static_cast<float>(m_nTitleTexSizeX) * inv_aspect_y * safe_h /
                        (static_cast<float>(m_nTitleTexSizeY) * safe_w);
 
-        const float max_width_fraction = 0.92f;
-        const float max_height_fraction = 0.34f;
+        const float max_width_fraction = primary_song_title ? 0.94f : 0.92f;
+        const float max_height_fraction = primary_song_title ? 0.42f : 0.34f;
         if (fSizeX > max_width_fraction)
         {
             const float scale = max_width_fraction / fSizeX;
@@ -4553,7 +4558,10 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
     for (i = 0; i < 128; i++)
         baseVertices[i] = v3[i];
 
-    const bool useTitleOutline = m_supertext.bIsSongTitle && IsFontOutlined(SONGTITLE_FONT);
+    const bool useTitleOutline = m_supertext.bIsSongTitle &&
+                                 m_supertext.nFontIndex >= SIMPLE_FONT &&
+                                 m_supertext.nFontIndex < NUM_BASIC_FONTS + NUM_EXTRA_FONTS &&
+                                 IsFontOutlined(static_cast<eFontIndex>(m_supertext.nFontIndex));
     const float outlinePixels = supertext_outline_px(w, h, useTitleOutline);
     const std::pair<float, float> outlineOffsets[] = {
         {-outlinePixels, -outlinePixels},
