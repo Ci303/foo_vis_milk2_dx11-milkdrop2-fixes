@@ -2032,15 +2032,15 @@ void milk2_ui_element::QueueClickPauseConfirmation(DWORD now)
 
     if (!m_playback_control->is_playing())
     {
-        QueueStatusText(L"Click again for play/pause?", 2.4f, 0.35f);
+        QueueStatusText(L"Click again to play", 2.4f, 0.35f);
     }
     else if (m_playback_control->is_paused())
     {
-        QueueStatusText(L"Click again to resume?", 2.4f, 0.35f);
+        QueueStatusText(L"Click again to resume", 2.4f, 0.35f);
     }
     else
     {
-        QueueStatusText(L"Click again to pause?", 2.4f, 0.35f);
+        QueueStatusText(L"Click again to pause", 2.4f, 0.35f);
     }
 }
 
