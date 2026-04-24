@@ -792,14 +792,16 @@ BEGIN
     IDS_WARP_SHADER_LOCKED  "(keep in mind... warp shader was locked.)"
     IDS_COMPOSITE_SHADER_LOCKED 
                             "(keep in mind... composite shader was locked.)"
-    //IDS_PRESET_USES_HIGHEST_PIXEL_SHADER_VERSION 
-    //                        "This preset already uses the highest pixel shader model (%d) supported by your graphics chip."
+    IDS_PRESET_USES_HIGHEST_PIXEL_SHADER_VERSION 
+                            "This preset already uses the highest pixel shader model supported by your graphics chip."
     IDS_PRESET_HAS_MIXED_VERSIONS_OF_SHADERS 
                             "This preset has mixed versions of shaders in it."
     IDS_UPGRADE_SHADERS_TO_USE_PS2 
                             "Do you want to upgrade all shaders to use (at least) pixel shader model 2.0?  [y/N]"
     IDS_UPGRADE_SHADERS_TO_USE_PS4 
                             "Do you want to upgrade all shaders to use (at least) pixel shader model 4.0?  [y/N]"
+    IDS_UPGRADE_SHADERS_TO_USE_PS5 
+                            "Do you want to upgrade all shaders to use (at least) pixel shader model 5.0?  [y/N]"
     IDS_PRESET_DOES_NOT_USE_PIXEL_SHADERS 
                             "This preset does not currently use pixel shaders."
 END
@@ -822,12 +824,14 @@ BEGIN
     IDS_PRESET_CURRENTLY_USES_PS2X 
                             "This preset currently uses pixel shader 2.x."
     IDS_UPGRADE_TO_USE_PS2X "Do you want to upgrade it to use pixel shader 2.x?  [y/N]"
+    IDS_PRESET_CURRENTLY_USES_PS4 "This preset currently uses pixel shader model 4.0."
     IDS_PRESET_MASH_UP_TEXT2 
                             "                         up/down/a-z to browse presets for current bin;"
     IDS_PRESET_MASH_UP_TEXT3 
                             "                         h to randomize preset (or H = all bins); "
     IDS_PRESET_MASH_UP_TEXT4 "                         ESC exits."
     IDS_DIRECTORY_OF_X      "Directory of: %s"
+    IDS_UPGRADE_TO_USE_PS5  "Do you want to upgrade it to use pixel shader model 5.0?  [y/N]"
 END
 
 STRINGTABLE

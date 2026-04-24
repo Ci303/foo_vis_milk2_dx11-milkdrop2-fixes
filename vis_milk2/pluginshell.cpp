@@ -1549,6 +1549,14 @@ void CPluginShell::RenderPlaylist()
         SendMessageTimeout(m_hWndWinamp, WM_USER, 0, IPC_GETLISTPOS, SMTO_NORMAL | SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT, 100, &p_now_playing); int now_playing = static_cast<int>(p_now_playing);
         DWORD dwFlags = DT_SINGLELINE; //| DT_NOPREFIX | DT_WORD_ELLIPSIS; // Note: `dwFlags` is used for both DDRAW and DX9
         int nFontHeight = GetFontHeight(PLAYLIST_FONT);
+        if (TextStyle* playlistStyle = GetFont(PLAYLIST_FONT); playlistStyle && m_lpDX && m_lpDX->GetD2DDeviceContext())
+        {
+            TextElement measureElement;
+            ConfigureHelpTextElement(measureElement, m_lpDX.get(), D2D1::ColorF(0xFFFFFFFF), playlistStyle);
+            const FLOAT measuredHeight = MeasureHelpTextHeight(m_text, playlistStyle, measureElement, L"Mg", 0xFFFFFFFF, m_lpDX->m_client_width, 256);
+            if (measuredHeight > 0.0f)
+                nFontHeight = std::max(nFontHeight, static_cast<int>(std::ceil(measuredHeight)));
+        }
         if (nSongs <= 0)
         {
             m_show_playlist = false;

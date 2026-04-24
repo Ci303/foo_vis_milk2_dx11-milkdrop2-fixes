@@ -564,4 +564,3 @@ class milk2_config
 };
 
 void milk2_sync_runtime_config_from_cfg() noexcept;
-void milk2_post_config_change(WPARAM source = 0) noexcept;

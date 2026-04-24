@@ -1136,23 +1136,50 @@ static void CancelThread(int max_wait_time_ms)
 {
     g_bThreadShouldQuit = true;
     int waited = 0;
+    const HANDLE thread = g_hThread;
     while (g_bThreadAlive && waited < max_wait_time_ms)
     {
-        Sleep(30);
+        if (thread && thread != INVALID_HANDLE_VALUE)
+        {
+            const DWORD wait = WaitForSingleObject(thread, 30);
+            if (wait == WAIT_OBJECT_0)
+                break;
+        }
+        else
+        {
+            Sleep(30);
+        }
         waited += 30;
     }
 
     if (g_bThreadAlive)
     {
 #ifdef TARGET_WINDOWS_DESKTOP
-        TerminateThread(g_hThread, 0);
+        if (thread && thread != INVALID_HANDLE_VALUE)
+        {
+            TerminateThread(thread, 0);
+            WaitForSingleObject(thread, INFINITE);
+        }
 #endif
         g_bThreadAlive = false;
     }
 
-    if (g_hThread != INVALID_HANDLE_VALUE)
-        CloseHandle(g_hThread);
+    if (thread && thread != INVALID_HANDLE_VALUE)
+        CloseHandle(thread);
     g_hThread = INVALID_HANDLE_VALUE;
+}
+
+static void CloseThreadHandleIfFinished()
+{
+    const HANDLE thread = g_hThread;
+    if (!thread || thread == INVALID_HANDLE_VALUE || g_bThreadAlive)
+        return;
+
+    if (WaitForSingleObject(thread, 0) == WAIT_OBJECT_0)
+    {
+        CloseHandle(thread);
+        g_hThread = INVALID_HANDLE_VALUE;
+    }
 }
 
 // This gets called only once, when the plugin exits.
@@ -4597,8 +4624,7 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
             if (m_pState->m_nWarpPSVersion >= m_nMaxPSVersion && m_pState->m_nCompPSVersion >= m_nMaxPSVersion)
             {
                 assert(m_pState->m_nMaxPSVersion == m_nMaxPSVersion);
-                swprintf_s(buf, WASABI_API_LNGSTRINGW(IDS_PRESET_USES_HIGHEST_PIXEL_SHADER_VERSION), m_nMaxPSVersion);
-                MilkDropMenuOut_Box(rect.top, 0, GetFont(SIMPLE_FONT), buf, rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
+                MilkDropMenuOut_Box(rect.top, 0, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_PRESET_USES_HIGHEST_PIXEL_SHADER_VERSION), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
                 MilkDropMenuOut_Box(rect.top, 1, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_PRESS_ESC_TO_RETURN), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
             }
             else
@@ -4620,7 +4646,13 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
                             MilkDropMenuOut_Box(rect.top, 1, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_UPGRADE_SHADERS_TO_USE_PS4), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
                             break;
                         case MD2_PS_3_0:
+                            MilkDropMenuOut_Box(rect.top, 0, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_PRESET_HAS_MIXED_VERSIONS_OF_SHADERS), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
+                            MilkDropMenuOut_Box(rect.top, 1, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_UPGRADE_SHADERS_TO_USE_PS4), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
+                            break;
                         case MD2_PS_4_0:
+                            MilkDropMenuOut_Box(rect.top, 0, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_PRESET_HAS_MIXED_VERSIONS_OF_SHADERS), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
+                            MilkDropMenuOut_Box(rect.top, 1, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_UPGRADE_SHADERS_TO_USE_PS5), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
+                            break;
                         case MD2_PS_5_0:
                         default:
                             assert(false);
@@ -4649,6 +4681,11 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
                         case MD2_PS_3_0:
                             MilkDropMenuOut_Box(rect.top, 0, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_PRESET_CURRENTLY_USES_PS3), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
                             MilkDropMenuOut_Box(rect.top, 1, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_UPGRADE_TO_USE_PS4), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
+                            MilkDropMenuOut_Box(rect.top, 2, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_WARNING_OLD_GPU_MIGHT_NOT_WORK_WITH_PRESET), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
+                            break;
+                        case MD2_PS_4_0:
+                            MilkDropMenuOut_Box(rect.top, 0, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_PRESET_CURRENTLY_USES_PS4), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
+                            MilkDropMenuOut_Box(rect.top, 1, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_UPGRADE_TO_USE_PS5), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
                             MilkDropMenuOut_Box(rect.top, 2, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_WARNING_OLD_GPU_MIGHT_NOT_WORK_WITH_PRESET), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
                             break;
                         default:
@@ -6640,6 +6677,8 @@ retry:
 // Note: If directory changed, make sure `bForce` is true!
 void CPlugin::UpdatePresetList(bool bBackground, bool bForce, bool bTryReselectCurrentPreset) const
 {
+    CloseThreadHandleIfFinished();
+
     if (bForce)
     {
         if (g_bThreadAlive)
@@ -6660,21 +6699,26 @@ void CPlugin::UpdatePresetList(bool bBackground, bool bForce, bool bTryReselectC
     g_bThreadShouldQuit = false;
     g_bThreadAlive = true;
     g_hThread = (HANDLE)_beginthreadex(NULL, 0, __UpdatePresetList, reinterpret_cast<void*>(flags), 0, 0);
+    if (!g_hThread || g_hThread == INVALID_HANDLE_VALUE)
+    {
+        g_hThread = INVALID_HANDLE_VALUE;
+        g_bThreadAlive = false;
+        return;
+    }
 
-    if (!bBackground && g_hThread)
+    if (!bBackground)
     {
         // Crank up priority, wait for it to finish, and then return.
         SetThreadPriority(g_hThread, THREAD_PRIORITY_HIGHEST);
 
         // Wait for it to finish.
-        while (g_bThreadAlive)
-            Sleep(30);
+        WaitForSingleObject(g_hThread, INFINITE);
 
         assert(g_hThread != INVALID_HANDLE_VALUE);
         CloseHandle(g_hThread);
         g_hThread = INVALID_HANDLE_VALUE;
     }
-    else if (g_hThread)
+    else
     {
         // It will just run in the background til it finishes.
         // however, we want to wait until at least ~32 presets are found (or failure) before returning,
@@ -6686,7 +6730,8 @@ void CPlugin::UpdatePresetList(bool bBackground, bool bForce, bool bTryReselectC
         // (thread will update preset list every so often, with the newest presets scanned in...)
         while (g_bThreadAlive)
         {
-            Sleep(30);
+            if (WaitForSingleObject(g_hThread, 30) == WAIT_OBJECT_0)
+                break;
 
             EnterCriticalSection(&g_cs);
             int nPresets = g_plugin.m_nPresets;
@@ -6702,6 +6747,10 @@ void CPlugin::UpdatePresetList(bool bBackground, bool bForce, bool bTryReselectC
             // because it is waiting on the HDD so much...
             // But the OS is smart, and the CPU stays nice and zippy in other threads =)
             SetThreadPriority(g_hThread, THREAD_PRIORITY_ABOVE_NORMAL);
+        }
+        else
+        {
+            CloseThreadHandleIfFinished();
         }
     }
 
