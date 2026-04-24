@@ -207,19 +207,7 @@ void CPluginShell::CleanUpNonDX11()
 
 int CPluginShell::AllocateFonts()
 {
-    // Create system fonts.
-    for (int i = 0; i < NUM_BASIC_FONTS + NUM_EXTRA_FONTS; i++)
-    {
-        if (!m_dwrite_font[i])
-            m_dwrite_font[i] = std::make_unique<TextStyle>(
-                m_fontinfo[i].szFace,
-                static_cast<float>(m_fontinfo[i].nSize), //* 4 / 10),
-                m_fontinfo[i].bBold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_REGULAR,
-                m_fontinfo[i].bItalic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
-                DWRITE_TEXT_ALIGNMENT_LEADING
-            );
-        m_dwrite_font[i]->SetTextOutline((m_fontOutlineMask & (1u << i)) != 0);
-    }
+    SyncFonts();
 
 #if 0
     // Get actual font heights.
@@ -251,6 +239,32 @@ void CPluginShell::CleanUpFonts()
 {
     //for (int i = 0; i < NUM_BASIC_FONTS + NUM_EXTRA_FONTS; i++)
     //    SafeDelete(m_dwrite_font[i]);
+}
+
+void CPluginShell::SyncFonts()
+{
+    for (int i = 0; i < NUM_BASIC_FONTS + NUM_EXTRA_FONTS; i++)
+    {
+        if (!m_dwrite_font[i])
+        {
+            m_dwrite_font[i] = std::make_unique<TextStyle>(
+                m_fontinfo[i].szFace,
+                static_cast<float>(m_fontinfo[i].nSize),
+                m_fontinfo[i].bBold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_REGULAR,
+                m_fontinfo[i].bItalic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_TEXT_ALIGNMENT_LEADING
+            );
+        }
+        else
+        {
+            m_dwrite_font[i]->SetFontName(m_fontinfo[i].szFace);
+            m_dwrite_font[i]->SetFontSize(static_cast<float>(m_fontinfo[i].nSize));
+            m_dwrite_font[i]->SetFontWeight(m_fontinfo[i].bBold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_REGULAR);
+            m_dwrite_font[i]->SetFontStyle(m_fontinfo[i].bItalic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL);
+        }
+
+        m_dwrite_font[i]->SetTextOutline((m_fontOutlineMask & (1u << i)) != 0);
+    }
 }
 
 void CPluginShell::AllocateTextSurface()

@@ -1004,6 +1004,7 @@ bool CPlugin::PanelSettings(plugin_config* settings)
     wcscpy_s(m_szImgIniFile, settings->m_szImgIniFile);
 
     memcpy_s(m_fontinfo, sizeof(m_fontinfo), settings->m_fontinfo, sizeof(settings->m_fontinfo));
+    SyncFonts();
 
     return true;
 }
@@ -3652,6 +3653,80 @@ static int MeasureShadowTextWidth(CTextManager& textManager, DXContext* dx, Text
     return static_cast<int>(std::ceil(bounds.right - bounds.left));
 }
 
+static int MeasureShadowTextHeight(CTextManager& textManager, DXContext* dx, TextStyle* font, TextElement& element, const wchar_t* text, int maxWidth, int maxHeight, DWORD color)
+{
+    UNREFERENCED_PARAMETER(textManager);
+
+    if (!(dx && font) || !(text && text[0] != L'\0') || maxWidth <= 0 || maxHeight <= 0)
+        return 0;
+
+    if (!element.IsVisible())
+        element.Initialize(dx->GetD2DDeviceContext());
+
+    D2D1_COLOR_F fText = D2D1::ColorF(color, static_cast<FLOAT>(((color & 0xFF000000) >> 24) / 255.0f));
+    element.SetAlignment(AlignNear, AlignNear);
+    element.SetTextColor(fText);
+    element.SetTextOpacity(fText.a);
+    element.SetText(text);
+    element.SetTextStyle(font);
+    element.SetTextShadow(true);
+    element.SetContainer(D2D1::RectF(0.0f, 0.0f, static_cast<FLOAT>(maxWidth), static_cast<FLOAT>(maxHeight)));
+
+    const D2D1_RECT_F bounds = element.GetBounds(dx->GetDWriteFactory());
+    return static_cast<int>(std::ceil(bounds.bottom - bounds.top));
+}
+
+static int DrawBottomAnchoredShadowText(CTextManager& textManager,
+                                        DXContext* dx,
+                                        TextStyle* font,
+                                        TextElement& element,
+                                        const wchar_t* text,
+                                        int left,
+                                        int right,
+                                        int bottom,
+                                        int maxHeight,
+                                        DWORD color = 0xFFFFFFFF)
+{
+    if (!(dx && font) || !(text && text[0] != L'\0') || right <= left || maxHeight <= 0)
+    {
+        HideTextElement(textManager, element);
+        return 0;
+    }
+
+    const int width = right - left;
+    const int height = std::min(MeasureShadowTextHeight(textManager, dx, font, element, text, width, maxHeight, color), maxHeight);
+    if (height <= 0)
+    {
+        HideTextElement(textManager, element);
+        return 0;
+    }
+
+    if (!element.IsVisible())
+        element.Initialize(dx->GetD2DDeviceContext());
+
+    D2D1_COLOR_F fText = D2D1::ColorF(color, static_cast<FLOAT>(((color & 0xFF000000) >> 24) / 255.0f));
+    const int top = std::max(0, bottom - height);
+    D2D1_RECT_F rect = D2D1::RectF(static_cast<FLOAT>(left), static_cast<FLOAT>(top), static_cast<FLOAT>(right), static_cast<FLOAT>(bottom));
+    element.SetAlignment(AlignNear, AlignFar);
+    element.SetTextColor(fText);
+    element.SetTextOpacity(fText.a);
+    element.SetText(text);
+    element.SetTextStyle(font);
+    element.SetTextShadow(true);
+    element.SetContainer(rect);
+
+    if (textManager.DrawD2DText(font, &element, const_cast<wchar_t*>(text), &rect, DT_NOPREFIX, color, false, 0xFF000000) != 0)
+    {
+        if (!element.IsVisible())
+            textManager.RegisterElement(&element);
+        element.SetVisible(true);
+        return height;
+    }
+
+    HideTextElement(textManager, element);
+    return 0;
+}
+
 static void DrawShadowTextAt(CTextManager& textManager,
                              DXContext* dx,
                              TextStyle* font,
@@ -4022,7 +4097,16 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
             SelectFont(DECORATIVE_FONT);
             GetWinampSongTitle(GetWinampWindow(), buf4, ARRAYSIZE(buf4)); // defined in "support.h/cpp"
             if (buf4[0])
-                MilkDropTextOut_Shadow(buf4, m_songTitle, 0xFFFFFFFF, MTO_LOWER_LEFT);
+            {
+                const int maxTitleHeight = std::max(0, *lower_left_corner_y - *upper_left_corner_y);
+                const int titleHeight = DrawBottomAnchoredShadowText(m_text, m_lpDX.get(), pFont, m_songTitle, buf4, xL, xR, *lower_left_corner_y, maxTitleHeight);
+                if (titleHeight > 0)
+                    *lower_left_corner_y -= titleHeight;
+            }
+            else
+            {
+                HideTextElement(m_text, m_songTitle);
+            }
         }
         else
         {
