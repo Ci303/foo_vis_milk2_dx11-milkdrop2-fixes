@@ -5884,6 +5884,8 @@ void CPlugin::LoadPreset(const wchar_t* szPresetFilename, float fBlendTime)
     if (fBlendTime == 0)
     {
         // Do it all NOW!
+        wchar_t previousPresetFile[MAX_PATH] = {0};
+        wcscpy_s(previousPresetFile, m_szCurrentPresetFile);
         if (szPresetFilename != m_szCurrentPresetFile) // [sic]
             wcscpy_s(m_szCurrentPresetFile, szPresetFilename);
 
@@ -5895,7 +5897,14 @@ void CPlugin::LoadPreset(const wchar_t* szPresetFilename, float fBlendTime)
         ApplyFlags ^= (m_bWarpShaderLock ? STATE_WARP : 0);
         ApplyFlags ^= (m_bCompShaderLock ? STATE_COMP : 0);
 
-        m_pState->Import(m_szCurrentPresetFile, GetTime(), m_pOldState, ApplyFlags);
+        if (!m_pState->Import(m_szCurrentPresetFile, GetTime(), m_pOldState, ApplyFlags))
+        {
+            temp = m_pState;
+            m_pState = m_pOldState;
+            m_pOldState = temp;
+            wcscpy_s(m_szCurrentPresetFile, previousPresetFile);
+            return;
+        }
 
         if (fBlendTime >= 0.001f)
         {
@@ -5930,7 +5939,8 @@ void CPlugin::LoadPreset(const wchar_t* szPresetFilename, float fBlendTime)
         ApplyFlags ^= (m_bCompShaderLock ? STATE_COMP : 0);
 
         m_lastPresetUsedFallback = false;
-        m_pNewState->Import(szPresetFilename, GetTime(), m_pOldState, ApplyFlags, false);
+        if (!m_pNewState->Import(szPresetFilename, GetTime(), m_pOldState, ApplyFlags, false))
+            return;
 
         m_nLoadingPreset = LOAD_PRESET_PREPARE_EXPRESSIONS;
 

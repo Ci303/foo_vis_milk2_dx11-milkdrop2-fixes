@@ -15,6 +15,11 @@ Format-info builder update for the foobar2000 x64 component.
 - Fixed the `Animated Song Titles` font path so centered title and click-status text now honor the configured size, weight, style, and live updates from the font dialog.
 - Updated the `Select Fonts` dialog to push saved font changes into the running MilkDrop instance immediately instead of waiting for a later config refresh.
 - Split preset expression recompilation into staged load steps so rare heavy presets are less likely to hitch when they first load.
+- Broadcast runtime configuration changes to all live MilkDrop panels instead of only the last active window, so font and preference updates stay in sync across open instances.
+- Applied advanced-preferences updates to the live runtime path instead of leaving them as restart-only changes.
+- Avoided tearing down the shared renderer when one MilkDrop panel closes while another panel is still alive, and hand off rendering to the surviving window when needed.
+- Reused `_SUPERTEXT` device resources across frames so centered title/status animations stop recreating D3D state every render.
+- Guarded immediate and staged preset loading so failed preset imports no longer continue through partially initialized state.
 - Simplified the click-to-play, click-to-resume, and click-to-pause confirmation prompts by removing trailing question marks and using direct action wording.
 
 ### 0.2.1.23 - 2026-04-23

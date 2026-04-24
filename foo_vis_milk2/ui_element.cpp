@@ -30,6 +30,39 @@ HWND g_hWindow;
 
 namespace
 {
+std::mutex s_ui_windows_mutex;
+std::vector<HWND> s_ui_windows;
+
+void register_ui_window(HWND wnd) noexcept
+{
+    if (!wnd)
+        return;
+
+    std::lock_guard<std::mutex> lock(s_ui_windows_mutex);
+    auto it = std::find(s_ui_windows.begin(), s_ui_windows.end(), wnd);
+    if (it == s_ui_windows.end())
+        s_ui_windows.push_back(wnd);
+    g_hWindow = wnd;
+}
+
+HWND unregister_ui_window(HWND wnd) noexcept
+{
+    std::lock_guard<std::mutex> lock(s_ui_windows_mutex);
+    s_ui_windows.erase(std::remove(s_ui_windows.begin(), s_ui_windows.end(), wnd), s_ui_windows.end());
+    s_ui_windows.erase(std::remove_if(s_ui_windows.begin(), s_ui_windows.end(), [](HWND candidate) { return !::IsWindow(candidate); }), s_ui_windows.end());
+    g_hWindow = s_ui_windows.empty() ? nullptr : s_ui_windows.back();
+    return g_hWindow;
+}
+
+std::vector<HWND> snapshot_ui_windows() noexcept
+{
+    std::lock_guard<std::mutex> lock(s_ui_windows_mutex);
+    s_ui_windows.erase(std::remove_if(s_ui_windows.begin(), s_ui_windows.end(), [](HWND candidate) { return !::IsWindow(candidate); }), s_ui_windows.end());
+    if (!::IsWindow(g_hWindow))
+        g_hWindow = s_ui_windows.empty() ? nullptr : s_ui_windows.back();
+    return s_ui_windows;
+}
+
 DWORD get_refresh_interval_ms(uint32_t max_fps) noexcept
 {
     if (max_fps == 0)
@@ -352,6 +385,7 @@ int milk2_ui_element::OnCreate(LPCREATESTRUCT cs)
 #endif
 
     MILK2_CONSOLE_LOG("OnCreate0 ", cs->x, ", ", cs->y, ", ", GetWnd())
+    register_ui_window(get_wnd());
     if (!XMVerifyCPUSupport()) {
         FB2K_console_print(core_api::get_my_file_name(), ": CPU does not support mathematics intrinsics. Exiting.");
         return E_FAIL;
@@ -433,6 +467,8 @@ void milk2_ui_element::OnClose()
 void milk2_ui_element::OnDestroy()
 {
     MILK2_CONSOLE_LOG("OnDestroy ", GetWnd())
+    const bool was_active_window = (g_hWindow == get_wnd());
+    HWND replacement_window = nullptr;
     UnregisterFocusHotkeys();
 #if defined(TIMER_TP)
     StopTimer();
@@ -453,25 +489,43 @@ void milk2_ui_element::OnDestroy()
     if (m_milk2)
         m_milk2 = false;
     s_count = 0ull;
+    replacement_window = unregister_ui_window(get_wnd());
 
     if (!s_in_toggle)
     {
-        MILK2_CONSOLE_LOG("ExitVis")
-        s_fullscreen = false;
-        s_in_toggle = false;
-        s_was_topmost = false;
-        s_milk2 = false;
+        if (!replacement_window)
+        {
+            MILK2_CONSOLE_LOG("ExitVis")
+            s_fullscreen = false;
+            s_in_toggle = false;
+            s_was_topmost = false;
+            s_milk2 = false;
 #ifdef TIMER_TP
-        delete_cs = true;
+            delete_cs = true;
 #endif
-        wcscpy_s(s_config.settings.m_szPresetDir, g_plugin.GetPresetDir()); // save last "Load Preset" menu directory
-        g_plugin.PluginQuit();
+            wcscpy_s(s_config.settings.m_szPresetDir, g_plugin.GetPresetDir()); // save last "Load Preset" menu directory
+            g_plugin.PluginQuit();
 
-        HWND parent = GetRealParent(get_wnd());
-        ::SetClassLongPtr(parent, GCLP_HICON, NULL);
-        ::SetClassLongPtr(parent, GCLP_HICONSM, NULL);
-
-        //PostQuitMessage(0);
+            HWND parent = GetRealParent(get_wnd());
+            ::SetClassLongPtr(parent, GCLP_HICON, NULL);
+            ::SetClassLongPtr(parent, GCLP_HICONSM, NULL);
+        }
+        else if (s_milk2 && was_active_window)
+        {
+            int width = 0;
+            int height = 0;
+            RECT rect{};
+            if (::GetClientRect(replacement_window, &rect))
+            {
+                width = rect.right - rect.left;
+                height = rect.bottom - rect.top;
+            }
+            if (width <= 0 || height <= 0)
+                GetDefaultSize(width, height);
+            normalize_render_size(width, height);
+            g_plugin.SetWinampWindow(replacement_window);
+            g_plugin.OnWindowSwap(replacement_window, width, height);
+        }
     }
     else
     {
@@ -1267,6 +1321,7 @@ LRESULT milk2_ui_element::OnConfigurationChange(UINT uMsg, WPARAM wParam, LPARAM
         switch (wParam)
         {
             case 0: // Preferences Dialog
+            case 1: // Advanced Preferences
                 {
 #ifdef TIMER_TP
                     EnterCriticalSection(&s_cs);
@@ -1294,10 +1349,6 @@ LRESULT milk2_ui_element::OnConfigurationChange(UINT uMsg, WPARAM wParam, LPARAM
                             g_plugin.OnWindowSizeChanged(width, height);
                         }
                     }
-                    break;
-                }
-            case 1: // Advanced Preferences
-                {
                     break;
                 }
         }
@@ -2463,4 +2514,12 @@ FB2K_SERVICE_FACTORY(milk2_initquit);
 void milk2_sync_runtime_config_from_cfg() noexcept
 {
     s_config.reset();
+}
+
+void milk2_post_config_change(WPARAM source) noexcept
+{
+    for (HWND wnd : snapshot_ui_windows())
+    {
+        ::PostMessage(wnd, WM_CONFIG_CHANGE, source, 0);
+    }
 }

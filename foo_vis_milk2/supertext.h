@@ -99,4 +99,6 @@ class SuperText
     float m_fontSize;
     bool m_fontBold;
     bool m_fontItalic;
+    int m_windowWidth;
+    int m_windowHeight;
 };

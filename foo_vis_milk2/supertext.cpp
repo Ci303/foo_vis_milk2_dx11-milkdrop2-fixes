@@ -909,6 +909,8 @@ SuperText::SuperText(DXContext* lpDX) :
     m_fontSize = 96.0f;
     m_fontBold = false;
     m_fontItalic = false;
+    m_windowWidth = 0;
+    m_windowHeight = 0;
 
     XMStoreFloat4x4(&m_ProjectionMatrix, XMMatrixIdentity());
     XMStoreFloat4x4(&m_ViewMatrix, XMMatrixIdentity());
@@ -1194,6 +1196,19 @@ HRESULT SuperText::CreateWindowSizeDependentResources(int nWidth, int nHeight)
 
     if (m_pDevice && m_pSwapChain)
     {
+        const int safeWidth = (std::max)(1, nWidth);
+        const int safeHeight = (std::max)(1, nHeight);
+        const bool sizeChanged = (safeWidth != m_windowWidth || safeHeight != m_windowHeight);
+        const bool resourcesReady = m_constantBufferNeverChanges && m_constantBufferChangeOnResize && m_constantBufferChangesEveryFrame &&
+                                    m_samplerLinear && m_vertexShader && m_pixelShader && m_pVertexBuffer && m_pVertexLayout;
+
+        if (resourcesReady && !sizeChanged)
+            return S_OK;
+
+        DiscardDeviceResources();
+        m_windowWidth = safeWidth;
+        m_windowHeight = safeHeight;
+
         if (SUCCEEDED(hr))
         {
             D3D11_BUFFER_DESC bd{};
@@ -1277,7 +1292,7 @@ HRESULT SuperText::CreateWindowSizeDependentResources(int nWidth, int nHeight)
             // Initialize the projection matrix.
             XMStoreFloat4x4(&m_ProjectionMatrix, XMMatrixPerspectiveFovLH(
                     static_cast<float>(XM_PI) * 0.24f, // fovy
-                    nWidth / static_cast<float>(nHeight), // aspect
+                    m_windowWidth / static_cast<float>(m_windowHeight), // aspect
                     0.1f, // zn
                     800.0f // zf
                 )
@@ -1318,6 +1333,12 @@ HRESULT SuperText::CreateWindowSizeDependentResources(int nWidth, int nHeight)
 // holding onto.
 void SuperText::DiscardDeviceResources()
 {
+    m_constantBufferNeverChanges.Reset();
+    m_constantBufferChangeOnResize.Reset();
+    m_constantBufferChangesEveryFrame.Reset();
+    m_samplerLinear.Reset();
+    m_vertexShader.Reset();
+    m_pixelShader.Reset();
     m_pState.Reset();
     m_pVertexBuffer.Reset();
     m_pVertexLayout.Reset();
@@ -1406,6 +1427,11 @@ HRESULT SuperText::OnRender()
 
                 // Setup the graphics pipeline.
                 m_pContext->IASetInputLayout(m_pVertexLayout.Get());
+                UINT stride = sizeof(PNVertex);
+                UINT offset = 0;
+                ID3D11Buffer* pVertexBuffer = m_pVertexBuffer.Get();
+                m_pContext->IASetVertexBuffers(0, 1, &pVertexBuffer, &stride, &offset);
+                m_pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
                 m_pContext->VSSetConstantBuffers(0, 1, m_constantBufferNeverChanges.GetAddressOf());
                 m_pContext->VSSetConstantBuffers(1, 1, m_constantBufferChangeOnResize.GetAddressOf());
                 m_pContext->VSSetConstantBuffers(2, 1, m_constantBufferChangesEveryFrame.GetAddressOf());

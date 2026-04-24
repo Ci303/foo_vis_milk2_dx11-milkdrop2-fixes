@@ -1539,8 +1539,7 @@ void milk2_preferences_page::apply()
     OnChanged(); // The dialog content has not changed but the flags have;
                  // the currently shown values now match the settings so the
                  // apply button can be disabled.
-    if (::IsWindow(g_hWindow))
-        ::PostMessage(g_hWindow, WM_CONFIG_CHANGE, (WPARAM)0, (LPARAM)0);
+    milk2_post_config_change(0);
 }
 
 // Returns whether the dialog content is different from the current configuration;
@@ -2024,8 +2023,7 @@ BOOL milk2_preferences_page::PluginShellFontDialogProc(HWND hdlg, UINT msg, WPAR
                             set_font_outline_mask(outlineMask);
                             store_font_info(fonts);
                             milk2_sync_runtime_config_from_cfg();
-                            if (::IsWindow(g_hWindow))
-                                ::PostMessage(g_hWindow, WM_CONFIG_CHANGE, (WPARAM)0, (LPARAM)0);
+                            milk2_post_config_change(0);
                         }
                         ::EndDialog(hdlg, id);
                         break;
