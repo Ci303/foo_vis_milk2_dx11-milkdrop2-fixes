@@ -12,6 +12,9 @@ Format-info builder update for the foobar2000 x64 component.
 - Fixed lower-left F2 title metadata rendering so multiline title/artist/album layouts anchor to the bottom edge and grow upward instead of running off-screen.
 - Fixed F3 elapsed/length placement so the time block stays spaced above the full F2 multiline metadata block in embedded and fullscreen views.
 - Fixed live font refresh for all fonts managed by the `Select Fonts` dialog so changes to face, size, bold, italic, and outline settings apply to the running overlay text without requiring stale DirectWrite font objects to be recreated later.
+- Fixed the `Animated Song Titles` font path so centered title and click-status text now honor the configured size, weight, style, and live updates from the font dialog.
+- Updated the `Select Fonts` dialog to push saved font changes into the running MilkDrop instance immediately instead of waiting for a later config refresh.
+- Split preset expression recompilation into staged load steps so rare heavy presets are less likely to hitch when they first load.
 - Simplified the click-to-play, click-to-resume, and click-to-pause confirmation prompts by removing trailing question marks and using direct action wording.
 
 ### 0.2.1.23 - 2026-04-23

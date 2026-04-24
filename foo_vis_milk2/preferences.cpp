@@ -2023,6 +2023,9 @@ BOOL milk2_preferences_page::PluginShellFontDialogProc(HWND hdlg, UINT msg, WPAR
 #endif
                             set_font_outline_mask(outlineMask);
                             store_font_info(fonts);
+                            milk2_sync_runtime_config_from_cfg();
+                            if (::IsWindow(g_hWindow))
+                                ::PostMessage(g_hWindow, WM_CONFIG_CHANGE, (WPARAM)0, (LPARAM)0);
                         }
                         ::EndDialog(hdlg, id);
                         break;

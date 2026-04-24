@@ -907,6 +907,8 @@ SuperText::SuperText(DXContext* lpDX) :
     m_characters = L"> ";
     m_fontFace = L"Gabriola";
     m_fontSize = 96.0f;
+    m_fontBold = false;
+    m_fontItalic = false;
 
     XMStoreFloat4x4(&m_ProjectionMatrix, XMMatrixIdentity());
     XMStoreFloat4x4(&m_ViewMatrix, XMMatrixIdentity());
@@ -968,8 +970,8 @@ HRESULT SuperText::UpdateTextGeometry()
     hr = m_pDWriteFactory->CreateTextFormat(
         m_fontFace,
         NULL,
-        DWRITE_FONT_WEIGHT_EXTRA_BOLD,
-        DWRITE_FONT_STYLE_NORMAL,
+        m_fontBold ? DWRITE_FONT_WEIGHT_BLACK : DWRITE_FONT_WEIGHT_REGULAR,
+        m_fontItalic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
         DWRITE_FONT_STRETCH_NORMAL,
         m_fontSize,
         L"", // locale name
@@ -1346,11 +1348,13 @@ void SuperText::DiscardDeviceResources()
 //    UpdateTextGeometry();
 //}
 
-HRESULT SuperText::SetTextFont(const std::wstring& str, const PCWSTR face, float size)
+HRESULT SuperText::SetTextFont(const std::wstring& str, const PCWSTR face, float size, bool bold, bool italic)
 {
     m_characters = str;
     m_fontFace = face;
     m_fontSize = size;
+    m_fontBold = bold;
+    m_fontItalic = italic;
 
     return UpdateTextGeometry();
 }

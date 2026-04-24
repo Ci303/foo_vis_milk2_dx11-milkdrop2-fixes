@@ -1278,7 +1278,7 @@ int CShape::Import(FILE* f, const wchar_t* szFile, int i)
     return 1;
 }
 
-bool CState::Import(const wchar_t* szIniFile, float fTime, CState* pOldState, DWORD ApplyFlags)
+bool CState::Import(const wchar_t* szIniFile, float fTime, CState* pOldState, DWORD ApplyFlags, bool bRecompileExpressions)
 {
     // If any `ApplyFlags` are missing, the settings will be copied from `pOldState`.
     if (!pOldState)
@@ -1468,7 +1468,8 @@ bool CState::Import(const wchar_t* szIniFile, float fTime, CState* pOldState, DW
     m_nMaxPSVersion = std::max(m_nWarpPSVersion, m_nCompPSVersion);
     m_nMinPSVersion = std::min(m_nWarpPSVersion, m_nCompPSVersion);
 
-    RecompileExpressions();
+    if (bRecompileExpressions)
+        RecompileExpressions();
 
     fclose(f);
 
@@ -1565,16 +1566,8 @@ void CState::StripLinefeedCharsAndComments(char* src, char* dest)
     dest[i2] = 0;
 }
 
-void CState::RecompileExpressions(int flags, int bReInit)
+void CState::PrepareExpressionRecompile(int flags, int bReInit)
 {
-    // before we get started, if we redo the init code for the preset, we have to redo
-    // other things too, because q1-q8 could change.
-    if ((flags & RECOMPILE_PRESET_CODE) && bReInit)
-    {
-        flags |= RECOMPILE_WAVE_CODE;
-        flags |= RECOMPILE_SHAPE_CODE;
-    }
-
     // Free old code handles.
     if (flags & RECOMPILE_PRESET_CODE)
     {
@@ -1668,7 +1661,10 @@ void CState::RecompileExpressions(int flags, int bReInit)
         if (*p == 0)
             pOrig[0] = 0;
     }
+}
 
+void CState::RecompileExpressionGroup(int flags, int bReInit)
+{
     // Compile new code.
 #ifndef _NO_EXPR_
     {
@@ -1893,6 +1889,20 @@ void CState::RecompileExpressions(int flags, int bReInit)
         }
     }
 #endif
+}
+
+void CState::RecompileExpressions(int flags, int bReInit)
+{
+    // before we get started, if we redo the init code for the preset, we have to redo
+    // other things too, because q1-q8 could change.
+    if ((flags & RECOMPILE_PRESET_CODE) && bReInit)
+    {
+        flags |= RECOMPILE_WAVE_CODE;
+        flags |= RECOMPILE_SHAPE_CODE;
+    }
+
+    PrepareExpressionRecompile(flags, bReInit);
+    RecompileExpressionGroup(flags, bReInit);
 }
 
 void CState::RandomizePresetVars()

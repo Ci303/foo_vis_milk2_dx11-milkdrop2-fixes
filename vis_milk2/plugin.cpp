@@ -149,6 +149,17 @@ static void TransferPShaderSet(PShaderSet& dst, PShaderSet& src)
     TransferPShaderInfo(dst.comp, src.comp);
 }
 
+enum LoadingPresetStage
+{
+    LOAD_PRESET_PREPARE_EXPRESSIONS = 1,
+    LOAD_PRESET_COMPILE_PRESET_EXPRESSIONS = 2,
+    LOAD_PRESET_COMPILE_WAVE_EXPRESSIONS = 3,
+    LOAD_PRESET_COMPILE_SHAPE_EXPRESSIONS = 4,
+    LOAD_PRESET_LOAD_WARP_SHADER = 5,
+    LOAD_PRESET_LOAD_COMP_SHADER = 6,
+    LOAD_PRESET_APPLY = 7,
+};
+
 static void CopyPShaderInfo(PShaderInfo& dst, const PShaderInfo& src)
 {
     dst.Clear();
@@ -3284,9 +3295,10 @@ void CPlugin::CleanUpMilkDropDX11(int /* final_cleanup */)
 {
     if (m_nLoadingPreset != 0)
     {
-        // Finish up the pre-load & start the official blend.
-        m_nLoadingPreset = 8;
-        LoadPresetTick();
+        // Finish any staged preset load now so the state/shader pointers stay coherent
+        // across a device teardown.
+        while (m_nLoadingPreset != 0)
+            LoadPresetTick();
     }
 
     // Force this.
@@ -5909,16 +5921,18 @@ void CPlugin::LoadPreset(const wchar_t* szPresetFilename, float fBlendTime)
     }
     else
     {
-        // Set up to load the preset (and especially compile shaders) a little bit at a time.
+        // Set up to load the preset (including expression recompilation and shaders)
+        // a little bit at a time so expensive presets do not stall one frame.
         ClearPShaderSet(m_NewShaders);
 
         DWORD ApplyFlags = STATE_ALL;
         ApplyFlags ^= (m_bWarpShaderLock ? STATE_WARP : 0);
         ApplyFlags ^= (m_bCompShaderLock ? STATE_COMP : 0);
 
-        m_pNewState->Import(szPresetFilename, GetTime(), m_pOldState, ApplyFlags);
+        m_lastPresetUsedFallback = false;
+        m_pNewState->Import(szPresetFilename, GetTime(), m_pOldState, ApplyFlags, false);
 
-        m_nLoadingPreset = 1; // this will cause `LoadPresetTick()` to get called over the next few frames...
+        m_nLoadingPreset = LOAD_PRESET_PREPARE_EXPRESSIONS;
 
         m_fLoadingPresetBlendTime = fBlendTime;
         wcscpy_s(m_szLoadingPreset, szPresetFilename);
@@ -5937,14 +5951,30 @@ void CPlugin::OnFinishedLoadingPreset()
 
 void CPlugin::LoadPresetTick()
 {
-    if (m_nLoadingPreset == 2 || m_nLoadingPreset == 5)
+    if (m_nLoadingPreset == LOAD_PRESET_PREPARE_EXPRESSIONS)
+    {
+        m_pNewState->PrepareExpressionRecompile(RECOMPILE_PRESET_CODE | RECOMPILE_WAVE_CODE | RECOMPILE_SHAPE_CODE, 1);
+    }
+    else if (m_nLoadingPreset == LOAD_PRESET_COMPILE_PRESET_EXPRESSIONS)
+    {
+        m_pNewState->RecompileExpressionGroup(RECOMPILE_PRESET_CODE, 1);
+    }
+    else if (m_nLoadingPreset == LOAD_PRESET_COMPILE_WAVE_EXPRESSIONS)
+    {
+        m_pNewState->RecompileExpressionGroup(RECOMPILE_WAVE_CODE, 1);
+    }
+    else if (m_nLoadingPreset == LOAD_PRESET_COMPILE_SHAPE_EXPRESSIONS)
+    {
+        m_pNewState->RecompileExpressionGroup(RECOMPILE_SHAPE_CODE, 1);
+    }
+    else if (m_nLoadingPreset == LOAD_PRESET_LOAD_WARP_SHADER || m_nLoadingPreset == LOAD_PRESET_LOAD_COMP_SHADER)
     {
         // Just loads one shader (warp or comp) then returns.
         LoadShaders(&m_NewShaders, m_pNewState, true);
     }
-    else if (m_nLoadingPreset == 8)
+    else if (m_nLoadingPreset == LOAD_PRESET_APPLY)
     {
-        // Finished loading the shaders - apply the preset!
+        // Finished loading the expressions and shaders - apply the preset.
         wcscpy_s(m_szCurrentPresetFile, m_szLoadingPreset);
         m_szLoadingPreset[0] = 0;
 
@@ -5967,6 +5997,9 @@ void CPlugin::LoadPresetTick()
         // Release stuff from `m_OldShaders`, then move `m_shaders` to `m_OldShaders`, then use the new shaders.
         TransferPShaderSet(m_OldShaders, m_shaders);
         TransferPShaderSet(m_shaders, m_NewShaders);
+
+        if (!m_lastPresetUsedFallback)
+            wcscpy_s(m_szRememberedPreset, m_szCurrentPresetFile);
 
         // End slow-preset-load mode.
         m_nLoadingPreset = 0;

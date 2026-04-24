@@ -251,9 +251,11 @@ class CState
     void Default(DWORD ApplyFlags = STATE_ALL);
     void Finish();
     void StartBlendFrom(CState* s_from, float fAnimTime, float fTimespan);
-    bool Import(const wchar_t* szIniFile, float fTime, CState* pOldState, DWORD ApplyFlags = STATE_ALL);
+    bool Import(const wchar_t* szIniFile, float fTime, CState* pOldState, DWORD ApplyFlags = STATE_ALL, bool bRecompileExpressions = true);
     bool Export(const wchar_t* szIniFile);
     void RecompileExpressions(int flags = 0xFFFFFFFF, int bReInit = 1);
+    void PrepareExpressionRecompile(int flags = 0xFFFFFFFF, int bReInit = 1);
+    void RecompileExpressionGroup(int flags = 0xFFFFFFFF, int bReInit = 1);
     void GenDefaultWarpShader();
     void GenDefaultCompShader();
 

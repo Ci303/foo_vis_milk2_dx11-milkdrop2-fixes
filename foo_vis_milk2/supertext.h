@@ -53,7 +53,7 @@ class SuperText
     void SetSwapChain(IDXGISwapChain1* pSwapChain) { m_pSwapChain = pSwapChain; }
     void SetDepthStencilView(ID3D11DepthStencilView* pDepthStencilView) { m_pDepthStencilView = pDepthStencilView; }
     void SetRenderTargetView(ID3D11RenderTargetView* pRenderTargetView) { m_pRenderTargetView = pRenderTargetView; }
-    HRESULT SetTextFont(const std::wstring& str, const PCWSTR face = L"Gabriola", float size = 96.0f);
+    HRESULT SetTextFont(const std::wstring& str, const PCWSTR face = L"Gabriola", float size = 96.0f, bool bold = false, bool italic = false);
     HRESULT OnRender();
 
   private:
@@ -97,4 +97,6 @@ class SuperText
     std::wstring m_characters;
     PCWSTR m_fontFace;
     float m_fontSize;
+    bool m_fontBold;
+    bool m_fontItalic;
 };

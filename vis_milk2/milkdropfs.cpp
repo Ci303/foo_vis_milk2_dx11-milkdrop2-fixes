@@ -46,10 +46,12 @@ float supertext_target_height_px(int width, int height, float configured_font_si
     const float safe_width = static_cast<float>((std::max)(1, width));
     const float safe_height = static_cast<float>((std::max)(1, height));
     const float diagonal_basis = std::sqrt(safe_width * safe_height);
-    const float user_scale = std::clamp(configured_font_size / static_cast<float>(EXTRA_FONT_2_DEFAULT_SIZE), 0.65f, 1.8f);
-    const float base_height = std::clamp(diagonal_basis * 0.055f, 18.0f, 150.0f);
-    const float height_limit = (std::min)(safe_height * 0.16f, 180.0f);
-    return std::clamp(base_height * user_scale, 14.0f, (std::max)(18.0f, height_limit));
+    const float safe_font_size = (std::max)(1.0f, configured_font_size);
+    const float size_scale = safe_font_size / static_cast<float>(EXTRA_FONT_2_DEFAULT_SIZE);
+    const float base_height = diagonal_basis * 0.055f;
+    const float min_height = (std::max)(12.0f, safe_height * 0.03f);
+    const float height_limit = (std::min)(safe_height * 0.28f, 260.0f);
+    return std::clamp(base_height * size_scale, min_height, (std::max)(min_height, height_limit));
 }
 
 float supertext_outline_px(int width, int height, bool outlined) noexcept
@@ -357,7 +359,8 @@ bool CPlugin::RenderStringToTitleTexture()
         wcscpy_s(clippedText, m_supertext.szText);
         const wchar_t* str = clippedText;
 
-        const int requested_font_size = (std::max)(6, static_cast<int>(m_fontinfo[SONGTITLE_FONT].nSize * m_nTitleTexSizeX / 256));
+        const int requested_font_size =
+            (std::max)(6, static_cast<int>(std::lround(m_supertext.fFontSize * static_cast<float>(m_nTitleTexSizeX) / 256.0f)));
         const int font_count = sizeof(g_title_font_sizes) / sizeof(int);
 
         int hi = 0;
@@ -370,10 +373,10 @@ bool CPlugin::RenderStringToTitleTexture()
             int mid = (lo + hi + 1) / 2;
 
             gdi_font = std::make_unique<TextStyle>(
-                m_fontinfo[SONGTITLE_FONT].szFace,
+                m_supertext.nFontFace,
                 static_cast<float>(g_title_font_sizes[mid]),
-                m_fontinfo[SONGTITLE_FONT].bBold ? DWRITE_FONT_WEIGHT_BLACK : DWRITE_FONT_WEIGHT_REGULAR,
-                m_fontinfo[SONGTITLE_FONT].bItalic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
+                m_supertext.bBold ? DWRITE_FONT_WEIGHT_BLACK : DWRITE_FONT_WEIGHT_REGULAR,
+                m_supertext.bItal ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
                 DWRITE_TEXT_ALIGNMENT_CENTER,
                 DWRITE_TRIMMING_GRANULARITY_NONE
             );
@@ -401,10 +404,10 @@ bool CPlugin::RenderStringToTitleTexture()
         }
 
         gdi_font = std::make_unique<TextStyle>(
-            m_fontinfo[SONGTITLE_FONT].szFace,
+            m_supertext.nFontFace,
             static_cast<float>(g_title_font_sizes[lo]),
-            m_fontinfo[SONGTITLE_FONT].bBold ? DWRITE_FONT_WEIGHT_BLACK : DWRITE_FONT_WEIGHT_REGULAR,
-            m_fontinfo[SONGTITLE_FONT].bItalic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
+            m_supertext.bBold ? DWRITE_FONT_WEIGHT_BLACK : DWRITE_FONT_WEIGHT_REGULAR,
+            m_supertext.bItal ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
             DWRITE_TEXT_ALIGNMENT_CENTER,
             DWRITE_TRIMMING_GRANULARITY_NONE
         );
@@ -4351,7 +4354,19 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
 
 #ifdef _SUPERTEXT
     m_superTitle->CreateWindowSizeDependentResources(w, h);
-    m_superTitle->SetTextFont(m_supertext.szText, m_supertext.nFontFace, static_cast<float>(m_supertext.nFontSizeUsed));
+    const float configured_font_size = (std::max)(1.0f, m_supertext.fFontSize);
+    const float supertext_font_size = std::clamp(
+        96.0f * configured_font_size / static_cast<float>(EXTRA_FONT_2_DEFAULT_SIZE),
+        24.0f,
+        384.0f
+    );
+    m_superTitle->SetTextFont(
+        m_supertext.szText,
+        m_supertext.nFontFace,
+        supertext_font_size,
+        m_supertext.bBold != 0,
+        m_supertext.bItal != 0
+    );
     m_superTitle->OnRender();
 #else
     if (m_supertext.bIsSongTitle)
