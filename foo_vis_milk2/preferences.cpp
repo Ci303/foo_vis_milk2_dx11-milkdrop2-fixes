@@ -282,6 +282,53 @@ uint32_t get_font_outline_mask()
     return normalize_font_outline_mask(static_cast<uint32_t>(static_cast<int64_t>(cfg_nFontOutlineMask)));
 }
 
+bool is_valid_font_info(const td_fontinfo& font) noexcept
+{
+    return font.szFace[0] != L'\0' && font.nSize > 0;
+}
+
+bool is_valid_font_info_store(const font_info_store_t& store) noexcept
+{
+    for (const auto& font : store.fontinfo)
+    {
+        if (!is_valid_font_info(font))
+            return false;
+    }
+
+    return true;
+}
+
+void normalize_font_info_store(font_info_store_t& store) noexcept
+{
+    const font_info_store_t defaults = _stFonts;
+    for (size_t i = 0; i < ARRAYSIZE(store.fontinfo); ++i)
+    {
+        if (!is_valid_font_info(store.fontinfo[i]))
+            store.fontinfo[i] = defaults.fontinfo[i];
+    }
+}
+
+font_info_store_t migrate_legacy_font_info_store(fb2k::memBlockRef blob)
+{
+    font_info_store_t store = _stFonts;
+    if (blob.is_valid() && blob->size() > 0)
+    {
+        const size_t maxFontCount = NUM_BASIC_FONTS + NUM_EXTRA_FONTS;
+        const size_t storedFontCount = blob->size() / sizeof(td_fontinfo);
+        const size_t fontCountToCopy = std::min(storedFontCount, maxFontCount);
+        if (fontCountToCopy > 0)
+        {
+            memcpy_s(store.fontinfo, sizeof(store.fontinfo), blob->get_ptr(), fontCountToCopy * sizeof(td_fontinfo));
+        }
+
+        if (fontCountToCopy <= CLICKPROMPT_FONT && fontCountToCopy > SONGTITLE_FONT)
+            store.fontinfo[CLICKPROMPT_FONT] = store.fontinfo[SONGTITLE_FONT];
+    }
+
+    normalize_font_info_store(store);
+    return store;
+}
+
 void set_font_outline_mask(uint32_t mask)
 {
     mask = normalize_font_outline_mask(mask);
@@ -291,29 +338,26 @@ void set_font_outline_mask(uint32_t mask)
 
 font_info_store_t load_font_info_store()
 {
-    font_info_store_t store = _stFonts;
     const auto configName = pfc::format("cfg_var.", pfc::print_guid(guid_cfg_stFontInfo));
-    const auto blob = fb2k::configStore::get()->getConfigBlob(configName, nullptr);
-    if (!blob.is_valid() || blob->size() == 0)
+    font_info_store_t store = cfg_stFontInfo.get();
+    if (is_valid_font_info_store(store))
         return store;
 
-    const size_t maxFontCount = NUM_BASIC_FONTS + NUM_EXTRA_FONTS;
-    const size_t storedFontCount = blob->size() / sizeof(td_fontinfo);
-    const size_t fontCountToCopy = std::min(storedFontCount, maxFontCount);
-    if (fontCountToCopy > 0)
+    const auto blob = fb2k::configStore::get()->getConfigBlob(configName, nullptr);
+    if (blob.is_valid() && blob->size() > 0 && blob->size() != sizeof(store))
     {
-        memcpy_s(store.fontinfo, sizeof(store.fontinfo), blob->get_ptr(), fontCountToCopy * sizeof(td_fontinfo));
-    }
-
-    const bool migratedLegacyLayout = blob->size() != sizeof(store) || fontCountToCopy < maxFontCount;
-    if (migratedLegacyLayout)
-    {
-        if (fontCountToCopy <= CLICKPROMPT_FONT && fontCountToCopy > SONGTITLE_FONT)
-            store.fontinfo[CLICKPROMPT_FONT] = store.fontinfo[SONGTITLE_FONT];
-
+        store = migrate_legacy_font_info_store(blob);
         cfg_stFontInfo.set(store);
+        return store;
     }
 
+    if (blob.is_valid() && blob->size() == sizeof(store))
+    {
+        memcpy_s(&store, sizeof(store), blob->get_ptr(), sizeof(store));
+    }
+
+    normalize_font_info_store(store);
+    cfg_stFontInfo.set(store);
     return store;
 }
 

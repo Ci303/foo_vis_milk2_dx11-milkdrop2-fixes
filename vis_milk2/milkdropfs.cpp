@@ -60,6 +60,35 @@ float supertext_outline_px(int width, int height, bool outlined) noexcept
     const float base = diagonal_basis / 900.0f;
     return std::clamp(base * (outlined ? 1.35f : 1.0f), 1.25f, outlined ? 3.5f : 2.5f);
 }
+
+float default_font_size_for_slot(int fontIndex) noexcept
+{
+    switch (fontIndex)
+    {
+        case SIMPLE_FONT: return static_cast<float>(SIMPLE_FONT_DEFAULT_SIZE);
+        case DECORATIVE_FONT: return static_cast<float>(DECORATIVE_FONT_DEFAULT_SIZE);
+        case HELPSCREEN_FONT: return static_cast<float>(HELPSCREEN_FONT_DEFAULT_SIZE);
+        case PLAYLIST_FONT: return static_cast<float>(PLAYLIST_FONT_DEFAULT_SIZE);
+        case TOOLTIP_FONT: return static_cast<float>(EXTRA_FONT_1_DEFAULT_SIZE);
+        case SONGTITLE_FONT: return static_cast<float>(EXTRA_FONT_2_DEFAULT_SIZE);
+        case CLICKPROMPT_FONT: return static_cast<float>(EXTRA_FONT_3_DEFAULT_SIZE);
+        default: return static_cast<float>(EXTRA_FONT_2_DEFAULT_SIZE);
+    }
+}
+
+float supertext_status_target_height_px(int width, int height, float configured_font_size, float default_font_size) noexcept
+{
+    const float safe_width = static_cast<float>((std::max)(1, width));
+    const float safe_height = static_cast<float>((std::max)(1, height));
+    const float diagonal_basis = std::sqrt(safe_width * safe_height);
+    const float safe_default = (std::max)(1.0f, default_font_size);
+    const float safe_configured = (std::max)(1.0f, configured_font_size);
+    const float size_scale = safe_configured / safe_default;
+    const float base_height = diagonal_basis * 0.032f;
+    const float min_height = (std::max)(10.0f, safe_height * 0.022f);
+    const float height_limit = (std::min)(safe_height * 0.20f, 180.0f);
+    return std::clamp(base_height * size_scale, min_height, (std::max)(min_height, height_limit));
+}
 }
 
 // This function evaluates whether the floating-point
@@ -359,8 +388,11 @@ bool CPlugin::RenderStringToTitleTexture()
         wcscpy_s(clippedText, m_supertext.szText);
         const wchar_t* str = clippedText;
 
+        // Rasterize song titles at a stable base size. The configured font size
+        // is applied later when the title texture is scaled on screen, which
+        // avoids the size canceling itself out.
         const int requested_font_size =
-            (std::max)(6, static_cast<int>(std::lround(m_supertext.fFontSize * static_cast<float>(m_nTitleTexSizeX) / 256.0f)));
+            (std::max)(6, static_cast<int>(std::lround(static_cast<float>(EXTRA_FONT_2_DEFAULT_SIZE) * static_cast<float>(m_nTitleTexSizeX) / 256.0f)));
         const int font_count = sizeof(g_title_font_sizes) / sizeof(int);
 
         int hi = 0;
@@ -4380,14 +4412,30 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
         const bool primary_song_title = m_supertext.nFontIndex == SONGTITLE_FONT;
         const float text_height_px = static_cast<float>((std::max)(1, m_supertext.nFontSizeUsed));
         const float text_width_px = static_cast<float>((std::max)(1, m_supertext.nTextWidthUsed));
-        const float max_text_width_px = safe_w * 0.88f;
-        float target_text_height_px = supertext_target_height_px(w, h, m_supertext.fFontSize);
+        const float font_scale =
+            (std::max)(0.25f, (std::max)(1.0f, m_supertext.fFontSize) / static_cast<float>(EXTRA_FONT_2_DEFAULT_SIZE));
+        float display_text_height_px = supertext_target_height_px(w, h, static_cast<float>(EXTRA_FONT_2_DEFAULT_SIZE)) * font_scale;
         if (primary_song_title)
-            target_text_height_px *= 1.35f;
-        target_text_height_px = (std::min)(target_text_height_px, max_text_width_px * text_height_px / text_width_px);
-        target_text_height_px = (std::max)(12.0f, target_text_height_px);
+            display_text_height_px *= 1.35f;
+        display_text_height_px = (std::max)(12.0f, display_text_height_px);
 
-        float display_texture_height_px = target_text_height_px * static_cast<float>(m_nTitleTexSizeY) / text_height_px;
+        float display_text_width_px = display_text_height_px * text_width_px / text_height_px;
+        const float max_text_width_px = safe_w * (primary_song_title ? 0.88f : 0.84f);
+        const float max_text_height_px = safe_h * (primary_song_title ? 0.28f : 0.22f);
+        if (display_text_width_px > max_text_width_px)
+        {
+            const float scale = max_text_width_px / display_text_width_px;
+            display_text_width_px *= scale;
+            display_text_height_px *= scale;
+        }
+        if (display_text_height_px > max_text_height_px)
+        {
+            const float scale = max_text_height_px / display_text_height_px;
+            display_text_width_px *= scale;
+            display_text_height_px *= scale;
+        }
+
+        float display_texture_height_px = display_text_height_px * static_cast<float>(m_nTitleTexSizeY) / text_height_px;
         float fSizeY = display_texture_height_px / (safe_h * inv_aspect_y);
         float fSizeX = fSizeY * static_cast<float>(m_nTitleTexSizeX) * inv_aspect_y * safe_h /
                        (static_cast<float>(m_nTitleTexSizeY) * safe_w);
@@ -4470,9 +4518,49 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
     }
     else
     {
-        // Positioning.
-        float fSizeX = static_cast<float>(m_nTexSizeX) / 1024.0f * 100.0f / static_cast<float>(m_supertext.nFontSizeUsed) * std::pow(1.033f, m_supertext.fFontSize - 50.0f);
-        float fSizeY = fSizeX * m_nTitleTexSizeY / static_cast<float>(m_nTitleTexSizeX);
+        const bool slot_scaled_status = m_supertext.nFontIndex >= SIMPLE_FONT &&
+                                        m_supertext.nFontIndex < NUM_BASIC_FONTS + NUM_EXTRA_FONTS;
+
+        float fSizeX = 0.0f;
+        float fSizeY = 0.0f;
+
+        if (slot_scaled_status)
+        {
+            const float safe_w = static_cast<float>((std::max)(1, w));
+            const float safe_h = static_cast<float>((std::max)(1, h));
+            const float inv_aspect_y = (std::max)(0.001f, m_fInvAspectY);
+            const float text_height_px = static_cast<float>((std::max)(1, m_supertext.nFontSizeUsed));
+            const float text_width_px = static_cast<float>((std::max)(1, m_supertext.nTextWidthUsed));
+            const float default_font_size = default_font_size_for_slot(m_supertext.nFontIndex);
+            float display_text_height_px = supertext_status_target_height_px(w, h, m_supertext.fFontSize, default_font_size);
+            float display_text_width_px = display_text_height_px * text_width_px / text_height_px;
+
+            const float max_text_width_px = safe_w * 0.78f;
+            const float max_text_height_px = safe_h * 0.20f;
+            if (display_text_width_px > max_text_width_px)
+            {
+                const float scale = max_text_width_px / display_text_width_px;
+                display_text_width_px *= scale;
+                display_text_height_px *= scale;
+            }
+            if (display_text_height_px > max_text_height_px)
+            {
+                const float scale = max_text_height_px / display_text_height_px;
+                display_text_width_px *= scale;
+                display_text_height_px *= scale;
+            }
+
+            const float display_texture_height_px = display_text_height_px * static_cast<float>(m_nTitleTexSizeY) / text_height_px;
+            fSizeY = display_texture_height_px / (safe_h * inv_aspect_y);
+            fSizeX = fSizeY * static_cast<float>(m_nTitleTexSizeX) * inv_aspect_y * safe_h /
+                     (static_cast<float>(m_nTitleTexSizeY) * safe_w);
+        }
+        else
+        {
+            // Legacy custom-message sizing uses a relative 0..100 scale rather than point sizes.
+            fSizeX = static_cast<float>(m_nTexSizeX) / 1024.0f * 100.0f / static_cast<float>(m_supertext.nFontSizeUsed) * std::pow(1.033f, m_supertext.fFontSize - 50.0f);
+            fSizeY = fSizeX * m_nTitleTexSizeY / static_cast<float>(m_nTitleTexSizeX);
+        }
 
         // FIXME
         if (fProgress < 1.0f) //(w != h) // regular render-to-backbuffer
@@ -4558,11 +4646,10 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
     for (i = 0; i < 128; i++)
         baseVertices[i] = v3[i];
 
-    const bool useTitleOutline = m_supertext.bIsSongTitle &&
-                                 m_supertext.nFontIndex >= SIMPLE_FONT &&
-                                 m_supertext.nFontIndex < NUM_BASIC_FONTS + NUM_EXTRA_FONTS &&
-                                 IsFontOutlined(static_cast<eFontIndex>(m_supertext.nFontIndex));
-    const float outlinePixels = supertext_outline_px(w, h, useTitleOutline);
+    const bool useTextOutline = m_supertext.nFontIndex >= SIMPLE_FONT &&
+                                m_supertext.nFontIndex < NUM_BASIC_FONTS + NUM_EXTRA_FONTS &&
+                                IsFontOutlined(static_cast<eFontIndex>(m_supertext.nFontIndex));
+    const float outlinePixels = supertext_outline_px(w, h, useTextOutline);
     const std::pair<float, float> outlineOffsets[] = {
         {-outlinePixels, -outlinePixels},
         {0.0f, -outlinePixels},
@@ -4573,7 +4660,7 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
         {0.0f, outlinePixels},
         {outlinePixels, outlinePixels},
     };
-    const int shadowPasses = useTitleOutline ? static_cast<int>(std::size(outlineOffsets)) : 1;
+    const int shadowPasses = useTextOutline ? static_cast<int>(std::size(outlineOffsets)) : 1;
 
     for (int it = 0; it < shadowPasses + 1; it++)
     {
@@ -4609,7 +4696,7 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
         float offset_y = 0.0f;
         if (!isTextPass)
         {
-            if (useTitleOutline)
+            if (useTextOutline)
             {
                 offset_x = outlineOffsets[it].first * 2.0f / static_cast<float>((std::max)(1, w));
                 offset_y = outlineOffsets[it].second * 2.0f / static_cast<float>((std::max)(1, h));
@@ -4620,7 +4707,7 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
                 offset_y = outlinePixels * 2.0f / static_cast<float>((std::max)(1, h));
             }
         }
-        else if (!useTitleOutline)
+        else if (!useTextOutline)
         {
             offset_x = -outlinePixels * 2.0f / static_cast<float>((std::max)(1, w));
             offset_y = -outlinePixels * 2.0f / static_cast<float>((std::max)(1, h));

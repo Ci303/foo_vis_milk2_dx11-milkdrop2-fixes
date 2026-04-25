@@ -7549,7 +7549,7 @@ void CPlugin::LaunchStatusText(const wchar_t* text, float duration, float fadeTi
         fontIndex = SONGTITLE_FONT;
 
     m_supertext.bRedrawSuperText = true;
-    m_supertext.bIsSongTitle = true;
+    m_supertext.bIsSongTitle = false;
     m_supertext.nFontSizeUsed = 0;
     m_supertext.nTextWidthUsed = 0;
     m_supertext.nFontIndex = fontIndex;
