@@ -196,6 +196,7 @@ class CPluginShell : public DX::IDeviceNotify
     int m_playlist_pageups; // can be + or -
     int m_playlist_top_idx; // used to track when the playlist cache (`m_playlist`) needs updating
     int m_playlist_btm_idx; // used to track when the playlist cache (`m_playlist`) needs updating
+    int m_playlist_line_advance_pixels; // considered invalid whenever 'm_playlist_top_idx' is -1
     int m_exiting;
 
   private:

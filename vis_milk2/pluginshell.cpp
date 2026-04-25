@@ -317,6 +317,7 @@ int CPluginShell::AllocateDX11()
 
     // Invalidate various 'caches' here.
     m_playlist_top_idx = -1; // Invalidating playlist cache forces recompute of playlist width
+    m_playlist_line_advance_pixels = 0;
 
     if (m_lpDX)
     {
@@ -449,6 +450,7 @@ void CPluginShell::TogglePlaylist()
 {
     m_show_playlist = !m_show_playlist;
     m_playlist_top_idx = -1; // <- invalidates playlist cache
+    m_playlist_line_advance_pixels = 0;
     //int ret = CheckMenuItem(m_context_menu, ID_SHOWPLAYLIST, MF_BYCOMMAND | (m_show_playlist ? MF_CHECKED : MF_UNCHECKED));
 }
 
@@ -657,6 +659,7 @@ int CPluginShell::PluginPreInitialize(HWND hWinampWnd, HINSTANCE hWinampInstance
     m_playlist_pageups = 0;
     m_playlist_top_idx = -1; // `m_playlist_width_pixels` and `m_playlist[256][256]` will be considered invalid whenever `m_playlist_top_idx` is -1.
     m_playlist_btm_idx = -1;
+    m_playlist_line_advance_pixels = 0;
     m_exiting = 0;
     m_upper_left_corner_y = 0;
     m_lower_left_corner_y = 0;
@@ -1549,7 +1552,11 @@ void CPluginShell::RenderPlaylist()
         SendMessageTimeout(m_hWndWinamp, WM_USER, 0, IPC_GETLISTPOS, SMTO_NORMAL | SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT, 100, &p_now_playing); int now_playing = static_cast<int>(p_now_playing);
         DWORD dwFlags = DT_SINGLELINE; //| DT_NOPREFIX | DT_WORD_ELLIPSIS; // Note: `dwFlags` is used for both DDRAW and DX9
         int nFontHeight = GetFontHeight(PLAYLIST_FONT);
-        if (TextStyle* playlistStyle = GetFont(PLAYLIST_FONT); playlistStyle && m_lpDX && m_lpDX->GetD2DDeviceContext())
+        TextStyle* playlistStyle = GetFont(PLAYLIST_FONT);
+        const bool playlistOutlined = playlistStyle && playlistStyle->HasTextOutline();
+        const int playlistVerticalPad = playlistOutlined ? 4 : 0;
+        const FLOAT playlistWidthPad = playlistOutlined ? 4.0f : 0.0f;
+        if (playlistStyle && m_lpDX && m_lpDX->GetD2DDeviceContext())
         {
             TextElement measureElement;
             ConfigureHelpTextElement(measureElement, m_lpDX.get(), D2D1::ColorF(0xFFFFFFFF), playlistStyle);
@@ -1557,6 +1564,9 @@ void CPluginShell::RenderPlaylist()
             if (measuredHeight > 0.0f)
                 nFontHeight = std::max(nFontHeight, static_cast<int>(std::ceil(measuredHeight)));
         }
+        int playlistLineAdvance = std::max(1, nFontHeight + playlistVerticalPad);
+        if (m_playlist_line_advance_pixels > 0)
+            playlistLineAdvance = m_playlist_line_advance_pixels;
         if (nSongs <= 0)
         {
             m_show_playlist = false;
@@ -1564,7 +1574,7 @@ void CPluginShell::RenderPlaylist()
         else
         {
             int playlist_vert_pixels = m_lower_left_corner_y - m_upper_left_corner_y;
-            int disp_lines = std::min(MAX_SONGS_PER_PAGE, (playlist_vert_pixels - static_cast<int>(PLAYLIST_INNER_MARGIN) * 2) / nFontHeight);
+            int disp_lines = std::min(MAX_SONGS_PER_PAGE, (playlist_vert_pixels - static_cast<int>(PLAYLIST_INNER_MARGIN) * 2) / playlistLineAdvance);
             //int total_pages = nSongs / disp_lines;
 
             if (disp_lines <= 0)
@@ -1615,8 +1625,10 @@ void CPluginShell::RenderPlaylist()
                 m_playlist_top_idx = new_top_idx;
                 m_playlist_btm_idx = new_btm_idx;
                 m_playlist_width_pixels = 0.0f;
+                int measuredTextHeight = nFontHeight;
 
                 FLOAT max_w = static_cast<FLOAT>(std::min(m_right_edge - m_left_edge, m_lpDX->m_client_width - TEXT_MARGIN * 2 - static_cast<int>(PLAYLIST_INNER_MARGIN) * 2));
+                const FLOAT measure_w = std::max(1.0f, max_w - playlistWidthPad);
 
                 for (int i = 0; i < disp_lines; i++)
                 {
@@ -1629,7 +1641,7 @@ void CPluginShell::RenderPlaylist()
                         //strcpy_s(bufA, reinterpret_cast<char*>(szTitle), 240);
                         //sprintf_s(m_playlist[i], "%d. %s ", j + 1, bufA); // leave an extra space @ end, so italicized fonts don't get clipped
 
-                        r = {0.0f, 0.0f, max_w, 1024.0f};
+                        r = {0.0f, 0.0f, measure_w, 1024.0f};
                         if (!m_playlist_song[i].IsVisible())
                             m_playlist_song[i].Initialize(m_lpDX->GetD2DDeviceContext());
                         m_playlist_song[i].SetAlignment(AlignNear, AlignNear);
@@ -1638,14 +1650,14 @@ void CPluginShell::RenderPlaylist()
                         m_playlist_song[i].SetContainer(r);
                         m_playlist_song[i].SetVisible(true);
                         m_playlist_song[i].SetText(m_playlist[i]);
-                        m_playlist_song[i].SetTextStyle(GetFont(PLAYLIST_FONT));
+                        m_playlist_song[i].SetTextStyle(playlistStyle);
                         m_playlist_song[i].SetTextShadow(false);
-                        int h = m_text.DrawD2DText(GetFont(PLAYLIST_FONT), &m_playlist_song[i], m_playlist[i], &r, dwFlags | DT_CALCRECT, 0xFFFFFFFF, false);
+                        const int h = m_text.DrawD2DText(playlistStyle, &m_playlist_song[i], m_playlist[i], &r, dwFlags | DT_CALCRECT, 0xFFFFFFFF, false);
                         float w = r.right - r.left;
                         if (w > 0)
-                            m_playlist_width_pixels = std::max(m_playlist_width_pixels, w);
+                            m_playlist_width_pixels = std::max(m_playlist_width_pixels, w + playlistWidthPad);
                         if (h > 0)
-                            nFontHeight = std::max(nFontHeight, h);
+                            measuredTextHeight = std::max(measuredTextHeight, h);
                     }
                     else
                     {
@@ -1657,6 +1669,9 @@ void CPluginShell::RenderPlaylist()
 
                 if (m_playlist_width_pixels == 0.0f || m_playlist_width_pixels > max_w)
                     m_playlist_width_pixels = max_w;
+
+                m_playlist_line_advance_pixels = std::max(1, measuredTextHeight + playlistVerticalPad);
+                playlistLineAdvance = m_playlist_line_advance_pixels;
             }
 
             int start = std::max(0, cur_page * disp_lines);
@@ -1666,7 +1681,7 @@ void CPluginShell::RenderPlaylist()
             r.top = static_cast<FLOAT>(m_upper_left_corner_y);
             r.left = static_cast<FLOAT>(m_left_edge);
             r.right = static_cast<FLOAT>(m_left_edge + m_playlist_width_pixels + PLAYLIST_INNER_MARGIN * 2.0f);
-            r.bottom = static_cast<FLOAT>(m_upper_left_corner_y + (end - start) * nFontHeight + PLAYLIST_INNER_MARGIN * 2.0f);
+            r.bottom = static_cast<FLOAT>(m_upper_left_corner_y + (end - start) * playlistLineAdvance + PLAYLIST_INNER_MARGIN * 2.0f);
             DrawDarkTranslucentBox(&r);
 
             // Draw playlist text.
@@ -1676,7 +1691,7 @@ void CPluginShell::RenderPlaylist()
                 r = {static_cast<FLOAT>(m_left_edge + PLAYLIST_INNER_MARGIN),
                      static_cast<FLOAT>(y),
                      static_cast<FLOAT>(m_left_edge + PLAYLIST_INNER_MARGIN + m_playlist_width_pixels),
-                     static_cast<FLOAT>(y + nFontHeight)};
+                     static_cast<FLOAT>(y + playlistLineAdvance)};
                 m_playlist_song[i - start].SetContainer(r);
                 DWORD color;
                 if (m_lpDX->GetBitDepth() == 8)
@@ -1689,8 +1704,8 @@ void CPluginShell::RenderPlaylist()
                 D2D1_COLOR_F fColor = D2D1::ColorF(color, GetAlpha(color));
                 m_playlist_song[i - start].SetTextColor(fColor);
                 m_playlist_song[i - start].SetTextOpacity(fColor.a);
-                y += nFontHeight;
-                m_text.DrawD2DText(GetFont(PLAYLIST_FONT), &m_playlist_song[i - start], m_playlist[i - start], &r, dwFlags, color, false);
+                y += playlistLineAdvance;
+                m_text.DrawD2DText(playlistStyle, &m_playlist_song[i - start], m_playlist[i - start], &r, dwFlags, color, false);
                 m_text.RegisterElement(&m_playlist_song[i - start]);
             }
         }

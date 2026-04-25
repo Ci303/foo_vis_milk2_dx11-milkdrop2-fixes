@@ -28,6 +28,9 @@ Format-info builder update for the foobar2000 x64 component.
 - Hardened preset-list scan waiting and handle cleanup so failed worker creation and finished background scans leave less stale thread state behind.
 - Safeguarded waveform ingest against zero-channel chunks, empty audio buffers, and short buffers that previously left stale samples in the tail of the waveform arrays.
 - Fixed playlist overlay row spacing so rendered lines use measured font height and stop collapsing into each other with taller fonts.
+- Fixed the playlist overlay to keep using its measured row advance between frames instead of dropping back to a smaller fallback height that could reintroduce overlap.
+- Changed playlist rows to use a dedicated one-line `artist - title` display path and flatten embedded newlines so each playlist item renders as a single row instead of stacking multiline title-format output.
+- Expanded playlist row width calculations to account for outlined text and the longer one-line labels so the overlay can grow wider before clipping.
 - Fixed shader-upgrade prompts and resources for pixel shader 3.0, 4.0, and 5.0 upgrade paths, including the highest-supported-shader message text.
 - Simplified the click-to-play, click-to-resume, and click-to-pause confirmation prompts by removing trailing question marks and using direct action wording.
 

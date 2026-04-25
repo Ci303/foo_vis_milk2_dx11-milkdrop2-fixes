@@ -56,6 +56,35 @@ void log_runtime_exception(const char* where) noexcept
     FB2K_console_print(core_api::get_my_file_name(), ": ", where, " failed - unknown exception");
 }
 
+std::wstring normalize_playlist_display_text(std::wstring_view input)
+{
+    std::wstring output;
+    output.reserve(input.size());
+
+    bool previous_was_space = false;
+    for (wchar_t ch : input)
+    {
+        const bool whitespace = ch == L'\r' || ch == L'\n' || ch == L'\t' || ch == L' ';
+        if (whitespace)
+        {
+            if (!output.empty() && !previous_was_space)
+            {
+                output.push_back(L' ');
+                previous_was_space = true;
+            }
+            continue;
+        }
+
+        output.push_back(ch);
+        previous_was_space = false;
+    }
+
+    while (!output.empty() && output.back() == L' ')
+        output.pop_back();
+
+    return output;
+}
+
 template <typename Callback>
 bool run_plugin_locked(const char* where, Callback&& callback, bool wait_for_lock = false) noexcept
 {
@@ -1081,10 +1110,10 @@ LRESULT milk2_ui_element::OnMilk2Message(UINT uMsg, WPARAM wParam, LPARAM lParam
     else if (lParam == IPC_GETPLAYLISTTITLEW)
     {
         //MILK2_CONSOLE_LOG("IPC_GETPLAYLISTTITLEW")
-        if (m_script.is_empty())
+        static titleformat_object::ptr playlist_script;
+        if (playlist_script.is_empty())
         {
-            pfc::string8 pattern = pfc::utf8FromWide(s_config.settings.m_szTitleFormat);
-            static_api_ptr_t<titleformat_compiler>()->compile_safe_ex(m_script, pattern);
+            static_api_ptr_t<titleformat_compiler>()->compile_safe_ex(playlist_script, "[$if2(%artist%,%album artist%) - ]%title%");
         }
 
         pfc::string_formatter state;
@@ -1098,13 +1127,26 @@ LRESULT milk2_ui_element::OnMilk2Message(UINT uMsg, WPARAM wParam, LPARAM lParam
         {
             state = ""; // no playlist
         }
-        else if (!use_playing_item && list.get_item(index)->format_title(NULL, state, m_script, NULL))
+        else if (!use_playing_item && list.get_item(index)->format_title(NULL, state, playlist_script, NULL) && state.length() > 0)
         {
             // Succeeded already.
         }
-        else if (m_playback_control->playback_format_title(NULL, state, m_script, NULL, playback_control::display_level_all))
+        else if (m_playback_control->playback_format_title(NULL, state, playlist_script, NULL, playback_control::display_level_all) && state.length() > 0)
         {
             // Fall back to the active playback item when the active playlist item is unavailable.
+        }
+        else if (!use_playing_item)
+        {
+            if (m_script.is_empty())
+            {
+                pfc::string8 pattern = pfc::utf8FromWide(s_config.settings.m_szTitleFormat);
+                static_api_ptr_t<titleformat_compiler>()->compile_safe_ex(m_script, pattern);
+            }
+
+            if (list.get_item(index)->format_title(NULL, state, m_script, NULL))
+            {
+                // Fall back to the user title format if artist/title fields are unavailable.
+            }
         }
         else if (m_playback_control->is_playing() || m_playback_control->is_paused())
         {
@@ -1115,7 +1157,7 @@ LRESULT milk2_ui_element::OnMilk2Message(UINT uMsg, WPARAM wParam, LPARAM lParam
             state = "Stopped.";
         }
 
-        m_szBuffer = pfc::wideFromUTF8(state);
+        m_szBuffer = normalize_playlist_display_text(pfc::wideFromUTF8(state).c_str());
         return reinterpret_cast<LRESULT>(m_szBuffer.c_str());
     }
     else if (lParam == IPC_GET_PLAYING_TITLE)
@@ -2005,6 +2047,7 @@ void milk2_ui_element::UpdatePlaylist()
         g_plugin.m_playlist_pos = (focus != pfc::infinite_size && focus < total) ? static_cast<LRESULT>(focus) : 0;
     }
     g_plugin.m_playlist_top_idx = -1;
+    g_plugin.m_playlist_line_advance_pixels = 0;
 }
 
 void milk2_ui_element::QueueStatusText(const wchar_t* text, float duration, float fadeTime, int fontIndex)
