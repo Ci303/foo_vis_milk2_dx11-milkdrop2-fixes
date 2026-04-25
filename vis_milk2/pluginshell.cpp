@@ -1465,11 +1465,15 @@ void CPluginShell::RenderBuiltInTextMsgs()
             const FLOAT boxWidth = (std::min)(measuredWidth + PLAYLIST_INNER_MARGIN * 2.0f,
                                               static_cast<FLOAT>(GetWidth()) - PLAYLIST_INNER_MARGIN * 4.0f);
             const FLOAT boxHeight = (std::min)(measuredHeight + PLAYLIST_INNER_MARGIN * 2.0f,
-                                               static_cast<FLOAT>(GetHeight() - m_upper_left_corner_y) - PLAYLIST_INNER_MARGIN * 2.0f);
-            const FLOAT left = static_cast<FLOAT>(m_left_edge + PLAYLIST_INNER_MARGIN);
-            const FLOAT top = static_cast<FLOAT>(m_upper_left_corner_y);
-            r = D2D1::RectF(left, top, left + boxWidth, top + boxHeight);
+                                               static_cast<FLOAT>(GetHeight() - m_upper_right_corner_y) - PLAYLIST_INNER_MARGIN * 2.0f);
+            const FLOAT right = static_cast<FLOAT>(m_right_edge - PLAYLIST_INNER_MARGIN);
+            const FLOAT left = (std::max)(static_cast<FLOAT>(m_left_edge + PLAYLIST_INNER_MARGIN), right - boxWidth);
+            const FLOAT top = static_cast<FLOAT>(m_upper_right_corner_y);
+            r = D2D1::RectF(left, top, right, top + boxHeight);
             DrawDarkTranslucentBox(&r);
+            const int reservedUpperRight =
+                static_cast<int>(std::ceil(r.bottom + PLAYLIST_INNER_MARGIN));
+            m_upper_right_corner_y = (std::min)(m_lower_right_corner_y, reservedUpperRight);
 
             r.top += PLAYLIST_INNER_MARGIN;
             r.left += PLAYLIST_INNER_MARGIN;
