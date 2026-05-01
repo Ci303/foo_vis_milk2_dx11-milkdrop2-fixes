@@ -2,6 +2,13 @@
 
 ## Release History
 
+### 0.2.1.25 - 2026-05-01
+
+Spacebar focus containment fix for the foobar2000 x64 component.
+
+- Stopped registering `Space` as a Win32 hotkey so MilkDrop no longer captures the key while another window is focused.
+- Kept the focused visualisation `Space` shortcut path intact so pressing `Space` inside MilkDrop still hard-cuts to the next preset.
+
 ### 0.2.1.24 - 2026-04-24
 
 Format-info builder update for the foobar2000 x64 component.

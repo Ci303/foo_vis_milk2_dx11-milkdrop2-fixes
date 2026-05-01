@@ -1876,7 +1876,6 @@ void milk2_ui_element::RegisterFocusHotkeys() noexcept
 
     if (::RegisterHotKey(get_wnd(), IDHK_SHOW_TITLE, 0, VK_F2) &&
         ::RegisterHotKey(get_wnd(), IDHK_SHOW_TIME, 0, VK_F3) &&
-        ::RegisterHotKey(get_wnd(), IDHK_HARDCUT, 0, VK_SPACE) &&
         ::RegisterHotKey(get_wnd(), IDHK_TOGGLE_FULLSCREEN, MOD_ALT, VK_RETURN))
     {
         m_focus_hotkeys_registered = true;
@@ -1885,7 +1884,6 @@ void milk2_ui_element::RegisterFocusHotkeys() noexcept
 
     ::UnregisterHotKey(get_wnd(), IDHK_SHOW_TITLE);
     ::UnregisterHotKey(get_wnd(), IDHK_SHOW_TIME);
-    ::UnregisterHotKey(get_wnd(), IDHK_HARDCUT);
     ::UnregisterHotKey(get_wnd(), IDHK_TOGGLE_FULLSCREEN);
 }
 
@@ -1896,7 +1894,6 @@ void milk2_ui_element::UnregisterFocusHotkeys() noexcept
 
     ::UnregisterHotKey(get_wnd(), IDHK_SHOW_TITLE);
     ::UnregisterHotKey(get_wnd(), IDHK_SHOW_TIME);
-    ::UnregisterHotKey(get_wnd(), IDHK_HARDCUT);
     ::UnregisterHotKey(get_wnd(), IDHK_TOGGLE_FULLSCREEN);
     m_focus_hotkeys_registered = false;
 }
@@ -1939,13 +1936,6 @@ LRESULT milk2_ui_element::OnHotKey(UINT uMsg, WPARAM wParam, LPARAM lParam)
             return 0;
         case IDHK_SHOW_TIME:
             ToggleSongLength();
-            return 0;
-        case IDHK_HARDCUT:
-            if (!IsPresetLock())
-            {
-                NextPreset(0.0f);
-                g_plugin.m_fHardCutThresh *= 2.0f;
-            }
             return 0;
         case IDHK_TOGGLE_FULLSCREEN:
             if (g_plugin.GetFrame() > 0)
