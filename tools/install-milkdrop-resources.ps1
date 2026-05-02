@@ -115,10 +115,31 @@ function Install-ResourcePack {
     Copy-TreeContent -SourcePath $sourcePath -DestinationPath $Resource.DestinationPath -Overwrite $Overwrite
 }
 
+function Install-FixedPresetPack {
+    param(
+        [Parameter(Mandatory)]
+        [string] $RepositoryRoot,
+
+        [Parameter(Mandatory)]
+        [string] $DestinationPath
+    )
+
+    $fixedPresetPath = Join-Path $RepositoryRoot 'presets\fixed-blacklisted'
+    if (-not (Test-Path -LiteralPath $fixedPresetPath -PathType Container)) {
+        throw "Missing fixed preset pack: $fixedPresetPath"
+    }
+
+    Write-Host "INFO: Installing fixed blacklist presets to $DestinationPath..."
+    foreach ($preset in Get-ChildItem -LiteralPath $fixedPresetPath -Filter '*.milk' -File) {
+        Copy-Item -LiteralPath $preset.FullName -Destination (Join-Path $DestinationPath $preset.Name) -Force
+    }
+}
+
 if (-not (Test-Path -LiteralPath $ProfilePath -PathType Container)) {
     throw "Profile path does not exist: $ProfilePath"
 }
 
+$repositoryRoot = Split-Path -Parent $PSScriptRoot
 $milkdropPath = Join-Path $ProfilePath 'milkdrop2'
 $presetPath = Join-Path $milkdropPath 'presets'
 $texturePath = Join-Path $milkdropPath 'textures'
@@ -160,6 +181,7 @@ try {
     foreach ($resource in $resources) {
         Install-ResourcePack -Resource $resource -WorkingPath $tempRoot -Overwrite $Force.IsPresent
     }
+    Install-FixedPresetPack -RepositoryRoot $repositoryRoot -DestinationPath $presetPath
 
     Write-Host 'INFO: Done.'
     Write-Host "INFO: Presets installed to $presetPath"
