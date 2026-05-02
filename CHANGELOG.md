@@ -2,6 +2,16 @@
 
 ## Release History
 
+### 0.2.1.26 - 2026-05-02
+
+Preset blacklist workflow and stability update for the foobar2000 x64 component.
+
+- Added extended selection to the preset blacklist dialog so Shift-click selects ranges and Ctrl-click toggles individual rows.
+- Updated blacklist removal to delete every selected entry in one action.
+- Added multi-select support to the blacklist file picker when adding presets from disk.
+- Added a conservative pixel-shader complexity guard so unusually large upgraded custom shader blocks fall back before entering the Direct3D compiler path.
+- Added a `presets/fixed-blacklisted` bundle with repaired versions of presets that previously triggered freezes, plus a CSV report of the applied preset changes.
+
 ### 0.2.1.25 - 2026-05-01
 
 Spacebar focus containment fix for the foobar2000 x64 component.

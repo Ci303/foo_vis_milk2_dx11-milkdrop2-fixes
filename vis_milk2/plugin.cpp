@@ -2957,6 +2957,26 @@ bool CPlugin::RecompilePShader(const char* szShadersText, PShaderInfo* si, int s
 
     si->Clear();
 
+    // Some imported MilkDrop packs contain very large shader-model 4 presets
+    // that can stall inside D3DCompile or the display driver. Treat those as a
+    // preset shader failure and let the normal fallback shader path handle them.
+    if (PSVersion >= MD2_PS_4_0 && szShadersText)
+    {
+        size_t shaderLength = 0;
+        size_t shaderLines = 1;
+        for (const char* p = szShadersText; *p; ++p)
+        {
+            shaderLength++;
+            if (*p == LINEFEED_CONTROL_CHAR)
+                shaderLines++;
+        }
+
+        constexpr size_t maxSafeHighModelShaderLength = 32000;
+        constexpr size_t maxSafeHighModelShaderLines = 240;
+        if (shaderLength > maxSafeHighModelShaderLength || shaderLines > maxSafeHighModelShaderLines)
+            return false;
+    }
+
     // Load shader.
     // Note: ps_1_4 required for dependent texture lookups.
     //       ps_2_0 required for tex2Dbias.

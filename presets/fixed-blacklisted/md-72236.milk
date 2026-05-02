@@ -1,0 +1,75 @@
+################################################################################
+Created with MilkDrop2077 on : 2021-02-19 at 12:20:21
+Code from : EvilJim - #11 Ice Drops.milk
+Warp code from : MilkDrop2077.R121.milk
+Comp code from : MilkDrop2077.R051.milk
+Level of RANDOMIZATION >> Around 30% of editable values were changed up to - or + 20%
+Result : A total of 10 out of 50 values have been changed :)
+Randomize colors : ON
+################################################################################
+MILKDROP_PRESET_VERSION=201
+PSVERSION=3
+PSVERSION_WARP=3
+PSVERSION_COMP=3
+[preset00]
+fRating=5.000000
+fGammaAdj=1.000000
+fDecay=0.990000
+fVideoEchoZoom=0.999601
+fVideoEchoAlpha=0.499900
+nVideoEchoOrientation=0
+nWaveMode=6
+bAdditiveWaves=0
+bWaveDots=0
+bModWaveAlphaByVolume=0
+bMaximizeWaveColor=0
+bTexWrap=0
+bDarkenCenter=0
+bMotionVectorsOn=0
+bRedBlueStereo=0
+nMotionVectorsX=12
+nMotionVectorsY=9
+bBrighten=1
+bDarken=1
+bSolarize=0
+bInvert=0
+fWaveAlpha=100.000000
+fWaveScale=0.2098551
+fWaveSmoothing=0.000000
+fWaveParam=0.000000
+fModWaveAlphaStart=2.000000
+fModWaveAlphaEnd=2.000000
+fWarpAnimSpeed=1.000000
+fWarpScale=1.0203601
+fZoomExponent=0.9801539
+fShader=0.000000
+zoom=0.999511
+rot=0.000000
+cx=0.500001
+cy=0.050000
+dx=0.000000
+dy=0.000000
+warp=0.0111
+sx=1.000158
+sy=1.000000
+wave_r=0.000000
+wave_g=0.000000
+wave_b=0.000000
+wave_x=0.999000
+wave_y=0.000000
+ob_size=0.500000
+ob_r=0.010000
+ob_g=0.000000
+ob_b=0.000000
+ob_a=0.000000
+ib_size=0.260000
+ib_r=0.285
+ib_g=0.250000
+ib_b=0.250000
+ib_a=0.000000
+per_frame_1=warp=0;
+per_frame_2=wave_r=treb;
+per_frame_3=wave_g=mid;
+per_frame_4=wave_b=bass;
+per_frame_5=dy=bass/50;
+

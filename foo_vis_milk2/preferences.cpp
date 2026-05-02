@@ -1137,30 +1137,76 @@ void PresetBlacklistDlg::OnAdd(UINT, int, CWindow)
 
     if (CPlugin::NormalizePresetBlacklistEntry(entry).empty())
     {
-        wchar_t selectedPath[MAX_PATH] = {0};
+        std::vector<wchar_t> selectedPaths(65536);
         OPENFILENAME ofn = {};
         ofn.lStructSize = sizeof(ofn);
         ofn.hwndOwner = *this;
         ofn.lpstrFilter = L"MilkDrop Presets (*.milk)\0*.milk\0All Files (*.*)\0*.*\0";
-        ofn.lpstrFile = selectedPath;
-        ofn.nMaxFile = static_cast<DWORD>(std::size(selectedPath));
+        ofn.lpstrFile = selectedPaths.data();
+        ofn.nMaxFile = static_cast<DWORD>(selectedPaths.size());
         ofn.lpstrInitialDir = g_plugin.GetPresetDir();
-        ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+        ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT | OFN_EXPLORER;
         ofn.lpstrDefExt = L"milk";
 
         if (!GetOpenFileName(&ofn))
             return;
 
-        wcscpy_s(entry, selectedPath);
-    }
+        std::vector<std::wstring> merged = g_plugin.GetPresetBlacklist();
+        size_t added = 0;
+        const wchar_t* cursor = selectedPaths.data();
+        std::wstring first = cursor;
+        cursor += first.size() + 1;
 
-    if (!g_plugin.AddPresetToBlacklist(entry))
-        return;
+        auto addEntry = [&](const std::wstring& value) {
+            std::wstring normalized = CPlugin::NormalizePresetBlacklistEntry(value);
+            if (normalized.empty())
+                return;
+
+            const bool duplicate = std::any_of(merged.begin(), merged.end(), [&normalized](const std::wstring& existing) {
+                return _wcsicmp(existing.c_str(), normalized.c_str()) == 0;
+            });
+            if (!duplicate)
+            {
+                merged.push_back(normalized);
+                added++;
+            }
+        };
+
+        if (*cursor == L'\0')
+        {
+            addEntry(first);
+        }
+        else
+        {
+            while (*cursor)
+            {
+                addEntry(cursor);
+                cursor += wcslen(cursor) + 1;
+            }
+        }
+
+        if (added == 0)
+            return;
+
+        if (!g_plugin.SetPresetBlacklist(merged))
+        {
+            MessageBox(L"Could not save the updated blacklist.", L"Preset Blacklist", MB_ICONERROR);
+            return;
+        }
+
+        m_changed = true;
+    }
+    else
+    {
+        if (!g_plugin.AddPresetToBlacklist(entry))
+            return;
+
+        m_changed = true;
+    }
 
     if (g_plugin.IsPresetBlacklisted(g_plugin.GetCurrentPresetFilename()))
         ::PostMessage(g_hWindow, WM_MILK2, MILK2_WPARAM_RANDOM_PRESET, 0);
 
-    m_changed = true;
     SetDlgItemText(IDC_BLACKLIST_ENTRY, L"");
     ApplyEntryPlaceholder();
     RefreshList();
@@ -1169,14 +1215,49 @@ void PresetBlacklistDlg::OnAdd(UINT, int, CWindow)
 
 void PresetBlacklistDlg::OnRemove(UINT, int, CWindow)
 {
-    const int index = static_cast<int>(SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETCURSEL, 0, 0));
-    if (index == LB_ERR)
+    const int selectionCount = static_cast<int>(SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETSELCOUNT, 0, 0));
+    if (selectionCount <= 0)
         return;
 
-    wchar_t entry[512] = {0};
-    SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETTEXT, index, reinterpret_cast<LPARAM>(entry));
-    if (!g_plugin.RemovePresetFromBlacklist(entry))
+    std::vector<int> selectedIndices(selectionCount);
+    const int selectedItems = static_cast<int>(
+        SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETSELITEMS, selectionCount, reinterpret_cast<LPARAM>(selectedIndices.data())));
+    if (selectedItems <= 0)
         return;
+
+    selectedIndices.resize(selectedItems);
+
+    std::vector<std::wstring> selectedEntries;
+    selectedEntries.reserve(selectedIndices.size());
+    for (const int index : selectedIndices)
+    {
+        wchar_t entry[512] = {0};
+        SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETTEXT, index, reinterpret_cast<LPARAM>(entry));
+
+        std::wstring normalized = CPlugin::NormalizePresetBlacklistEntry(entry);
+        if (!normalized.empty())
+            selectedEntries.push_back(std::move(normalized));
+    }
+
+    if (selectedEntries.empty())
+        return;
+
+    std::vector<std::wstring> blacklist = g_plugin.GetPresetBlacklist();
+    const size_t originalSize = blacklist.size();
+    blacklist.erase(std::remove_if(blacklist.begin(), blacklist.end(), [&selectedEntries](const std::wstring& entry) {
+        return std::any_of(selectedEntries.begin(), selectedEntries.end(), [&entry](const std::wstring& selected) {
+            return _wcsicmp(entry.c_str(), selected.c_str()) == 0;
+        });
+    }), blacklist.end());
+
+    if (blacklist.size() == originalSize)
+        return;
+
+    if (!g_plugin.SetPresetBlacklist(blacklist))
+    {
+        MessageBox(L"Could not save the updated blacklist.", L"Preset Blacklist", MB_ICONERROR);
+        return;
+    }
 
     m_changed = true;
     RefreshList();
@@ -1185,7 +1266,17 @@ void PresetBlacklistDlg::OnRemove(UINT, int, CWindow)
 
 void PresetBlacklistDlg::OnOpenLocation(UINT, int, CWindow)
 {
-    const int index = static_cast<int>(SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETCURSEL, 0, 0));
+    int index = LB_ERR;
+    const int selectionCount = static_cast<int>(SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETSELCOUNT, 0, 0));
+    if (selectionCount > 0)
+    {
+        std::vector<int> selectedIndices(selectionCount);
+        const int selectedItems = static_cast<int>(
+            SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETSELITEMS, selectionCount, reinterpret_cast<LPARAM>(selectedIndices.data())));
+        if (selectedItems > 0)
+            index = selectedIndices.front();
+    }
+
     if (index == LB_ERR)
         return;
 
@@ -1363,7 +1454,7 @@ void PresetBlacklistDlg::RefreshList()
 
 void PresetBlacklistDlg::UpdateButtons()
 {
-    const bool hasSelection = static_cast<int>(SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETCURSEL, 0, 0)) != LB_ERR;
+    const bool hasSelection = static_cast<int>(SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETSELCOUNT, 0, 0)) > 0;
     ::EnableWindow(GetDlgItem(IDC_BLACKLIST_ADD), TRUE);
     ::EnableWindow(GetDlgItem(IDC_BLACKLIST_REMOVE), static_cast<BOOL>(hasSelection));
     ::EnableWindow(GetDlgItem(IDC_BLACKLIST_OPEN), static_cast<BOOL>(hasSelection));
