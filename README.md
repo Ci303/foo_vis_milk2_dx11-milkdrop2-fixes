@@ -67,8 +67,8 @@ This branch already includes the upstream DirectX 11 foobar2000 port. Recent mai
 - The easiest install path is the GitHub Releases page for this repository.
 - Current public packages are x64 builds intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
-- Import `foo_vis_milk2.fb2k-component` in **File > Preferences > Components > Install...**.
-- Current release packages are named like `foo_vis_milk2-0.2.1.24.fb2k-component`.
+- Close foobar2000, then run the release installer named like `foo_vis_milk2-0.2.1.26-installer.exe`. It installs the x64 component, shader data, recommended preset packs, textures, and fixed preset overrides into the foobar2000 v2 profile.
+- If you prefer manual installation, import `foo_vis_milk2.fb2k-component` in **File > Preferences > Components > Install...** and then run [tools/install-milkdrop-resources.ps1](tools/install-milkdrop-resources.ps1).
 - Restart foobar2000 after the component is installed.
 
 ### 2. Add presets and textures
@@ -86,7 +86,7 @@ Useful preset sources:
 - [Vendored resource archive snapshots](third_party/milkdrop-resources)
 - [Fixed blacklist preset overrides](presets/fixed-blacklisted)
 
-Example:
+Manual resource install example:
 
 ```powershell
 .\tools\install-milkdrop-resources.ps1
