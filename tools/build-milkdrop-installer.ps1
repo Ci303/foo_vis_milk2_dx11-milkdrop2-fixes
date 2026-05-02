@@ -90,6 +90,7 @@ try {
     Copy-RequiredItem -SourcePath (Join-Path $repositoryRoot 'tools\install-milkdrop-resources.ps1') -DestinationPath (Join-Path $payloadRoot 'tools\install-milkdrop-resources.ps1')
     Copy-RequiredItem -SourcePath (Join-Path $repositoryRoot 'presets\fixed-blacklisted') -DestinationPath (Join-Path $payloadRoot 'presets\fixed-blacklisted')
     Copy-RequiredItem -SourcePath (Join-Path $repositoryRoot 'third_party\milkdrop-resources') -DestinationPath (Join-Path $payloadRoot 'third_party\milkdrop-resources')
+    Copy-RequiredItem -SourcePath (Join-Path $repositoryRoot 'templates') -DestinationPath (Join-Path $payloadRoot 'templates')
 
     Push-Location $payloadRoot
     try {

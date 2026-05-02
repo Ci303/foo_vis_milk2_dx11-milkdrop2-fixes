@@ -227,6 +227,31 @@ function Test-Foobar2000X64Installed {
     return $false
 }
 
+function Install-StarterTemplates {
+    param(
+        [Parameter(Mandatory)]
+        [string] $RepositoryRoot,
+
+        [Parameter(Mandatory)]
+        [string] $ProfilePath
+    )
+
+    $templateSource = Join-Path $RepositoryRoot 'templates'
+    if (-not (Test-Path -LiteralPath $templateSource -PathType Container)) {
+        return
+    }
+
+    $templateDestination = Join-Path $ProfilePath 'milkdrop2\templates'
+    [System.IO.Directory]::CreateDirectory((ConvertTo-ExtendedPath $templateDestination)) | Out-Null
+
+    Get-ChildItem -LiteralPath $templateSource -File -Filter '*.fth' |
+        ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $templateDestination $_.Name) -Force
+        }
+
+    Write-Host "INFO: Starter foobar2000 template copied to $templateDestination"
+}
+
 function Stop-WithMessage {
     param(
         [Parameter(Mandatory)]
@@ -254,6 +279,10 @@ if (-not $SkipFoobarCheck.IsPresent) {
 if (-not $SkipFoobarInstallCheck.IsPresent) {
     if (-not (Test-Foobar2000X64Installed)) {
         Write-Host 'ERROR: foobar2000 x64 does not appear to be installed.' -ForegroundColor Red
+        Write-Host ''
+        Write-Host 'This MilkDrop bundle is an add-on for foobar2000 v2 x64.'
+        Write-Host 'Install foobar2000 first, close it after installation, then run this MilkDrop installer again.'
+        Write-Host ''
         Write-Host "INFO: Opening official foobar2000 download page: $foobarDownloadUrl"
         Start-Process $foobarDownloadUrl
         if ((-not $NoPause.IsPresent) -and $Host.Name -eq 'ConsoleHost') {
@@ -277,10 +306,12 @@ if (-not $PSCmdlet.ShouldProcess($ProfilePath, 'Install MilkDrop component, pres
 
 Install-ComponentPackage -PackagePath $packagePath -ProfilePath $ProfilePath
 & $resourceInstallerPath -ProfilePath $ProfilePath -Force:$Force.IsPresent
+Install-StarterTemplates -RepositoryRoot $repositoryRoot -ProfilePath $ProfilePath
 
 Write-Host ''
 Write-Host 'MilkDrop bundle install complete.'
 Write-Host 'Restart foobar2000, then add or open the MilkDrop visualisation.'
+Write-Host 'Optional starter template: import milkdrop2\templates\foobar2000-milkdrop-starter.fth from the foobar2000 profile folder.'
 
 if ((-not $NoPause.IsPresent) -and $Host.Name -eq 'ConsoleHost') {
     Read-Host 'Press Enter to exit' | Out-Null

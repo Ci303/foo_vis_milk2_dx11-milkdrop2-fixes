@@ -67,11 +67,23 @@ This branch already includes the upstream DirectX 11 foobar2000 port. Recent mai
 - The easiest install path is the GitHub Releases page for this repository.
 - Current public packages are x64 builds intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
-- Close foobar2000, then run the release installer named like `foo_vis_milk2-0.2.1.26-installer.exe`. It installs the x64 component, shader data, recommended preset packs, textures, and repaired preset additions into the foobar2000 v2 profile.
-- If foobar2000 x64 is not installed, the installer opens the official foobar2000 download page and exits.
+- Close foobar2000, then run the release installer named like `foo_vis_milk2-0.2.1.26-installer.exe`. It installs the x64 component, shader data, recommended preset packs, textures, repaired preset additions, and an optional starter layout template into the foobar2000 v2 profile.
+- If foobar2000 x64 is not installed, the installer explains that foobar2000 is required, opens the official foobar2000 download page, and exits. Install foobar2000 v2 x64 first, close it, then run the MilkDrop installer again.
 - Restart foobar2000 after the component is installed.
 
-### 2. Optional manual resources
+### 2. Optional starter template
+
+The installer copies a starter foobar2000 Default UI theme to:
+
+`<foobar2000 profile folder>\milkdrop2\templates\foobar2000-milkdrop-starter.fth`
+
+This template is intended to help non-technical users get a working MilkDrop layout without building one manually. It is copied as a template only; the installer does not overwrite the user's active foobar2000 layout.
+
+To use it, open foobar2000 after installation and import the `.fth` theme from the profile folder path above.
+
+The same template is stored in this repository at [templates/foobar2000-milkdrop-starter.fth](templates/foobar2000-milkdrop-starter.fth).
+
+### 3. Optional manual resources
 
 - Presets go in `<foobar2000 profile folder>\milkdrop2\presets`.
 - Texture packs go in `<foobar2000 profile folder>\milkdrop2\textures`.
@@ -93,7 +105,7 @@ Manual resource install example:
 .\tools\install-milkdrop-resources.ps1
 ```
 
-### 3. Configure
+### 4. Configure
 
 - Add the MilkDrop visualisation element to a Default UI layout, or open it from the visualisations area if your layout already includes it.
 - Open **Preferences > Visualisations > MilkDrop** to configure:
@@ -115,14 +127,14 @@ FPS behaviour is mode-aware:
 - Fullscreen: fixed FPS values also enable MilkDrop's internal fullscreen limiter.
 - `Unlimited`: stores as `0` and disables those caps.
 
-### 4. Optional custom files
+### 5. Optional custom files
 
 - Custom messages file: `<foobar2000 profile folder>\milkdrop2\milk2_msg.ini`
 - Custom sprites file: `<foobar2000 profile folder>\milkdrop2\milk2_img.ini`
 
 If those files are blank or missing, normal playback still works. They are only used for the optional custom message and sprite features.
 
-### 5. Useful runtime shortcuts
+### 6. Useful runtime shortcuts
 
 - `F1`: show help
 - `F2`: song title
@@ -136,14 +148,14 @@ If those files are blank or missing, normal playback still works. They are only 
 
 The full shortcut list is also shown in the built-in help overlay.
 
-### 6. Optional mouse controls
+### 7. Optional mouse controls
 
 - Mouse wheel can adjust foobar2000 volume when **Enable mouse wheel volume control** is turned on in MilkDrop preferences.
 - Single left click can toggle play/pause when **Enable single-click play/pause** is turned on.
 - Double click still toggles fullscreen.
 - When single-click play/pause is enabled, MilkDrop shows a short `Paused` overlay using the current animated song-title font settings.
 
-### 7. Preset blacklist
+### 8. Preset blacklist
 
 - Right click the visualiser and choose `Never Show Again` to blacklist the current preset immediately.
 - The current preset name at the top of the context menu can open the preset file location in Explorer.
