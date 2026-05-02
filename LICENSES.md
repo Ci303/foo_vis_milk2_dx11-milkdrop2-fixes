@@ -677,7 +677,7 @@ freely, subject to the following restrictions:
 
 - **foobar2000** audio player is Copyright © 2001-2024, [Peter Pawlowski](https://www.foobar2000.org/license). All rights reserved.
 - **MilkDrop preset and texture archives** in `third_party/milkdrop-resources/` are vendored snapshots of projectM preset resource repositories. Their upstream readme and notice files are retained inside each archive.
-- **Fixed blacklist preset overrides** in `presets/fixed-blacklisted/` are modified copies of presets from the local/user preset set, repaired to avoid freeze-prone shader paths. The repair report in that folder documents the applied transformations.
+- **Fixed blacklist preset overrides** in `presets/fixed-blacklisted/` are modified copies of presets from the local/user preset set, repaired to avoid freeze-prone shader paths.
 
 ---
 
