@@ -1,9 +1,9 @@
 <#
     .SYNOPSIS
-        Downloads and installs recommended MilkDrop preset resources.
+        Installs recommended MilkDrop preset resources.
     .DESCRIPTION
-        Fetches the preset packs and texture pack referenced in README.md and
-        installs them into the expected foobar2000 profile folders:
+        Installs the vendored preset packs and texture pack referenced in
+        README.md into the expected foobar2000 profile folders:
         <profile>\milkdrop2\presets and <profile>\milkdrop2\textures.
     .EXAMPLE
         PS> .\tools\install-milkdrop-resources.ps1
@@ -12,7 +12,7 @@
     .INPUTS
         None.
     .OUTPUTS
-        Downloaded preset and texture files in the target profile folder.
+        Preset and texture files in the target profile folder.
 #>
 
 [CmdletBinding(SupportsShouldProcess)]
@@ -26,25 +26,37 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-function Get-RepoArchiveUrl {
+function ConvertTo-ExtendedPath {
     param(
         [Parameter(Mandatory)]
-        [string] $Repository
+        [string] $Path
     )
 
-    $repoInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repository"
-    $branch = $repoInfo.default_branch
-    return @{
-        Branch = $branch
-        Url    = "https://codeload.github.com/$Repository/zip/refs/heads/$branch"
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    if ($env:OS -ne 'Windows_NT') {
+        return $fullPath
     }
+
+    if ($fullPath.StartsWith('\\?\')) {
+        return $fullPath
+    }
+
+    if ($fullPath.StartsWith('\\')) {
+        return '\\?\UNC\' + $fullPath.Substring(2)
+    }
+
+    return '\\?\' + $fullPath
 }
 
-function Copy-TreeContent {
+function Copy-ZipTreeContent {
     param(
         [Parameter(Mandatory)]
-        [string] $SourcePath,
+        [string] $ArchivePath,
+
+        [Parameter()]
+        [string] $SourceSubPath,
 
         [Parameter(Mandatory)]
         [string] $DestinationPath,
@@ -53,27 +65,68 @@ function Copy-TreeContent {
         [bool] $Overwrite
     )
 
-    if (-not (Test-Path -LiteralPath $SourcePath -PathType Container)) {
-        throw "Missing extracted source path: $SourcePath"
+    if (-not (Test-Path -LiteralPath $ArchivePath -PathType Leaf)) {
+        throw "Missing archive: $ArchivePath"
     }
 
     if (-not (Test-Path -LiteralPath $DestinationPath -PathType Container)) {
         $null = New-Item -ItemType Directory -Path $DestinationPath -Force
     }
 
-    foreach ($item in Get-ChildItem -LiteralPath $SourcePath -Force) {
-        $target = Join-Path $DestinationPath $item.Name
-
-        if ($item.PSIsContainer) {
-            Copy-Item -LiteralPath $item.FullName -Destination $target -Recurse -Force
-            continue
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($ArchivePath)
+    try {
+        $root = ($archive.Entries | Where-Object { -not [string]::IsNullOrWhiteSpace($_.FullName) } | Select-Object -First 1).FullName.Split('/')[0]
+        if ([string]::IsNullOrWhiteSpace($root)) {
+            throw "Could not locate archive root for $ArchivePath."
         }
 
-        if ((-not $Overwrite) -and (Test-Path -LiteralPath $target -PathType Leaf)) {
-            continue
+        $sourcePrefix = if ([string]::IsNullOrWhiteSpace($SourceSubPath)) {
+            "$root/"
+        }
+        else {
+            "$root/$($SourceSubPath.Trim('/').Replace('\', '/'))/"
         }
 
-        Copy-Item -LiteralPath $item.FullName -Destination $target -Force
+        foreach ($entry in $archive.Entries) {
+            if (-not $entry.FullName.StartsWith($sourcePrefix, [System.StringComparison]::Ordinal)) {
+                continue
+            }
+
+            $relativePath = $entry.FullName.Substring($sourcePrefix.Length)
+            if ([string]::IsNullOrWhiteSpace($relativePath)) {
+                continue
+            }
+
+            $target = Join-Path $DestinationPath ($relativePath.Replace('/', [System.IO.Path]::DirectorySeparatorChar))
+            if ($entry.FullName.EndsWith('/')) {
+                [System.IO.Directory]::CreateDirectory((ConvertTo-ExtendedPath $target)) | Out-Null
+                continue
+            }
+
+            if ((-not $Overwrite) -and [System.IO.File]::Exists((ConvertTo-ExtendedPath $target))) {
+                continue
+            }
+
+            $targetDirectory = Split-Path -Parent $target
+            [System.IO.Directory]::CreateDirectory((ConvertTo-ExtendedPath $targetDirectory)) | Out-Null
+
+            $inputStream = $entry.Open()
+            try {
+                $outputStream = [System.IO.File]::Open((ConvertTo-ExtendedPath $target), [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+                try {
+                    $inputStream.CopyTo($outputStream)
+                }
+                finally {
+                    $outputStream.Dispose()
+                }
+            }
+            finally {
+                $inputStream.Dispose()
+            }
+        }
+    }
+    finally {
+        $archive.Dispose()
     }
 }
 
@@ -83,36 +136,17 @@ function Install-ResourcePack {
         [hashtable] $Resource,
 
         [Parameter(Mandatory)]
-        [string] $WorkingPath,
-
-        [Parameter(Mandatory)]
         [bool] $Overwrite
     )
 
-    $archiveInfo = Get-RepoArchiveUrl -Repository $Resource.Repository
-    $zipPath = Join-Path $WorkingPath ($Resource.Name + '.zip')
-    $extractPath = Join-Path $WorkingPath ($Resource.Name + '-extract')
-
-    Write-Host "INFO: Downloading $($Resource.Repository) ($($archiveInfo.Branch))..."
-    Invoke-WebRequest -Uri $archiveInfo.Url -OutFile $zipPath
-
-    Write-Host "INFO: Extracting $($Resource.Name)..."
-    Expand-Archive -LiteralPath $zipPath -DestinationPath $extractPath -Force
-
-    $archiveRoot = Get-ChildItem -LiteralPath $extractPath -Directory | Select-Object -First 1
-    if (-not $archiveRoot) {
-        throw "Could not locate extracted archive root for $($Resource.Name)."
-    }
-
-    $sourcePath = if ([string]::IsNullOrWhiteSpace($Resource.SourceSubPath)) {
-        $archiveRoot.FullName
-    }
-    else {
-        Join-Path $archiveRoot.FullName $Resource.SourceSubPath
+    $archivePath = $Resource.ArchivePath
+    if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
+        Write-Host "INFO: Local archive missing for $($Resource.Name); downloading pinned archive..."
+        Invoke-WebRequest -Uri $Resource.ArchiveUrl -OutFile $archivePath
     }
 
     Write-Host "INFO: Installing $($Resource.Name) to $($Resource.DestinationPath)..."
-    Copy-TreeContent -SourcePath $sourcePath -DestinationPath $Resource.DestinationPath -Overwrite $Overwrite
+    Copy-ZipTreeContent -ArchivePath $archivePath -SourceSubPath $Resource.SourceSubPath -DestinationPath $Resource.DestinationPath -Overwrite $Overwrite
 }
 
 function Install-FixedPresetPack {
@@ -140,6 +174,7 @@ if (-not (Test-Path -LiteralPath $ProfilePath -PathType Container)) {
 }
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
+$resourceArchivePath = Join-Path $repositoryRoot 'third_party\milkdrop-resources'
 $milkdropPath = Join-Path $ProfilePath 'milkdrop2'
 $presetPath = Join-Path $milkdropPath 'presets'
 $texturePath = Join-Path $milkdropPath 'textures'
@@ -147,19 +182,22 @@ $texturePath = Join-Path $milkdropPath 'textures'
 $resources = @(
     @{
         Name            = 'cream-of-the-crop'
-        Repository      = 'projectM-visualizer/presets-cream-of-the-crop'
+        ArchivePath     = Join-Path $resourceArchivePath 'presets-cream-of-the-crop-0180df21f5e0.zip'
+        ArchiveUrl      = 'https://codeload.github.com/projectM-visualizer/presets-cream-of-the-crop/zip/0180df21f5e0bd39b9060cc5de420ed2f1f9e509'
         SourceSubPath   = ''
         DestinationPath = $presetPath
     },
     @{
         Name            = 'milkdrop-original'
-        Repository      = 'projectM-visualizer/presets-milkdrop-original'
+        ArchivePath     = Join-Path $resourceArchivePath 'presets-milkdrop-original-e03b83e3338d.zip'
+        ArchiveUrl      = 'https://codeload.github.com/projectM-visualizer/presets-milkdrop-original/zip/e03b83e3338d8f1ed6cbcf908c719f249ef24288'
         SourceSubPath   = 'Milkdrop-Original'
         DestinationPath = $presetPath
     },
     @{
         Name            = 'milkdrop-textures'
-        Repository      = 'projectM-visualizer/presets-milkdrop-texture-pack'
+        ArchivePath     = Join-Path $resourceArchivePath 'presets-milkdrop-texture-pack-ff8edf2a8fa0.zip'
+        ArchiveUrl      = 'https://codeload.github.com/projectM-visualizer/presets-milkdrop-texture-pack/zip/ff8edf2a8fa07e55ad562f1af97076526c484f7d'
         SourceSubPath   = 'textures'
         DestinationPath = $texturePath
     }
@@ -167,28 +205,19 @@ $resources = @(
 
 Write-Host "INFO: Installing MilkDrop resources into $milkdropPath"
 
-if (-not $PSCmdlet.ShouldProcess($milkdropPath, 'Download and install recommended MilkDrop preset resources')) {
+if (-not $PSCmdlet.ShouldProcess($milkdropPath, 'Install recommended MilkDrop preset resources')) {
     return
 }
 
-$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('milkdrop-resource-install-' + [System.Guid]::NewGuid().ToString('N'))
+$null = New-Item -ItemType Directory -Path $presetPath -Force
+$null = New-Item -ItemType Directory -Path $texturePath -Force
+$null = New-Item -ItemType Directory -Path $resourceArchivePath -Force
 
-try {
-    $null = New-Item -ItemType Directory -Path $tempRoot -Force
-    $null = New-Item -ItemType Directory -Path $presetPath -Force
-    $null = New-Item -ItemType Directory -Path $texturePath -Force
-
-    foreach ($resource in $resources) {
-        Install-ResourcePack -Resource $resource -WorkingPath $tempRoot -Overwrite $Force.IsPresent
-    }
-    Install-FixedPresetPack -RepositoryRoot $repositoryRoot -DestinationPath $presetPath
-
-    Write-Host 'INFO: Done.'
-    Write-Host "INFO: Presets installed to $presetPath"
-    Write-Host "INFO: Textures installed to $texturePath"
+foreach ($resource in $resources) {
+    Install-ResourcePack -Resource $resource -Overwrite $Force.IsPresent
 }
-finally {
-    if (Test-Path -LiteralPath $tempRoot -PathType Container) {
-        Remove-Item -LiteralPath $tempRoot -Recurse -Force
-    }
-}
+Install-FixedPresetPack -RepositoryRoot $repositoryRoot -DestinationPath $presetPath
+
+Write-Host 'INFO: Done.'
+Write-Host "INFO: Presets installed to $presetPath"
+Write-Host "INFO: Textures installed to $texturePath"

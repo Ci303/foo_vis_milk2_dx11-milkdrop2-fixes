@@ -76,13 +76,14 @@ This branch already includes the upstream DirectX 11 foobar2000 port. Recent mai
 - Presets go in `<foobar2000 profile folder>\milkdrop2\presets`.
 - Texture packs go in `<foobar2000 profile folder>\milkdrop2\textures`.
 - If you use presets from large packs, install the matching texture pack as well. Many "blank" or obviously broken starts are just missing textures.
-- To bootstrap the recommended packs automatically, run [tools/install-milkdrop-resources.ps1](tools/install-milkdrop-resources.ps1). By default it targets `%AppData%\foobar2000-v2` and installs the recommended preset and texture repositories into the correct `milkdrop2` folders. The script also applies this repository's fixed preset overrides from `presets/fixed-blacklisted`.
+- To bootstrap the recommended packs automatically, run [tools/install-milkdrop-resources.ps1](tools/install-milkdrop-resources.ps1). By default it targets `%AppData%\foobar2000-v2` and installs the vendored preset and texture archives from `third_party/milkdrop-resources` into the correct `milkdrop2` folders. The script also applies this repository's fixed preset overrides from `presets/fixed-blacklisted`.
 
 Useful preset sources:
 
 - [Cream of the Crop Pack](https://github.com/projectM-visualizer/presets-cream-of-the-crop)
 - [Base Milkdrop Texture Pack](https://github.com/projectM-visualizer/presets-milkdrop-texture-pack)
 - [Milkdrop 2 Presets](https://github.com/projectM-visualizer/presets-milkdrop-original)
+- [Vendored resource archive snapshots](third_party/milkdrop-resources)
 - [Fixed blacklist preset overrides](presets/fixed-blacklisted)
 
 Example:
