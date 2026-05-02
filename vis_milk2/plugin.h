@@ -393,6 +393,10 @@ class CPlugin : public CPluginShell
     bool m_bTexSizeWasAutoExact;
     bool m_bPresetLockedByUser;
     bool m_bPresetLockedByCode;
+    bool m_bPlaybackActive;
+    bool m_bLoadPresetOnPlaybackResume;
+    bool m_bLoadFoobarIdlePreset;
+    bool m_bFoobarIdlePresetActive;
     float m_fAnimTime;
     float m_fStartTime;
     float m_fPresetStartTime;
@@ -583,6 +587,8 @@ class CPlugin : public CPluginShell
 #else
     bool PanelSettings(plugin_config* settings);
     void SetFoobarFullscreenFrameLimit(uint32_t max_fps) noexcept;
+    void SetFoobarPlaybackActive(bool active) noexcept;
+    void LoadFoobarIdlePreset(float fBlendTime) noexcept;
 #endif
     void LoadRandomPreset(float fBlendTime);
     void LoadPreset(const wchar_t* szPresetFilename, float fBlendTime);

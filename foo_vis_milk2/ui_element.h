@@ -322,10 +322,12 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
 
     // clang-format off
     // Playback callback methods
-    void on_playback_starting(play_control::t_track_command /*p_command*/, bool /*p_paused*/) { MILK2_CONSOLE_LOG("+ PlaybackStart") UpdateTrack(); }
-    void on_playback_new_track(metadb_handle_ptr p_track) { MILK2_CONSOLE_LOG("+ PlaybackNew") UpdateTrack(p_track); }
-    void on_playback_stop(play_control::t_stop_reason /*p_reason*/) { MILK2_CONSOLE_LOG("+ PlaybackStop") UpdateTrack(); }
+    void on_playback_starting(play_control::t_track_command p_command, bool p_paused);
+    void on_playback_new_track(metadb_handle_ptr p_track);
+    void on_playback_stop(play_control::t_stop_reason p_reason);
+    void on_playback_pause(bool p_state);
 
+    void UpdateFoobarPlaybackState();
     void UpdateTrack();
     void UpdateTrack(metadb_handle_ptr p_track);
 

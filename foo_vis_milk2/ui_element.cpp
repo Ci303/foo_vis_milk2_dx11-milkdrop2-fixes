@@ -270,7 +270,7 @@ void install_crash_logging() noexcept
 milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_instance_callback_ptr p_callback) :
     m_callback(p_callback),
     m_bMsgHandled(TRUE),
-    play_callback_impl_base(flag_on_playback_starting | flag_on_playback_new_track | flag_on_playback_stop),
+    play_callback_impl_base(flag_on_playback_starting | flag_on_playback_new_track | flag_on_playback_stop | flag_on_playback_pause),
     playlist_callback_impl_base(flag_on_items_added | flag_on_items_reordered | flag_on_items_removed | flag_on_items_selection_change |
                                 flag_on_item_focus_change | flag_on_items_modified | flag_on_playlist_activate | flag_on_playlists_reorder |
                                 flag_on_playlists_removed | flag_on_playback_order_changed)
@@ -1388,6 +1388,7 @@ bool milk2_ui_element::Initialize(HWND window, int width, int height)
         {
             if (FALSE == g_plugin.PluginInitialize(width, height))
                 return false;
+            g_plugin.SetFoobarPlaybackActive(m_playback_control->is_playing() && !m_playback_control->is_paused());
 
             HICON hIcon = ::LoadIcon(_AtlBaseModule.GetResourceInstance(), MAKEINTRESOURCE(IDI_MILK2_ICON));
             HWND parent = GetRealParent(get_wnd());
@@ -1539,8 +1540,12 @@ void milk2_ui_element::Clear()
 
 void milk2_ui_element::BuildWaves()
 {
-    //if (!m_vis_stream.is_valid())
-    //    return;
+    if (!m_vis_stream.is_valid() || !m_playback_control->is_playing() || m_playback_control->is_paused())
+    {
+        for (uint32_t i = 0; i < static_cast<uint32_t>(NUM_AUDIO_BUFFER_SAMPLES); ++i)
+            waves[0][i] = waves[1][i] = 0.0f;
+        return;
+    }
 
     double time;
     if (!m_vis_stream->get_absolute_time(time))
@@ -1932,6 +1937,40 @@ void milk2_ui_element::UpdateChannelMode()
     }
 }
 // clang-format on
+
+void milk2_ui_element::UpdateFoobarPlaybackState()
+{
+    const bool active = m_playback_control->is_playing() && !m_playback_control->is_paused();
+    run_plugin_locked("UpdateFoobarPlaybackState", [&] { g_plugin.SetFoobarPlaybackActive(active); }, true);
+}
+
+void milk2_ui_element::on_playback_starting(play_control::t_track_command /*p_command*/, bool /*p_paused*/)
+{
+    MILK2_CONSOLE_LOG("+ PlaybackStart")
+    UpdateFoobarPlaybackState();
+    UpdateTrack();
+}
+
+void milk2_ui_element::on_playback_new_track(metadb_handle_ptr p_track)
+{
+    MILK2_CONSOLE_LOG("+ PlaybackNew")
+    UpdateFoobarPlaybackState();
+    UpdateTrack(p_track);
+}
+
+void milk2_ui_element::on_playback_stop(play_control::t_stop_reason /*p_reason*/)
+{
+    MILK2_CONSOLE_LOG("+ PlaybackStop")
+    UpdateFoobarPlaybackState();
+    UpdateTrack();
+}
+
+void milk2_ui_element::on_playback_pause(bool /*p_state*/)
+{
+    MILK2_CONSOLE_LOG("+ PlaybackPause")
+    UpdateFoobarPlaybackState();
+    UpdateTrack();
+}
 
 void milk2_ui_element::UpdateTrack()
 {

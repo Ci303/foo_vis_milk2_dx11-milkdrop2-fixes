@@ -851,6 +851,14 @@ void CPlugin::RenderFrame(int bRedraw)
         m_fNextPresetTime += fDeltaT;
     }
 
+#ifdef _FOOBAR
+    if (!m_bPlaybackActive)
+    {
+        m_fPresetStartTime += fDeltaT;
+        m_fNextPresetTime += fDeltaT;
+    }
+#endif
+
     // Update FPS.
     /*
     if (GetFrame() < 4)
@@ -910,8 +918,26 @@ void CPlugin::RenderFrame(int bRedraw)
     {
         m_rand_frame = XMFLOAT4(FRAND, FRAND, FRAND, FRAND);
 
+#ifdef _FOOBAR
+        if (!m_bPlaybackActive && m_bLoadFoobarIdlePreset && m_nLoadingPreset == 0)
+        {
+            LoadFoobarIdlePreset(0.0f);
+            m_bLoadFoobarIdlePreset = false;
+        }
+
+        if (m_bPlaybackActive && m_bLoadPresetOnPlaybackResume && m_nLoadingPreset == 0)
+        {
+            LoadRandomPreset(m_fBlendTimeAuto);
+            m_bLoadPresetOnPlaybackResume = false;
+            m_bFoobarIdlePresetActive = false;
+        }
+        const bool allowPresetChange = m_bPlaybackActive;
+#else
+        const bool allowPresetChange = true;
+#endif
+
         // Randomly change the preset, if it's time.
-        if (m_fNextPresetTime < GetTime())
+        if (allowPresetChange && m_fNextPresetTime < GetTime())
         {
             if (m_nLoadingPreset == 0) // don't start a load if one is already underway!
                 LoadRandomPreset(m_fBlendTimeAuto);
@@ -957,7 +983,7 @@ void CPlugin::RenderFrame(int bRedraw)
         //static float m_fHardCutThresh;
         if (GetFrame() == 0)
             m_fHardCutThresh = m_fHardCutLoudnessThresh * 2.0f;
-        if (GetFps() > 1.0f && !m_bHardCutsDisabled && !m_bPresetLockedByUser && !m_bPresetLockedByCode)
+        if (GetFps() > 1.0f && !m_bHardCutsDisabled && !m_bPresetLockedByUser && !m_bPresetLockedByCode && allowPresetChange)
         {
             if (mdsound.imm_rel[0] + mdsound.imm_rel[1] + mdsound.imm_rel[2] > m_fHardCutThresh * 3.0f)
             {

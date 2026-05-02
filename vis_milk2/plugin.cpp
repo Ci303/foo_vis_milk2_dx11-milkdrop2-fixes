@@ -615,6 +615,10 @@ void CPlugin::MilkDropPreInitialize()
     m_bTexSizeWasAutoExact = false;
     //m_bPresetLockedByUser = false;  NOW SET IN DERIVED SETTINGS
     m_bPresetLockedByCode = false;
+    m_bPlaybackActive = false;
+    m_bLoadPresetOnPlaybackResume = false;
+    m_bLoadFoobarIdlePreset = true;
+    m_bFoobarIdlePresetActive = false;
     m_fStartTime = 0.0f;
     m_fPresetStartTime = 0.0f;
     m_fNextPresetTime = -1.0f; // negative value means no time set (...it will be auto-set on first call to UpdateTime)
@@ -1026,6 +1030,120 @@ bool CPlugin::PanelSettings(plugin_config* settings)
 void CPlugin::SetFoobarFullscreenFrameLimit(uint32_t max_fps) noexcept
 {
     m_max_fps_fs = static_cast<int>(max_fps);
+}
+
+void CPlugin::SetFoobarPlaybackActive(bool active) noexcept
+{
+    if (m_bPlaybackActive == active)
+        return;
+
+    m_bPlaybackActive = active;
+    if (active)
+    {
+        m_bLoadPresetOnPlaybackResume = m_bFoobarIdlePresetActive || m_bLoadFoobarIdlePreset;
+        m_bLoadFoobarIdlePreset = false;
+    }
+    else
+    {
+        m_bLoadFoobarIdlePreset = true;
+        m_bLoadPresetOnPlaybackResume = false;
+    }
+}
+
+void CPlugin::LoadFoobarIdlePreset(float fBlendTime) noexcept
+{
+    static constexpr char idlePreset[] =
+        "MILKDROP_PRESET_VERSION=201\r\n"
+        "PSVERSION=3\r\n"
+        "PSVERSION_WARP=3\r\n"
+        "PSVERSION_COMP=3\r\n"
+        "[preset00]\r\n"
+        "fRating=0.000000\r\n"
+        "fGammaAdj=1.000000\r\n"
+        "fDecay=0.900000\r\n"
+        "fVideoEchoZoom=1.000000\r\n"
+        "fVideoEchoAlpha=0.000000\r\n"
+        "nVideoEchoOrientation=0\r\n"
+        "nWaveMode=0\r\n"
+        "bAdditiveWaves=0\r\n"
+        "bWaveDots=0\r\n"
+        "bModWaveAlphaByVolume=0\r\n"
+        "bMaximizeWaveColor=0\r\n"
+        "bTexWrap=0\r\n"
+        "bDarkenCenter=0\r\n"
+        "bMotionVectorsOn=0\r\n"
+        "bRedBlueStereo=0\r\n"
+        "nMotionVectorsX=0\r\n"
+        "nMotionVectorsY=0\r\n"
+        "bBrighten=0\r\n"
+        "bDarken=0\r\n"
+        "bSolarize=0\r\n"
+        "bInvert=0\r\n"
+        "fWaveAlpha=1.000000\r\n"
+        "fWaveScale=1.400000\r\n"
+        "fWaveSmoothing=0.600000\r\n"
+        "fWaveParam=0.000000\r\n"
+        "fModWaveAlphaStart=0.000000\r\n"
+        "fModWaveAlphaEnd=0.000000\r\n"
+        "fWarpAnimSpeed=0.000000\r\n"
+        "fWarpScale=1.000000\r\n"
+        "fZoomExponent=1.000000\r\n"
+        "fShader=0.000000\r\n"
+        "zoom=1.000000\r\n"
+        "rot=0.000000\r\n"
+        "cx=0.500000\r\n"
+        "cy=0.500000\r\n"
+        "dx=0.000000\r\n"
+        "dy=0.000000\r\n"
+        "warp=0.000000\r\n"
+        "sx=1.000000\r\n"
+        "sy=1.000000\r\n"
+        "wave_r=0.080000\r\n"
+        "wave_g=0.900000\r\n"
+        "wave_b=0.780000\r\n"
+        "wave_x=0.500000\r\n"
+        "wave_y=0.500000\r\n"
+        "ob_size=0.000000\r\n"
+        "ob_r=0.000000\r\n"
+        "ob_g=0.000000\r\n"
+        "ob_b=0.000000\r\n"
+        "ob_a=0.000000\r\n"
+        "ib_size=0.000000\r\n"
+        "ib_r=0.000000\r\n"
+        "ib_g=0.000000\r\n"
+        "ib_b=0.000000\r\n"
+        "ib_a=0.000000\r\n"
+        "per_frame_1=wave_y=0.5;\r\n"
+        "per_frame_2=wave_r=0.08;\r\n"
+        "per_frame_3=wave_g=0.65+0.08*sin(time*1.7);\r\n"
+        "per_frame_4=wave_b=0.75+0.06*sin(time*1.1);\r\n"
+        "per_frame_5=monitor=0;\r\n";
+
+    wchar_t idleDir[MAX_PATH] = {0};
+    wchar_t idleFile[MAX_PATH] = {0};
+    if (swprintf_s(idleDir, L"%lsidle\\", m_szMilkdrop2Path) < 0 ||
+        swprintf_s(idleFile, L"%lsfoobar-idle-oscilloscope.milk", idleDir) < 0)
+        return;
+
+    CreateDirectory(m_szMilkdrop2Path, nullptr);
+    CreateDirectory(idleDir, nullptr);
+
+    HANDLE file = CreateFile(idleFile, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE)
+        return;
+
+    DWORD bytesWritten = 0;
+    const DWORD bytesToWrite = static_cast<DWORD>(sizeof(idlePreset) - 1);
+    const BOOL writeOk = WriteFile(file, idlePreset, bytesToWrite, &bytesWritten, nullptr);
+    CloseHandle(file);
+    if (!writeOk || bytesWritten != bytesToWrite)
+        return;
+
+    wchar_t rememberedPreset[MAX_PATH] = {0};
+    wcscpy_s(rememberedPreset, m_szRememberedPreset);
+    LoadPreset(idleFile, fBlendTime);
+    wcscpy_s(m_szRememberedPreset, rememberedPreset);
+    m_bFoobarIdlePresetActive = true;
 }
 #endif
 
