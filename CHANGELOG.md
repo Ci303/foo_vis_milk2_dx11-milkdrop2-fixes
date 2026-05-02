@@ -10,9 +10,9 @@ Preset blacklist workflow and stability update for the foobar2000 x64 component.
 - Updated blacklist removal to delete every selected entry in one action.
 - Added multi-select support to the blacklist file picker when adding presets from disk.
 - Added a conservative pixel-shader complexity guard so unusually large upgraded custom shader blocks fall back before entering the Direct3D compiler path.
-- Added a `presets/fixed-blacklisted` bundle with repaired versions of presets that previously triggered freezes.
+- Added repaired preset additions for presets that previously triggered freezes.
 - Vendored the recommended preset and texture pack archives into `third_party/milkdrop-resources` and updated the resource installer to use those local archives by default.
-- Added a self-extracting installer build script that packages the x64 component, shader data, vendored resources, and fixed preset overrides into one `.exe`.
+- Added a self-extracting installer build script that packages the x64 component, shader data, vendored resources, and repaired preset additions into one `.exe`.
 - Updated the bundle installer to stop and open the official foobar2000 download page when foobar2000 x64 is not installed.
 
 ### 0.2.1.25 - 2026-05-01

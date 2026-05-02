@@ -50,6 +50,29 @@ function ConvertTo-ExtendedPath {
     return '\\?\' + $fullPath
 }
 
+function Test-SafeArchiveRelativePath {
+    param(
+        [Parameter(Mandatory)]
+        [string] $RelativePath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($RelativePath)) {
+        return $false
+    }
+
+    if ([System.IO.Path]::IsPathRooted($RelativePath) -or $RelativePath -match '^[A-Za-z]:') {
+        return $false
+    }
+
+    foreach ($part in ($RelativePath -split '[\\/]')) {
+        if ([string]::IsNullOrWhiteSpace($part) -or $part -eq '..') {
+            return $false
+        }
+    }
+
+    return $true
+}
+
 function Copy-ZipTreeContent {
     param(
         [Parameter(Mandatory)]
@@ -57,6 +80,9 @@ function Copy-ZipTreeContent {
 
         [Parameter()]
         [string] $SourceSubPath,
+
+        [Parameter()]
+        [string[]] $IncludeExtensions = @(),
 
         [Parameter(Mandatory)]
         [string] $DestinationPath,
@@ -97,10 +123,29 @@ function Copy-ZipTreeContent {
                 continue
             }
 
+            $safeRelativePath = $relativePath.TrimEnd('/', '\')
+            if (-not (Test-SafeArchiveRelativePath $safeRelativePath)) {
+                throw "Archive entry uses an unsafe relative path: $($entry.FullName)"
+            }
+
             $target = Join-Path $DestinationPath ($relativePath.Replace('/', [System.IO.Path]::DirectorySeparatorChar))
             if ($entry.FullName.EndsWith('/')) {
                 [System.IO.Directory]::CreateDirectory((ConvertTo-ExtendedPath $target)) | Out-Null
                 continue
+            }
+
+            if ($IncludeExtensions.Count -gt 0) {
+                $extension = [System.IO.Path]::GetExtension($relativePath)
+                $extensionAllowed = $IncludeExtensions | Where-Object { [string]::Equals($_, $extension, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1
+                if (-not $extensionAllowed) {
+                    continue
+                }
+            }
+
+            $destinationRoot = [System.IO.Path]::GetFullPath($DestinationPath).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+            $targetFullPath = [System.IO.Path]::GetFullPath($target)
+            if (-not $targetFullPath.StartsWith($destinationRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "Archive entry escapes the destination path: $($entry.FullName)"
             }
 
             if ((-not $Overwrite) -and [System.IO.File]::Exists((ConvertTo-ExtendedPath $target))) {
@@ -146,7 +191,8 @@ function Install-ResourcePack {
     }
 
     Write-Host "INFO: Installing $($Resource.Name) to $($Resource.DestinationPath)..."
-    Copy-ZipTreeContent -ArchivePath $archivePath -SourceSubPath $Resource.SourceSubPath -DestinationPath $Resource.DestinationPath -Overwrite $Overwrite
+    $includeExtensions = if ($Resource.ContainsKey('IncludeExtensions')) { @($Resource.IncludeExtensions) } else { @() }
+    Copy-ZipTreeContent -ArchivePath $archivePath -SourceSubPath $Resource.SourceSubPath -IncludeExtensions $includeExtensions -DestinationPath $Resource.DestinationPath -Overwrite $Overwrite
 }
 
 function Install-FixedPresetPack {
@@ -163,7 +209,7 @@ function Install-FixedPresetPack {
         throw "Missing fixed preset pack: $fixedPresetPath"
     }
 
-    Write-Host "INFO: Installing fixed blacklist presets to $DestinationPath..."
+    Write-Host "INFO: Installing repaired preset additions to $DestinationPath..."
     foreach ($preset in Get-ChildItem -LiteralPath $fixedPresetPath -Filter '*.milk' -File) {
         Copy-Item -LiteralPath $preset.FullName -Destination (Join-Path $DestinationPath $preset.Name) -Force
     }
@@ -185,6 +231,7 @@ $resources = @(
         ArchivePath     = Join-Path $resourceArchivePath 'presets-cream-of-the-crop-0180df21f5e0.zip'
         ArchiveUrl      = 'https://codeload.github.com/projectM-visualizer/presets-cream-of-the-crop/zip/0180df21f5e0bd39b9060cc5de420ed2f1f9e509'
         SourceSubPath   = ''
+        IncludeExtensions = @('.milk')
         DestinationPath = $presetPath
     },
     @{
@@ -192,6 +239,7 @@ $resources = @(
         ArchivePath     = Join-Path $resourceArchivePath 'presets-milkdrop-original-e03b83e3338d.zip'
         ArchiveUrl      = 'https://codeload.github.com/projectM-visualizer/presets-milkdrop-original/zip/e03b83e3338d8f1ed6cbcf908c719f249ef24288'
         SourceSubPath   = 'Milkdrop-Original'
+        IncludeExtensions = @('.milk')
         DestinationPath = $presetPath
     },
     @{
@@ -199,6 +247,7 @@ $resources = @(
         ArchivePath     = Join-Path $resourceArchivePath 'presets-milkdrop-texture-pack-ff8edf2a8fa0.zip'
         ArchiveUrl      = 'https://codeload.github.com/projectM-visualizer/presets-milkdrop-texture-pack/zip/ff8edf2a8fa07e55ad562f1af97076526c484f7d'
         SourceSubPath   = 'textures'
+        IncludeExtensions = @('.bmp', '.jpg', '.jpeg', '.png', '.tga')
         DestinationPath = $texturePath
     }
 )

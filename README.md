@@ -67,7 +67,7 @@ This branch already includes the upstream DirectX 11 foobar2000 port. Recent mai
 - The easiest install path is the GitHub Releases page for this repository.
 - Current public packages are x64 builds intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
-- Close foobar2000, then run the release installer named like `foo_vis_milk2-0.2.1.26-installer.exe`. It installs the x64 component, shader data, recommended preset packs, textures, and fixed preset overrides into the foobar2000 v2 profile.
+- Close foobar2000, then run the release installer named like `foo_vis_milk2-0.2.1.26-installer.exe`. It installs the x64 component, shader data, recommended preset packs, textures, and repaired preset additions into the foobar2000 v2 profile.
 - If foobar2000 x64 is not installed, the installer opens the official foobar2000 download page and exits.
 - Restart foobar2000 after the component is installed.
 
@@ -75,8 +75,8 @@ This branch already includes the upstream DirectX 11 foobar2000 port. Recent mai
 
 - Presets go in `<foobar2000 profile folder>\milkdrop2\presets`.
 - Texture packs go in `<foobar2000 profile folder>\milkdrop2\textures`.
-- The release installer already installs the recommended packs and fixed preset overrides.
-- If you install `foo_vis_milk2.fb2k-component` manually, run [tools/install-milkdrop-resources.ps1](tools/install-milkdrop-resources.ps1) to install the same vendored presets, textures, and fixed overrides.
+- The release installer already installs the recommended packs and repaired preset additions.
+- If you install `foo_vis_milk2.fb2k-component` manually, run [tools/install-milkdrop-resources.ps1](tools/install-milkdrop-resources.ps1) to install the same vendored presets, textures, and repaired additions.
 - Many "blank" or obviously broken presets are caused by missing textures.
 
 Useful preset sources:

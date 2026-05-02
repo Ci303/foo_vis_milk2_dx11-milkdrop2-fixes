@@ -3,7 +3,7 @@
         Builds a self-extracting MilkDrop bundle installer.
     .DESCRIPTION
         Creates a single EXE containing the foobar2000 component package,
-        vendored preset/texture archives, fixed preset overrides, and installer
+        vendored preset/texture archives, repaired preset additions, and installer
         scripts.
     .EXAMPLE
         PS> .\tools\build-milkdrop-installer.ps1
@@ -44,6 +44,16 @@ function Copy-RequiredItem {
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $sevenZip = (Get-Command 7z.exe -ErrorAction Stop).Source
+$sevenZipVersionText = (& $sevenZip | Select-Object -First 2) -join "`n"
+if ($sevenZipVersionText -notmatch '7-Zip\s+(\d+)\.(\d+)') {
+    throw "Could not determine 7-Zip version from $sevenZip."
+}
+
+$sevenZipVersion = [version]::new([int]$Matches[1], [int]$Matches[2])
+if ($sevenZipVersion -lt [version]::new(24, 0)) {
+    throw "7-Zip 24.00 or newer is required to build the installer. Found $sevenZipVersion at $sevenZip."
+}
+
 $sevenZipSfx = Join-Path (Split-Path -Parent $sevenZip) '7z.sfx'
 if (-not (Test-Path -LiteralPath $sevenZipSfx -PathType Leaf)) {
     throw "Could not locate 7z.sfx next to $sevenZip."

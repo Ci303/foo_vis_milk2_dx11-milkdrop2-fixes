@@ -138,14 +138,93 @@ function Install-ComponentPackage {
     Write-Host "INFO: Component installed to $componentDirectory"
 }
 
-function Test-Foobar2000X64Installed {
-    $programFiles = [Environment]::GetFolderPath('ProgramFiles')
-    if ([string]::IsNullOrWhiteSpace($programFiles)) {
+function Test-WindowsExecutableX64 {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         return $false
     }
 
-    $foobarPath = Join-Path $programFiles 'foobar2000\foobar2000.exe'
-    return Test-Path -LiteralPath $foobarPath -PathType Leaf
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $reader = [System.IO.BinaryReader]::new($stream)
+        try {
+            if ($stream.Length -lt 0x40) {
+                return $false
+            }
+
+            $stream.Position = 0x3c
+            $peOffset = $reader.ReadInt32()
+            if ($peOffset -lt 0 -or $peOffset + 6 -gt $stream.Length) {
+                return $false
+            }
+
+            $stream.Position = $peOffset
+            $signature = $reader.ReadUInt32()
+            if ($signature -ne 0x00004550) {
+                return $false
+            }
+
+            $machine = $reader.ReadUInt16()
+            return $machine -eq 0x8664
+        }
+        finally {
+            $reader.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
+function Get-Foobar2000CandidatePaths {
+    $paths = New-Object System.Collections.Generic.List[string]
+
+    foreach ($basePath in @(
+        [Environment]::GetFolderPath('ProgramFiles'),
+        [Environment]::GetFolderPath('ProgramFilesX86'),
+        (Join-Path $env:LOCALAPPDATA 'Programs')
+    )) {
+        if (-not [string]::IsNullOrWhiteSpace($basePath)) {
+            $paths.Add((Join-Path $basePath 'foobar2000\foobar2000.exe'))
+        }
+    }
+
+    foreach ($registryPath in @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )) {
+        Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -like 'foobar2000*' } |
+            ForEach-Object {
+                if (-not [string]::IsNullOrWhiteSpace($_.InstallLocation)) {
+                    $paths.Add((Join-Path $_.InstallLocation 'foobar2000.exe'))
+                }
+
+                if (-not [string]::IsNullOrWhiteSpace($_.DisplayIcon)) {
+                    $displayIcon = ($_.DisplayIcon -replace ',\d+$', '').Trim('"')
+                    if ([System.IO.Path]::GetFileName($displayIcon) -ieq 'foobar2000.exe') {
+                        $paths.Add($displayIcon)
+                    }
+                }
+            }
+    }
+
+    return $paths | Select-Object -Unique
+}
+
+function Test-Foobar2000X64Installed {
+    foreach ($candidatePath in Get-Foobar2000CandidatePaths) {
+        if (Test-WindowsExecutableX64 $candidatePath) {
+            return $true
+        }
+    }
+
+    return $false
 }
 
 function Stop-WithMessage {
