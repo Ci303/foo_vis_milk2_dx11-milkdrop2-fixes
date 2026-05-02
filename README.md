@@ -62,21 +62,22 @@ This branch already includes the upstream DirectX 11 foobar2000 port. Recent mai
 
 ## Install and Use
 
-### 1. Install the component
+### 1. Install
 
 - The easiest install path is the GitHub Releases page for this repository.
 - Current public packages are x64 builds intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
 - Close foobar2000, then run the release installer named like `foo_vis_milk2-0.2.1.26-installer.exe`. It installs the x64 component, shader data, recommended preset packs, textures, and fixed preset overrides into the foobar2000 v2 profile.
-- If you prefer manual installation, import `foo_vis_milk2.fb2k-component` in **File > Preferences > Components > Install...** and then run [tools/install-milkdrop-resources.ps1](tools/install-milkdrop-resources.ps1).
+- If foobar2000 x64 is not installed, the installer opens the official foobar2000 download page and exits.
 - Restart foobar2000 after the component is installed.
 
-### 2. Add presets and textures
+### 2. Optional manual resources
 
 - Presets go in `<foobar2000 profile folder>\milkdrop2\presets`.
 - Texture packs go in `<foobar2000 profile folder>\milkdrop2\textures`.
-- If you use presets from large packs, install the matching texture pack as well. Many "blank" or obviously broken starts are just missing textures.
-- To bootstrap the recommended packs automatically, run [tools/install-milkdrop-resources.ps1](tools/install-milkdrop-resources.ps1). By default it targets `%AppData%\foobar2000-v2` and installs the vendored preset and texture archives from `third_party/milkdrop-resources` into the correct `milkdrop2` folders. The script also applies this repository's fixed preset overrides from `presets/fixed-blacklisted`.
+- The release installer already installs the recommended packs and fixed preset overrides.
+- If you install `foo_vis_milk2.fb2k-component` manually, run [tools/install-milkdrop-resources.ps1](tools/install-milkdrop-resources.ps1) to install the same vendored presets, textures, and fixed overrides.
+- Many "blank" or obviously broken presets are caused by missing textures.
 
 Useful preset sources:
 
@@ -92,7 +93,7 @@ Manual resource install example:
 .\tools\install-milkdrop-resources.ps1
 ```
 
-### 3. Configure it
+### 3. Configure
 
 - Add the MilkDrop visualisation element to a Default UI layout, or open it from the visualisations area if your layout already includes it.
 - Open **Preferences > Visualisations > MilkDrop** to configure:

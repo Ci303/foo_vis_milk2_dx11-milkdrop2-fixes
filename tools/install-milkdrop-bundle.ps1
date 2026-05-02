@@ -22,12 +22,17 @@ param(
     [switch] $NoPause,
 
     [Parameter(HelpMessage = 'Skip the foobar2000 running-process check. Intended for isolated test profiles only.')]
-    [switch] $SkipFoobarCheck
+    [switch] $SkipFoobarCheck,
+
+    [Parameter(HelpMessage = 'Skip the installed foobar2000 x64 check. Intended for portable/test profiles only.')]
+    [switch] $SkipFoobarInstallCheck
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+$foobarDownloadUrl = 'https://www.foobar2000.org/download'
 
 function ConvertTo-ExtendedPath {
     param(
@@ -133,14 +138,49 @@ function Install-ComponentPackage {
     Write-Host "INFO: Component installed to $componentDirectory"
 }
 
+function Test-Foobar2000X64Installed {
+    $programFiles = [Environment]::GetFolderPath('ProgramFiles')
+    if ([string]::IsNullOrWhiteSpace($programFiles)) {
+        return $false
+    }
+
+    $foobarPath = Join-Path $programFiles 'foobar2000\foobar2000.exe'
+    return Test-Path -LiteralPath $foobarPath -PathType Leaf
+}
+
+function Stop-WithMessage {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Message,
+
+        [Parameter(Mandatory)]
+        [int] $ExitCode
+    )
+
+    Write-Host "ERROR: $Message" -ForegroundColor Red
+    if ((-not $NoPause.IsPresent) -and $Host.Name -eq 'ConsoleHost') {
+        Read-Host 'Press Enter to exit' | Out-Null
+    }
+
+    exit $ExitCode
+}
+
 if (-not $SkipFoobarCheck.IsPresent) {
     $runningFoobar = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like 'foobar2000*' }
     if ($runningFoobar) {
-        Write-Host 'ERROR: foobar2000 is running. Close foobar2000 and run this installer again.' -ForegroundColor Red
+        Stop-WithMessage -Message 'foobar2000 is running. Close foobar2000 and run this installer again.' -ExitCode 2
+    }
+}
+
+if (-not $SkipFoobarInstallCheck.IsPresent) {
+    if (-not (Test-Foobar2000X64Installed)) {
+        Write-Host 'ERROR: foobar2000 x64 does not appear to be installed.' -ForegroundColor Red
+        Write-Host "INFO: Opening official foobar2000 download page: $foobarDownloadUrl"
+        Start-Process $foobarDownloadUrl
         if ((-not $NoPause.IsPresent) -and $Host.Name -eq 'ConsoleHost') {
-            Read-Host 'Press Enter to exit' | Out-Null
+            Read-Host 'Install foobar2000 x64, then run this installer again. Press Enter to exit' | Out-Null
         }
-        exit 2
+        exit 3
     }
 }
 

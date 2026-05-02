@@ -13,6 +13,7 @@ Preset blacklist workflow and stability update for the foobar2000 x64 component.
 - Added a `presets/fixed-blacklisted` bundle with repaired versions of presets that previously triggered freezes.
 - Vendored the recommended preset and texture pack archives into `third_party/milkdrop-resources` and updated the resource installer to use those local archives by default.
 - Added a self-extracting installer build script that packages the x64 component, shader data, vendored resources, and fixed preset overrides into one `.exe`.
+- Updated the bundle installer to stop and open the official foobar2000 download page when foobar2000 x64 is not installed.
 
 ### 0.2.1.25 - 2026-05-01
 
