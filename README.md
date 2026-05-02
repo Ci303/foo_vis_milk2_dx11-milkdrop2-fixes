@@ -160,6 +160,14 @@ GitHub Releases are the preferred distribution point for this repository.
 - Current public releases are focused on x64 foobar2000 builds first.
 - See [CHANGELOG](CHANGELOG.md) for per-release details.
 
+## Privacy
+
+foo_vis_milk2 does not collect, transmit, sell, or store personal user data.
+
+The component runs locally inside foobar2000. It reads local foobar2000 playback state, visualisation audio data, album artwork provided by foobar2000, and files under the local `milkdrop2` profile folder for presets, textures, custom messages, custom sprites, crash logs, and configuration.
+
+The installer runs locally and installs the component, shader data, presets, textures, and repaired preset additions into the foobar2000 profile. If foobar2000 x64 is not installed, it opens the official foobar2000 download page in the user's browser.
+
 ## Building
 
 Prerequisites to build the `foo_vis_milk2.dll` component for foobar2000:
