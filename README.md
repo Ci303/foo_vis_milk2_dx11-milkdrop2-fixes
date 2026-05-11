@@ -1,4 +1,4 @@
-# MilkDrop 2 Visualization Component for foobar2000
+# MilkDrop 2 DX11 Visualization Component for foobar2000
 
 Port of Winamp's MilkDrop 2 visualization library from its original DirectX 9 version to use DirectX 11.1.
 
