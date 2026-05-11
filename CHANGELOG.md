@@ -2,6 +2,18 @@
 
 ## Release History
 
+### 0.2.1.27 - 2026-05-11
+
+Frame pacing, fullscreen restore, and preferences parity update for the foobar2000 x64 component.
+
+- Replaced the old `Unlimited` max-frame-rate option with standard monitor-rate caps: 30, 60, 75, 120, 144, and 240 FPS.
+- Moved embedded and fullscreen frame pacing under the foobar2000 wrapper so both modes honour the configured cap without MilkDrop's legacy sleep limiter double-throttling either path.
+- Changed Direct3D presentation to avoid DXGI vsync blocking so high caps such as 120, 144, and 240 FPS can be reached when the system can sustain them.
+- Restored stable fullscreen/window transitions after resizing and fullscreen toggles, including automatic embedded-panel restoration after leaving fullscreen.
+- Added dark-mode-compatible scrolling to the MilkDrop preferences page and reworked the layout so the expanded settings fit cleanly.
+- Added preference buttons for opening the MilkDrop profile folder and textures folder.
+- Updated the help overlay and stopped-state oscilloscope presentation to match the current shortcut and idle behaviour more closely.
+
 ### 0.2.1.26 - 2026-05-02
 
 Preset blacklist workflow and stability update for the foobar2000 x64 component.

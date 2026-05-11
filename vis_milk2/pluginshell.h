@@ -97,6 +97,7 @@ class CPluginShell : public DX::IDeviceNotify
     eScrMode GetScreenMode() const; // returns WINDOWED, FULLSCREEN, FAKE_FULLSCREEN, DESKTOP, or NOT_YET_KNOWN (if called before or during OverrideDefaults()).
     HWND GetWinampWindow() const; // returns handle to Winamp main window
     void SetWinampWindow(HWND window); // sets the Winamp main window handle
+    void SetScreenMode(eScrMode screenmode); // sets the host window mode before a foobar window swap.
     HINSTANCE GetInstance() const; // returns handle to the plugin DLL module; used for things like loading resources (dialogs, bitmaps, icons...) that are built into the plugin.
     wchar_t* GetPluginsDirPath(); // usually returns 'c:\\program files\\winamp\\plugins\\'
     wchar_t* GetConfigIniFile(); // usually returns 'c:\\program files\\winamp\\plugins\\something.ini' - filename is determined from identifiers in "defines.h"
@@ -150,8 +151,8 @@ class CPluginShell : public DX::IDeviceNotify
     // ------------------------------------------------------------
     // *** only read/write these values during CPlugin::OverrideDefaults! ***
     int m_start_fullscreen;          // 0 or 1
-    int m_max_fps_fs;                // 1-144, or 0 for 'unlimited'
-    int m_max_fps_w;                 // 1-144, or 0 for 'unlimited'
+    int m_max_fps_fs;                // supported cap, or 0 when the host wrapper owns pacing
+    int m_max_fps_w;                 // supported cap, or 0 for legacy standalone unlimited
     int m_show_press_f1_msg;         // 0 or 1
     int m_allow_page_tearing_w;      // 0 or 1
     int m_allow_page_tearing_fs;     // 0 or 1

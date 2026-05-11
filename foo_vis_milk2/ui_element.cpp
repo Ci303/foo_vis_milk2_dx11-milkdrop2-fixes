@@ -30,12 +30,32 @@ HWND g_hWindow;
 
 namespace
 {
+uint32_t normalize_frame_limit(uint32_t max_fps) noexcept
+{
+    for (size_t i = 0; i < supported_max_fps_count; ++i)
+    {
+        if (max_fps == supported_max_fps_values[i])
+            return max_fps;
+    }
+    return default_max_fps_fs;
+}
+
 DWORD get_refresh_interval_ms(uint32_t max_fps) noexcept
 {
-    if (max_fps == 0)
-        return 1;
+    max_fps = normalize_frame_limit(max_fps);
 
     return (std::max)(1L, lround(1000.0 / static_cast<double>(max_fps)));
+}
+
+bool call_winmm_timer_period(const char* procName) noexcept
+{
+    using TimerPeriodProc = UINT(WINAPI*)(UINT);
+    static HMODULE winmm = ::LoadLibraryW(L"winmm.dll");
+    if (winmm == nullptr)
+        return false;
+
+    auto proc = reinterpret_cast<TimerPeriodProc>(::GetProcAddress(winmm, procName));
+    return proc != nullptr && proc(1) == 0;
 }
 
 void normalize_render_size(int& width, int& height) noexcept
@@ -293,7 +313,19 @@ milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_ins
     m_pending_animated_status_font = SONGTITLE_FONT;
     m_last_time = 0.0;
 #if defined(TIMER_TP)
-    m_tpTimer = nullptr;
+    m_framePacerThread = nullptr;
+    m_framePacerStopEvent = nullptr;
+    m_framePacerWakeEvent = nullptr;
+    LARGE_INTEGER frameTimerFrequency{};
+    m_frameTimerFrequencyQpc = QueryPerformanceFrequency(&frameTimerFrequency) ? frameTimerFrequency.QuadPart : 0;
+    if (m_frameTimerFrequencyQpc > 0)
+        m_frameIntervalQpc = (std::max)(1LL, (m_frameTimerFrequencyQpc + default_max_fps_fs / 2) / default_max_fps_fs);
+    else
+        m_frameIntervalQpc = 0;
+    m_nextFrameQpc = 0;
+    m_renderPending = false;
+    m_renderPostTick = 0;
+    m_timerResolutionActive = false;
 #elif defined(TIMER_32)
     m_last_refresh = 0;
 #endif
@@ -414,9 +446,7 @@ int milk2_ui_element::OnCreate(LPCREATESTRUCT cs)
             FB2K_console_print(core_api::get_my_file_name(), ": Exception while creating visualization stream - ", exc);
         }
 
-#if defined(TIMER_TP)
-        m_tpTimer = CreateThreadpoolTimer(TimerCallback, this, NULL);
-#elif defined(TIMER_DX)
+#if defined(TIMER_DX)
         message_loop_v2::get()->add_idle_handler(this);
 #endif
 
@@ -466,6 +496,8 @@ void milk2_ui_element::OnDestroy()
     MILK2_CONSOLE_LOG("OnDestroy ", GetWnd())
     UnregisterFocusHotkeys();
 #if defined(TIMER_TP)
+    m_renderPending = false;
+    m_renderPostTick = 0;
     StopTimer();
     EnterCriticalSection(&s_cs);
     bool delete_cs = false;
@@ -505,6 +537,10 @@ void milk2_ui_element::OnDestroy()
     else
     {
         s_in_toggle = false;
+        if (!s_fullscreen && g_hWindow && g_hWindow != get_wnd() && ::IsWindow(g_hWindow))
+        {
+            ::PostMessage(g_hWindow, WM_MILK2_RESTORE_WINDOWED, 0, 0);
+        }
     }
 #ifdef TIMER_TP
     LeaveCriticalSection(&s_cs);
@@ -571,6 +607,10 @@ void milk2_ui_element::OnPaint(CDCHandle dc)
         std::ignore = BeginPaint(&ps);
         EndPaint(&ps);
     }
+#ifdef TIMER_TP
+    if (m_milk2)
+        StartTimer();
+#endif
     ValidateRect(NULL);
 #ifdef TIMER_32
     ULONGLONG now = GetTickCount64();
@@ -608,7 +648,7 @@ BOOL milk2_ui_element::OnEraseBkgnd(CDCHandle dc)
     WIN32_OP_D(brush.CreateSolidBrush(m_callback->query_std_color(ui_color_background)) != NULL);
     WIN32_OP_D(dc.FillRect(&r, brush));
 #else
-    if (!m_milk2 && !s_fullscreen && s_milk2)
+    if (!m_milk2 && !s_fullscreen && s_milk2 && !s_in_toggle)
     {
         int w, h;
         GetDefaultSize(w, h);
@@ -1294,6 +1334,77 @@ LRESULT milk2_ui_element::OnMilk2Message(UINT uMsg, WPARAM wParam, LPARAM lParam
     return 1;
 }
 
+LRESULT milk2_ui_element::OnRenderMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    UNREFERENCED_PARAMETER(wParam);
+    UNREFERENCED_PARAMETER(lParam);
+
+    if (uMsg != WM_MILK2_RENDER)
+        return -1;
+
+#ifdef TIMER_TP
+    m_renderPending = false;
+    m_renderPostTick = 0;
+#endif
+
+    if (!m_milk2)
+        return 0;
+
+    LONGLONG renderQpc = 0;
+#ifdef TIMER_TP
+    if (!TryBeginFrame(renderQpc))
+        return 0;
+#endif
+
+    BuildWaves();
+    Tick();
+
+#ifdef TIMER_TP
+    if (m_milk2)
+    {
+        FinishFrameTiming(renderQpc);
+        ScheduleNextFrameTimer();
+    }
+#endif
+
+    return 0;
+}
+
+LRESULT milk2_ui_element::OnRestoreWindowed(UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    UNREFERENCED_PARAMETER(wParam);
+    UNREFERENCED_PARAMETER(lParam);
+
+    if (uMsg != WM_MILK2_RESTORE_WINDOWED)
+        return -1;
+
+    if (s_fullscreen || m_milk2)
+        return 0;
+
+    int w, h;
+    GetDefaultSize(w, h);
+
+    CRect r{};
+    if (::GetClientRect(get_wnd(), &r) && r.right - r.left > 0 && r.bottom - r.top > 0)
+    {
+        w = r.right - r.left;
+        h = r.bottom - r.top;
+    }
+
+    if (!Initialize(get_wnd(), w, h))
+    {
+        FB2K_console_print(core_api::get_my_file_name(), ": Could not restore MilkDrop after fullscreen");
+        return 0;
+    }
+
+#ifdef TIMER_TP
+    StartTimer();
+    QueueRenderMessage();
+#endif
+    InvalidateRect(nullptr, FALSE);
+    return 0;
+}
+
 LRESULT milk2_ui_element::OnConfigurationChange(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     UNREFERENCED_PARAMETER(lParam);
@@ -1366,7 +1477,8 @@ bool milk2_ui_element::Initialize(HWND window, int width, int height)
 #endif
     try
     {
-        g_hWindow = get_wnd();
+        if (!s_fullscreen)
+            g_hWindow = get_wnd();
         normalize_render_size(width, height);
 
         if (!s_milk2)
@@ -1382,6 +1494,7 @@ bool milk2_ui_element::Initialize(HWND window, int width, int height)
         }
 
         g_plugin.SetWinampWindow(window);
+        g_plugin.SetScreenMode(s_fullscreen ? FULLSCREEN : WINDOWED);
         ApplyFrameRateLimit();
 
         if (!s_milk2)
@@ -1403,6 +1516,8 @@ bool milk2_ui_element::Initialize(HWND window, int width, int height)
             EnterCriticalSection(&s_cs);
             lock_held = true;
 #endif
+            g_plugin.SetWinampWindow(window);
+            g_plugin.SetScreenMode(s_fullscreen ? FULLSCREEN : WINDOWED);
             g_plugin.OnWindowSwap(window, width, height);
 #ifdef TIMER_TP
             if (lock_held)
@@ -1645,10 +1760,26 @@ void milk2_ui_element::GetDefaultSize(int& width, int& height) const noexcept
 void milk2_ui_element::ApplyFrameRateLimit() noexcept
 {
     s_config.refresh_frame_rate();
-#ifdef TIMER_32
-    m_refresh_interval = get_refresh_interval_ms(s_config.settings.m_max_fps_fs);
+    uint32_t maxFps = normalize_frame_limit(s_config.settings.m_max_fps_fs);
+    if (s_config.settings.m_max_fps_fs != maxFps)
+        s_config.settings.m_max_fps_fs = maxFps;
+
+    m_refresh_interval = get_refresh_interval_ms(maxFps);
+#ifdef TIMER_TP
+    LONGLONG frameInterval = 0;
+    if (m_frameTimerFrequencyQpc > 0)
+    {
+        const LONGLONG fps = static_cast<LONGLONG>(maxFps);
+        frameInterval = (std::max)(1LL, (m_frameTimerFrequencyQpc + fps / 2) / fps);
+    }
+    m_frameIntervalQpc = frameInterval;
+    m_nextFrameQpc = 0;
+    SetFrameTimerResolution(m_milk2 && frameInterval > 0);
 #endif
-    g_plugin.SetFoobarFullscreenFrameLimit(s_fullscreen ? s_config.settings.m_max_fps_fs : 0);
+
+    // The foobar UI scheduler owns frame pacing. Keep the legacy shell sleep
+    // limiter disabled so it cannot double-throttle fullscreen frames.
+    g_plugin.SetFoobarFullscreenFrameLimit(0);
 }
 
 #ifdef TIMER_32
@@ -1673,11 +1804,15 @@ void milk2_ui_element::ToggleFullScreen()
     {
         try
         {
-            if (!s_fullscreen)
-            {
+            const bool enteringFullscreen = !s_fullscreen;
+            if (enteringFullscreen)
                 g_hWindow = get_wnd();
-                m_milk2 = false;
-            }
+            m_milk2 = false;
+#ifdef TIMER_TP
+            m_renderPending = false;
+            m_renderPostTick = 0;
+            StopTimer();
+#endif
 #if 0
             if (s_fullscreen)
             {
@@ -1701,12 +1836,12 @@ void milk2_ui_element::ToggleFullScreen()
                 ShowWindow(SW_SHOWMAXIMIZED);
             }
 #endif
-            s_fullscreen = !s_fullscreen;
+            s_in_toggle = true;
+            s_fullscreen = enteringFullscreen;
             ApplyFrameRateLimit();
 #ifdef TIMER_32
             RestartRefreshTimer();
 #endif
-            s_in_toggle = true;
             SetTopMost();
             static_api_ptr_t<ui_element_common_methods_v2>()->toggle_fullscreen(g_get_guid(), core_api::get_main_window());
             ApplyFullscreenWindowOrder();
@@ -2205,34 +2340,242 @@ bool milk2_ui_element::LaunchStatusText(const wchar_t* text, float duration, flo
 void milk2_ui_element::StartTimer() noexcept
 {
     MILK2_CONSOLE_LOG_LIMIT("StartTimer ", GetWnd())
-    if (m_tpTimer == nullptr)
+    if (!m_milk2)
         return;
 
-    FILETIME DueTime{};
-    DWORD RefreshInterval = get_refresh_interval_ms(s_config.settings.m_max_fps_fs);
-    SetThreadpoolTimer(m_tpTimer, &DueTime, RefreshInterval, 0);
+    SetFrameTimerResolution(true);
+    if (m_framePacerStopEvent == nullptr)
+        m_framePacerStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (m_framePacerWakeEvent == nullptr)
+        m_framePacerWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (m_framePacerStopEvent == nullptr || m_framePacerWakeEvent == nullptr)
+        return;
+
+    ResetEvent(m_framePacerStopEvent);
+    if (m_framePacerThread == nullptr)
+        m_framePacerThread = CreateThread(nullptr, 0, FramePacerThreadProc, this, 0, nullptr);
+
+    ScheduleNextFrameTimer();
 }
 
 // Stops the timer.
 void milk2_ui_element::StopTimer() noexcept
 {
     MILK2_CONSOLE_LOG_LIMIT("StopTimer ", GetWnd())
-    if (m_tpTimer == nullptr)
-        return;
+    if (m_framePacerStopEvent != nullptr)
+        SetEvent(m_framePacerStopEvent);
+    if (m_framePacerWakeEvent != nullptr)
+        SetEvent(m_framePacerWakeEvent);
 
-    SetThreadpoolTimer(m_tpTimer, NULL, 0, 0);
-    WaitForThreadpoolTimerCallbacks(m_tpTimer, TRUE);
-    CloseThreadpoolTimer(m_tpTimer);
-    m_tpTimer = nullptr;
+    if (m_framePacerThread != nullptr)
+    {
+        WaitForSingleObject(m_framePacerThread, INFINITE);
+        CloseHandle(m_framePacerThread);
+        m_framePacerThread = nullptr;
+    }
+    if (m_framePacerWakeEvent != nullptr)
+    {
+        CloseHandle(m_framePacerWakeEvent);
+        m_framePacerWakeEvent = nullptr;
+    }
+    if (m_framePacerStopEvent != nullptr)
+    {
+        CloseHandle(m_framePacerStopEvent);
+        m_framePacerStopEvent = nullptr;
+    }
+    m_nextFrameQpc = 0;
+    m_renderPending = false;
+    m_renderPostTick = 0;
+    SetFrameTimerResolution(false);
 }
 
-// Handles a timer tick.
-VOID CALLBACK milk2_ui_element::TimerCallback(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_TIMER Timer) noexcept
+void milk2_ui_element::ScheduleNextFrameTimer() noexcept
 {
-    UNREFERENCED_PARAMETER(Instance);
-    UNREFERENCED_PARAMETER(Timer);
+    if (m_framePacerWakeEvent != nullptr)
+        SetEvent(m_framePacerWakeEvent);
+}
 
-    ((milk2_ui_element*)Context)->Tick();
+DWORD WINAPI milk2_ui_element::FramePacerThreadProc(LPVOID context) noexcept
+{
+    auto* element = static_cast<milk2_ui_element*>(context);
+    if (element != nullptr)
+        element->FramePacerThreadLoop();
+    return 0;
+}
+
+void milk2_ui_element::FramePacerThreadLoop() noexcept
+{
+    HANDLE waits[2] = {m_framePacerStopEvent, m_framePacerWakeEvent};
+    if (waits[0] == nullptr || waits[1] == nullptr)
+        return;
+
+    for (;;)
+    {
+        if (WaitForSingleObject(waits[0], 0) == WAIT_OBJECT_0)
+            return;
+
+        if (!m_milk2 || !::IsWindow(get_wnd()))
+        {
+            const DWORD waitResult = WaitForMultipleObjects(2, waits, FALSE, 50);
+            if (waitResult == WAIT_OBJECT_0)
+                return;
+            continue;
+        }
+
+        const LONGLONG frameInterval = m_frameIntervalQpc.load(std::memory_order_relaxed);
+        if (frameInterval > 0 && m_frameTimerFrequencyQpc > 0)
+        {
+            for (;;)
+            {
+                LARGE_INTEGER nowValue{};
+                if (!QueryPerformanceCounter(&nowValue))
+                    break;
+
+                const LONGLONG now = nowValue.QuadPart;
+                LONGLONG nextFrame = m_nextFrameQpc.load(std::memory_order_relaxed);
+                if (nextFrame <= 0 || nextFrame < now - frameInterval)
+                {
+                    nextFrame = now + frameInterval;
+                    m_nextFrameQpc.store(nextFrame, std::memory_order_relaxed);
+                }
+
+                const LONGLONG ticksUntilFrame = nextFrame - now;
+                if (ticksUntilFrame <= 0)
+                    break;
+
+                const DWORD waitMs = static_cast<DWORD>((ticksUntilFrame * 1000LL) / m_frameTimerFrequencyQpc);
+                if (waitMs > 2)
+                {
+                    const DWORD waitResult = WaitForMultipleObjects(2, waits, FALSE, waitMs - 1);
+                    if (waitResult == WAIT_OBJECT_0)
+                        return;
+                    if (waitResult == WAIT_OBJECT_0 + 1)
+                        break;
+                    continue;
+                }
+
+                SwitchToThread();
+            }
+        }
+        else
+        {
+            m_nextFrameQpc = 0;
+            const DWORD waitResult = WaitForMultipleObjects(2, waits, FALSE, 1);
+            if (waitResult == WAIT_OBJECT_0)
+                return;
+        }
+
+        if (!QueueRenderMessage())
+        {
+            const DWORD waitResult = WaitForMultipleObjects(2, waits, FALSE, 1);
+            if (waitResult == WAIT_OBJECT_0)
+                return;
+        }
+    }
+}
+
+bool milk2_ui_element::TryBeginFrame(LONGLONG& renderQpc) noexcept
+{
+    renderQpc = 0;
+    if (m_frameTimerFrequencyQpc > 0)
+    {
+        LARGE_INTEGER nowValue{};
+        if (QueryPerformanceCounter(&nowValue))
+            renderQpc = nowValue.QuadPart;
+    }
+
+    const LONGLONG frameInterval = m_frameIntervalQpc.load(std::memory_order_relaxed);
+    if (frameInterval <= 0 || m_frameTimerFrequencyQpc <= 0)
+    {
+        m_nextFrameQpc = 0;
+        return true;
+    }
+
+    if (renderQpc <= 0)
+    {
+        m_nextFrameQpc = 0;
+        return true;
+    }
+
+    LONGLONG nextFrame = m_nextFrameQpc.load(std::memory_order_relaxed);
+    if (nextFrame > 0 && renderQpc < nextFrame)
+    {
+        ScheduleNextFrameTimer();
+        return false;
+    }
+
+    return true;
+}
+
+void milk2_ui_element::FinishFrameTiming(LONGLONG renderQpc) noexcept
+{
+    if (renderQpc <= 0 && m_frameTimerFrequencyQpc > 0)
+    {
+        LARGE_INTEGER nowValue{};
+        if (QueryPerformanceCounter(&nowValue))
+            renderQpc = nowValue.QuadPart;
+    }
+
+    const LONGLONG frameInterval = m_frameIntervalQpc.load(std::memory_order_relaxed);
+    if (frameInterval <= 0 || m_frameTimerFrequencyQpc <= 0 || renderQpc <= 0)
+    {
+        m_nextFrameQpc = 0;
+        return;
+    }
+
+    LONGLONG nextFrame = renderQpc + frameInterval;
+    LARGE_INTEGER nowValue{};
+    if (QueryPerformanceCounter(&nowValue))
+    {
+        while (nextFrame <= nowValue.QuadPart)
+            nextFrame += frameInterval;
+    }
+    m_nextFrameQpc.store(nextFrame, std::memory_order_relaxed);
+}
+
+bool milk2_ui_element::QueueRenderMessage() noexcept
+{
+    if (!m_milk2 || !::IsWindow(get_wnd()))
+        return false;
+
+    const DWORD now = GetTickCount();
+    const DWORD postedAt = m_renderPostTick.load(std::memory_order_relaxed);
+    if (m_renderPending && postedAt != 0 && now - postedAt > 250)
+    {
+        m_renderPending = false;
+        m_renderPostTick = 0;
+    }
+
+    bool expected = false;
+    if (!m_renderPending.compare_exchange_strong(expected, true))
+        return false;
+
+    m_renderPostTick = now;
+    if (!::PostMessage(get_wnd(), WM_MILK2_RENDER, 0, 0))
+    {
+        m_renderPending = false;
+        m_renderPostTick = 0;
+        return false;
+    }
+    return true;
+}
+
+void milk2_ui_element::SetFrameTimerResolution(bool enabled) noexcept
+{
+    if (enabled == m_timerResolutionActive)
+        return;
+
+    if (enabled)
+    {
+        if (call_winmm_timer_period("timeBeginPeriod"))
+            m_timerResolutionActive = true;
+    }
+    else
+    {
+        if (m_timerResolutionActive)
+            call_winmm_timer_period("timeEndPeriod");
+        m_timerResolutionActive = false;
+    }
 }
 #endif
 

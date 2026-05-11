@@ -55,10 +55,9 @@ This branch already includes the upstream DirectX 11 foobar2000 port. Recent mai
 - Presets, textures, custom messages, and custom sprites still use the `milkdrop2` profile directory.
 - Older presets can still fail, crash, hang, or remain black if they depend on unsupported EEL1 syntax, old shader assumptions, missing texture packs, or other compatibility issues.
 - This project is currently tested mainly on foobar2000 v2 x64, although the solution can still be built for other targets.
-- FPS cap behaviour is split by display mode:
-  - Embedded panels use the foobar2000 UI timer cap.
-  - Fullscreen also enables MilkDrop's internal fullscreen limiter.
-  - `Unlimited` stores as `0` internally and disables both caps.
+- FPS caps are selected from standard monitor rates: 30, 60, 75, 120, 144, and 240 FPS.
+- The foobar2000 wrapper owns frame pacing in embedded and fullscreen modes so both paths honour the same preference without double-throttling.
+- Direct3D presentation no longer waits on DXGI vsync; use the FPS preference to choose the intended cap.
 
 ## Install and Use
 
@@ -67,7 +66,7 @@ This branch already includes the upstream DirectX 11 foobar2000 port. Recent mai
 - The easiest install path is the GitHub Releases page for this repository.
 - Current public packages are x64 builds intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
-- Close foobar2000, then run the release installer named like `foo_vis_milk2-0.2.1.26-installer.exe`. It installs the x64 component, shader data, recommended preset packs, textures, repaired preset additions, and an optional starter layout template into the foobar2000 v2 profile.
+- Close foobar2000, then run the release installer named like `foo_vis_milk2-0.2.1.27-installer.exe`. It installs the x64 component, shader data, recommended preset packs, textures, repaired preset additions, and an optional starter layout template into the foobar2000 v2 profile.
 - If foobar2000 x64 is not installed, the installer explains that foobar2000 is required, opens the official foobar2000 download page, and exits. Install foobar2000 v2 x64 first, close it, then run the MilkDrop installer again.
 - Restart foobar2000 after the component is installed.
 
@@ -119,13 +118,13 @@ Manual resource install example:
 
 Title display format uses normal foobar2000 title formatting. Artwork display format can be left blank to use standard foobar2000 album art, or set to a full image path or a title-formatting script that returns one. The preferences page includes a `Format Info...` builder with examples, common fields, and direct insertion into either format box.
 
-For refresh rates above 60 FPS, use `Unlimited`. Fixed-rate values are useful when you want the visualiser paced near a specific cap such as 60 FPS.
+The max frame rate preference uses standard monitor rates: 30, 60, 75, 120, 144, and 240 FPS. The old `Unlimited` option is intentionally not exposed because it can overdrive the render loop and make foobar2000 less responsive.
 
-FPS behaviour is mode-aware:
+FPS behaviour is host-paced:
 
-- Embedded panel: fixed FPS values pace the foobar2000 UI timer.
-- Fullscreen: fixed FPS values also enable MilkDrop's internal fullscreen limiter.
-- `Unlimited`: stores as `0` and disables those caps.
+- Embedded panel and fullscreen rendering both use the configured MilkDrop preference.
+- MilkDrop's legacy internal sleep limiter is disabled while hosted by foobar2000 to avoid double-limiting.
+- DXGI presentation is non-vsync-blocking, with optional page tearing controlled by the page-tearing preference.
 
 ### 5. Optional custom files
 

@@ -147,6 +147,7 @@ int CPluginShell::GetCanvasMarginX() { return 0; }
 int CPluginShell::GetCanvasMarginY() { return 0; }
 HWND CPluginShell::GetWinampWindow() const { return m_hWndWinamp; }
 void CPluginShell::SetWinampWindow(HWND window) { m_hWndWinamp = window; }
+void CPluginShell::SetScreenMode(eScrMode screenmode) { m_screenmode = screenmode; }
 HINSTANCE CPluginShell::GetInstance() const { return m_hInstance; }
 wchar_t* CPluginShell::GetPluginsDirPath() { return m_szPluginsDirPath; }
 wchar_t* CPluginShell::GetConfigIniFile() { return m_szConfigIniFile; }

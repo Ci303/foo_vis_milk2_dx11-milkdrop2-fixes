@@ -13,7 +13,9 @@
 
 #include <sdk/configStore.h>
 
+#include <algorithm>
 #include <fstream>
+#include <limits>
 
 extern HWND g_hWindow;
 
@@ -185,6 +187,21 @@ template <typename T, size_t N>
 constexpr size_t countof(const T (&)[N]) noexcept
 {
     return N;
+}
+
+UINT normalize_max_fps(int64_t max_fps) noexcept
+{
+    if (max_fps < 0 || max_fps > static_cast<int64_t>((std::numeric_limits<UINT>::max)()))
+        return default_max_fps_fs;
+
+    const UINT value = static_cast<UINT>(max_fps);
+    for (const UINT supported : supported_max_fps_values)
+    {
+        if (value == supported)
+            return value;
+    }
+
+    return default_max_fps_fs;
 }
 
 font_info_store_t load_font_info_store();
@@ -552,6 +569,10 @@ std::wstring get_tooltip_text(UINT16 controlId, UINT16 resourceId)
             return L"Click this button to edit 'milk2_img.ini', the file that defines custom sprites MilkDrop can invoke. If the file does not exist yet, MilkDrop will create a starter template.";
         case ID_MSG:
             return L"Click this button to edit 'milk2_msg.ini', the file that defines custom overlay messages. If the file does not exist yet, MilkDrop will create a starter template.";
+        case IDC_OPEN_MILKDROP_FOLDER:
+            return L"Open the MilkDrop component folder that contains presets, textures, and runtime support files.";
+        case IDC_OPEN_TEXTURES_FOLDER:
+            return L"Open the MilkDrop textures folder, creating it first if needed.";
         case IDC_RAND_MSG_LABEL:
         case IDC_RAND_MSG:
             return L"The mean (average) time, in seconds, between randomly launched custom messages from 'milk2_msg.ini'. Set to a negative value to disable random launching.";
@@ -799,6 +820,8 @@ BOOL milk2_preferences_page::OnInitDialog(CWindow, LPARAM)
     milk2_config::initialize_paths();
     ::EnableWindow(GetDlgItem(ID_SPRITE), static_cast<BOOL>(default_szImgIniFile[0] != L'\0'));
     ::EnableWindow(GetDlgItem(ID_MSG), static_cast<BOOL>(default_szMsgIniFile[0] != L'\0'));
+    ::EnableWindow(GetDlgItem(IDC_OPEN_MILKDROP_FOLDER), static_cast<BOOL>(default_szMilkdrop2Path[0] != L'\0'));
+    ::EnableWindow(GetDlgItem(IDC_OPEN_TEXTURES_FOLDER), static_cast<BOOL>(default_szMilkdrop2Path[0] != L'\0'));
 
     // clang-format off
     const std::vector<std::pair<UINT16, UINT16>> tips = {
@@ -861,6 +884,8 @@ BOOL milk2_preferences_page::OnInitDialog(CWindow, LPARAM)
         {(UINT16)ID_SPRITE, (UINT16)IDS_SPRITE},
         {(UINT16)ID_MSG, (UINT16)IDS_MSG},
         {(UINT16)ID_FONTS, (UINT16)IDS_FONTS_HELP},
+        {(UINT16)IDC_OPEN_MILKDROP_FOLDER, (UINT16)IDS_SPRITE},
+        {(UINT16)IDC_OPEN_TEXTURES_FOLDER, (UINT16)IDS_MAX_IMAGES_BYTES_HELP},
     };
     // clang-format on
     m_tooltips.Create(get_wnd(), nullptr, nullptr, TTS_ALWAYSTIP | TTS_NOANIMATE);
@@ -884,6 +909,9 @@ BOOL milk2_preferences_page::OnInitDialog(CWindow, LPARAM)
     }
     m_tooltips.SetMaxTipWidth(200);
     SetWindowTheme(m_tooltips, m_dark ? L"DarkMode_Explorer" : nullptr, nullptr);
+    SetWindowTheme(GetDlgItem(IDC_PREFS_SCROLLBAR), m_dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
+    CapturePreferencesControlLayout();
+    UpdatePreferencesScrollBar();
 
     return FALSE;
 }
@@ -945,6 +973,17 @@ void milk2_preferences_page::OnButtonPushed(UINT uNotifyCode, int nID, CWindow w
         case IDC_FORMAT_INFO:
             {
                 FormatInfoDlg dlg(get_wnd()); dlg.DoModal(get_wnd());
+            }
+            break;
+        case IDC_OPEN_MILKDROP_FOLDER:
+            milk2_config::initialize_paths();
+            OpenDirectory(default_szMilkdrop2Path, L"MilkDrop Folder");
+            break;
+        case IDC_OPEN_TEXTURES_FOLDER:
+            {
+                milk2_config::initialize_paths();
+                const auto texturePath = std::filesystem::path(default_szMilkdrop2Path) / L"textures";
+                OpenDirectory(texturePath.c_str(), L"Textures Folder");
             }
             break;
     }
@@ -1513,9 +1552,234 @@ void milk2_preferences_page::OnHScroll(UINT nSBCode, UINT nPos, CScrollBar pScro
     }
 }
 
+void milk2_preferences_page::OnVScroll(UINT nSBCode, UINT nPos, CScrollBar pScrollBar)
+{
+    UNREFERENCED_PARAMETER(nPos);
+
+    const bool childScrollBar = pScrollBar.IsWindow();
+    if (childScrollBar && pScrollBar.GetDlgCtrlID() != IDC_PREFS_SCROLLBAR)
+        return;
+
+    SCROLLINFO info = {};
+    info.cbSize = sizeof(info);
+    info.fMask = SIF_ALL;
+    if (childScrollBar)
+        pScrollBar.GetScrollInfo(&info);
+    else
+        GetScrollInfo(SB_VERT, &info);
+
+    constexpr int lineDelta = 24;
+    const int pageDelta = std::max(lineDelta, static_cast<int>(info.nPage) - lineDelta);
+    int target = m_preferences_scroll_pos;
+
+    switch (nSBCode)
+    {
+        case SB_TOP:
+            target = 0;
+            break;
+        case SB_BOTTOM:
+            target = GetPreferencesScrollMax();
+            break;
+        case SB_LINEUP:
+            target -= lineDelta;
+            break;
+        case SB_LINEDOWN:
+            target += lineDelta;
+            break;
+        case SB_PAGEUP:
+            target -= pageDelta;
+            break;
+        case SB_PAGEDOWN:
+            target += pageDelta;
+            break;
+        case SB_THUMBPOSITION:
+        case SB_THUMBTRACK:
+            target = info.nTrackPos;
+            break;
+        default:
+            return;
+    }
+
+    ScrollPreferencesTo(target);
+}
+
+BOOL milk2_preferences_page::OnMouseWheel(UINT nFlags, short zDelta, CPoint pt)
+{
+    UNREFERENCED_PARAMETER(nFlags);
+    UNREFERENCED_PARAMETER(pt);
+
+    constexpr int lineDelta = 24;
+    const int scrollMax = GetPreferencesScrollMax();
+    if (scrollMax <= 0)
+        return FALSE;
+
+    UINT wheelLines = 3;
+    SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &wheelLines, 0);
+
+    RECT rc = {};
+    GetClientRect(&rc);
+    const int clientHeight = rc.bottom - rc.top;
+    const int pageDelta = std::max(lineDelta, clientHeight - lineDelta);
+    const int direction = zDelta > 0 ? -1 : 1;
+    const int notches = std::max(1, std::abs(static_cast<int>(zDelta)) / WHEEL_DELTA);
+    const int delta = wheelLines == WHEEL_PAGESCROLL ? pageDelta : static_cast<int>(wheelLines) * lineDelta;
+
+    ScrollPreferencesTo(m_preferences_scroll_pos + direction * notches * delta);
+    return TRUE;
+}
+
+void milk2_preferences_page::OnSize(UINT nType, CSize size)
+{
+    UNREFERENCED_PARAMETER(nType);
+    UNREFERENCED_PARAMETER(size);
+
+    UpdatePreferencesScrollBar();
+}
+
 void milk2_preferences_page::AutoHideGamma16()
 {
     update_gamma16_visibility(m_hWnd, static_cast<bool>(IsDlgButtonChecked(IDC_CB_AUTOGAMMA2)));
+    UpdatePreferencesScrollBar();
+}
+
+void milk2_preferences_page::CapturePreferencesControlLayout()
+{
+    m_preference_control_layout.clear();
+    for (HWND child = ::GetWindow(m_hWnd, GW_CHILD); child; child = ::GetWindow(child, GW_HWNDNEXT))
+    {
+        if (::GetDlgCtrlID(child) == IDC_PREFS_SCROLLBAR)
+            continue;
+
+        RECT rect = {};
+        if (!::GetWindowRect(child, &rect))
+            continue;
+
+        ::MapWindowPoints(HWND_DESKTOP, m_hWnd, reinterpret_cast<POINT*>(&rect), 2);
+        m_preference_control_layout.emplace_back(child, rect);
+    }
+}
+
+void milk2_preferences_page::RepositionPreferencesControls()
+{
+    HDWP defer = ::BeginDeferWindowPos(static_cast<int>(m_preference_control_layout.size()));
+    for (const auto& item : m_preference_control_layout)
+    {
+        const HWND child = item.first;
+        if (!::IsWindow(child))
+            continue;
+
+        const RECT& rect = item.second;
+        const int x = rect.left;
+        const int y = rect.top - m_preferences_scroll_pos;
+        const int width = rect.right - rect.left;
+        const int height = rect.bottom - rect.top;
+
+        if (defer)
+        {
+            defer = ::DeferWindowPos(defer, child, nullptr, x, y, width, height, SWP_NOACTIVATE | SWP_NOZORDER);
+        }
+        else
+        {
+            ::SetWindowPos(child, nullptr, x, y, width, height, SWP_NOACTIVATE | SWP_NOZORDER);
+        }
+    }
+
+    if (defer)
+        ::EndDeferWindowPos(defer);
+
+    RedrawWindow(nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
+}
+
+int milk2_preferences_page::GetPreferencesContentHeight() const
+{
+    int contentHeight = 0;
+    for (const auto& item : m_preference_control_layout)
+    {
+        const HWND child = item.first;
+        if (!::IsWindow(child))
+            continue;
+
+        const auto style = static_cast<DWORD_PTR>(::GetWindowLongPtr(child, GWL_STYLE));
+        if ((style & WS_VISIBLE) == 0)
+            continue;
+
+        contentHeight = std::max(contentHeight, static_cast<int>(item.second.bottom));
+    }
+
+    return contentHeight + 10;
+}
+
+int milk2_preferences_page::GetPreferencesScrollMax() const
+{
+    RECT rect = {};
+    GetClientRect(&rect);
+    const int clientHeight = rect.bottom - rect.top;
+    if (clientHeight <= 0)
+        return 0;
+
+    return std::max(0, GetPreferencesContentHeight() - clientHeight);
+}
+
+void milk2_preferences_page::PositionPreferencesScrollBar(bool visible)
+{
+    CWindow scrollBar = GetDlgItem(IDC_PREFS_SCROLLBAR);
+    if (!scrollBar.IsWindow())
+        return;
+
+    RECT rect = {};
+    GetClientRect(&rect);
+    const int width = std::max(1, GetSystemMetrics(SM_CXVSCROLL));
+    const int height = std::max(0, static_cast<int>(rect.bottom - rect.top));
+    ::SetWindowPos(scrollBar.m_hWnd,
+                   HWND_TOP,
+                   std::max(0, static_cast<int>(rect.right) - width),
+                   0,
+                   width,
+                   height,
+                   SWP_NOACTIVATE | (visible ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+}
+
+void milk2_preferences_page::UpdatePreferencesScrollBar()
+{
+    RECT rect = {};
+    GetClientRect(&rect);
+    const int clientHeight = rect.bottom - rect.top;
+    const int contentHeight = GetPreferencesContentHeight();
+    const int maxScroll = std::max(0, contentHeight - clientHeight);
+
+    if (m_preferences_scroll_pos > maxScroll)
+    {
+        m_preferences_scroll_pos = maxScroll;
+        RepositionPreferencesControls();
+    }
+
+    SCROLLINFO info = {};
+    info.cbSize = sizeof(info);
+    info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
+    info.nMin = 0;
+    info.nMax = std::max(0, contentHeight - 1);
+    info.nPage = static_cast<UINT>(std::max(0, clientHeight));
+    info.nPos = m_preferences_scroll_pos;
+    CWindow scrollBar = GetDlgItem(IDC_PREFS_SCROLLBAR);
+    if (scrollBar.IsWindow())
+        ::SetScrollInfo(scrollBar.m_hWnd, SB_CTL, &info, TRUE);
+    PositionPreferencesScrollBar(maxScroll > 0);
+}
+
+void milk2_preferences_page::ScrollPreferencesTo(int scrollPos)
+{
+    const int target = std::clamp(scrollPos, 0, GetPreferencesScrollMax());
+    if (target == m_preferences_scroll_pos)
+        return;
+
+    m_preferences_scroll_pos = target;
+    RepositionPreferencesControls();
+
+    CWindow scrollBar = GetDlgItem(IDC_PREFS_SCROLLBAR);
+    if (scrollBar.IsWindow())
+        ::SetScrollPos(scrollBar.m_hWnd, SB_CTL, m_preferences_scroll_pos, TRUE);
+    PositionPreferencesScrollBar(GetPreferencesScrollMax() > 0);
+    RedrawWindow(nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
 }
 
 uint32_t milk2_preferences_page::get_state()
@@ -1544,6 +1808,7 @@ void milk2_preferences_page::reset()
 
     CheckDlgButton(IDC_CB_FSPT, static_cast<UINT>(default_allow_page_tearing_fs));
     UpdateMaxFps(FULLSCREEN);
+    SelectItemByValue(GetDlgItem(IDC_FS_MAXFPS2), default_max_fps_fs);
 
     swprintf_s(buf, L"%2.1f", static_cast<float>(default_fTimeBetweenPresets));
     SetDlgItemText(IDC_BETWEEN_TIME, buf);
@@ -1724,13 +1989,9 @@ bool milk2_preferences_page::HasChanged() const
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_TITLE_ANIMS)) != cfg_bSongTitleAnims);
 
     bool combobox_changes = false;
-    LRESULT n = SendMessage(GetDlgItem(IDC_FS_MAXFPS2), CB_GETCURSEL, (WPARAM)0, (LPARAM)0);
-    if (n != CB_ERR)
-    {
-        if (n > 0)
-            n = MAX_MAX_FPS + 1 - n;
-        combobox_changes = combobox_changes || (static_cast<t_int32>(n) != cfg_max_fps_fs);
-    }
+    const int64_t selectedMaxFps = ReadCBValue(IDC_FS_MAXFPS2);
+    if (selectedMaxFps >= 0)
+        combobox_changes = combobox_changes || (normalize_max_fps(selectedMaxFps) != normalize_max_fps(cfg_max_fps_fs));
     combobox_changes = combobox_changes ||
                        IsComboDiff(IDC_SHADERS, cfg_nMaxPSVersion) ||
                        //IsComboDiff(IDC_TEXFORMAT, cfg_nTexBitsPerCh) ||
@@ -1811,7 +2072,7 @@ inline void milk2_preferences_page::SelectItemByPos(HWND ctrl, int pos)
     SendMessage(ctrl, CB_SETCURSEL, (WPARAM)pos, (LPARAM)0);
 }
 
-int milk2_preferences_page::SelectItemByValue(HWND ctrl, LRESULT value)
+int milk2_preferences_page::SelectItemByValue(HWND ctrl, LRESULT value) const
 {
     LRESULT count = SendMessage(ctrl, CB_GETCOUNT, (WPARAM)0, (LPARAM)0);
     for (int i = 0; i < count; ++i)
@@ -1877,32 +2138,26 @@ void milk2_preferences_page::UpdateMaxFps(int screenmode) const
         return;
 
     SendMessage(ctrl, CB_RESETCONTENT, (WPARAM)0, (LPARAM)0);
-    for (int j = 0; j <= MAX_MAX_FPS; ++j)
+    for (const UINT maxFps : supported_max_fps_values)
     {
-        WCHAR buf[256];
-        if (j == 0)
-            LoadString(core_api::get_my_instance(), IDS_UNLIMITED, buf, 256);
-        else
-        {
-            LoadString(core_api::get_my_instance(), IDS_X_FPS, buf, 256);
-            swprintf_s(buf, buf, MAX_MAX_FPS + 1 - j);
-        }
-
-        SendMessage(ctrl, CB_ADDSTRING, (WPARAM)j, (LPARAM)buf);
+        WCHAR format[256] = {0};
+        WCHAR buf[256] = {0};
+        LoadString(core_api::get_my_instance(), IDS_X_FPS, format, 256);
+        swprintf_s(buf, format, maxFps);
+        LRESULT pos = SendMessage(ctrl, CB_ADDSTRING, (WPARAM)0, (LPARAM)buf);
+        SendMessage(ctrl, CB_SETITEMDATA, pos, maxFps);
     }
 
     // Set previous selection.
-    UINT max_fps = 0;
+    UINT max_fps = default_max_fps_fs;
     switch (screenmode)
     {
         case FULLSCREEN:
-            max_fps = static_cast<UINT>(cfg_max_fps_fs);
+            max_fps = normalize_max_fps(cfg_max_fps_fs);
             break;
     }
-    if (max_fps == 0)
+    if (SelectItemByValue(ctrl, max_fps) < 0)
         SendMessage(ctrl, CB_SETCURSEL, (WPARAM)0, (LPARAM)0);
-    else
-        SendMessage(ctrl, CB_SETCURSEL, (WPARAM)(MAX_MAX_FPS - max_fps + 1), (LPARAM)0);
 }
 
 void milk2_preferences_page::SaveMaxFps(int screenmode) const
@@ -1921,13 +2176,13 @@ void milk2_preferences_page::SaveMaxFps(int screenmode) const
         LRESULT n = SendMessage(ctrl, CB_GETCURSEL, (WPARAM)0, (LPARAM)0);
         if (n != CB_ERR)
         {
-            if (n > 0)
-                n = MAX_MAX_FPS + 1 - n;
+            n = SendMessage(ctrl, CB_GETITEMDATA, (WPARAM)n, (LPARAM)0);
+            const UINT maxFps = normalize_max_fps(n);
 
             switch (screenmode)
             {
                 case FULLSCREEN:
-                    cfg_max_fps_fs = static_cast<UINT>(n);
+                    cfg_max_fps_fs = maxFps;
                     break;
             }
         }
@@ -1961,6 +2216,33 @@ void milk2_preferences_page::OpenToEdit(LPWSTR szDefault, LPCWSTR szFilename)
             wchar_t* str = WASABI_API_LNGSTRINGW(IDS_ERROR_IN_SHELLEXECUTE);
             MessageBox(str, szPath, MB_OK | MB_SETFOREGROUND | MB_TOPMOST | MB_TASKMODAL);
         }
+    }
+}
+
+void milk2_preferences_page::OpenDirectory(LPCWSTR directory, LPCWSTR title)
+{
+    if (!directory || directory[0] == L'\0')
+        return;
+
+    std::error_code ec;
+    std::filesystem::create_directories(directory, ec);
+    if (ec)
+    {
+        wchar_t caption[MAX_PATH] = {0};
+        swprintf_s(caption, L"Error Creating \"%ls\"", title);
+        MessageBox(L"MilkDrop could not create the requested folder in your profile directory.",
+                   caption,
+                   MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST | MB_TASKMODAL);
+        return;
+    }
+
+    const INT_PTR ret = reinterpret_cast<INT_PTR>(ShellExecute(NULL, L"open", directory, NULL, directory, SW_SHOWNORMAL));
+    if (ret <= 32)
+    {
+        wchar_t caption[MAX_PATH] = {0};
+        swprintf_s(caption, L"Error Opening \"%ls\"", title);
+        wchar_t* str = WASABI_API_LNGSTRINGW(IDS_ERROR_IN_SHELLEXECUTE);
+        MessageBox(str, caption, MB_OK | MB_SETFOREGROUND | MB_TOPMOST | MB_TASKMODAL);
     }
 }
 
@@ -2331,7 +2613,11 @@ void milk2_config::reset()
 
 void milk2_config::refresh_frame_rate()
 {
-    settings.m_max_fps_fs = static_cast<uint32_t>(cfg_max_fps_fs);
+    const int64_t storedMaxFps = cfg_max_fps_fs;
+    const UINT maxFps = normalize_max_fps(storedMaxFps);
+    if (storedMaxFps != static_cast<int64_t>(maxFps))
+        cfg_max_fps_fs = maxFps;
+    settings.m_max_fps_fs = maxFps;
 }
 
 // Initializes all font dialog variables.

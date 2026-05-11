@@ -489,9 +489,9 @@ void CPlugin::OverrideDefaults()
     //m_start_fullscreen      = 0;   // 0 or 1
     //m_start_desktop         = 0;   // 0 or 1
     //m_fake_fullscreen_mode  = 0;   // 0 or 1
-    m_max_fps_fs            = 30;  // 1-144, or 0 for 'unlimited'
-    //m_max_fps_d             = 30;  // 1-144, or 0 for 'unlimited'
-    //m_max_fps_w             = 30;  // 1-144, or 0 for 'unlimited'
+    m_max_fps_fs            = 30;  // supported cap, or 0 when the foobar2000 wrapper owns pacing
+    //m_max_fps_d             = 30;  // supported cap, or 0 for 'unlimited'
+    //m_max_fps_w             = 30;  // supported cap, or 0 for 'unlimited'
     m_show_press_f1_msg     = 1;   // 0 or 1
     //m_allow_page_tearing_w  = 0;   // 0 or 1
     m_allow_page_tearing_fs = 0;   // 0 or 1
@@ -1029,7 +1029,13 @@ bool CPlugin::PanelSettings(plugin_config* settings)
 
 void CPlugin::SetFoobarFullscreenFrameLimit(uint32_t max_fps) noexcept
 {
-    m_max_fps_fs = static_cast<int>(max_fps);
+    UNREFERENCED_PARAMETER(max_fps);
+
+    // In foobar2000 mode the UI element owns frame pacing. Disable the legacy
+    // shell Sleep limiter for both host modes; leaving m_max_fps_w at its
+    // default 30 FPS caps embedded/windowed rendering regardless of preferences.
+    m_max_fps_fs = 0;
+    m_max_fps_w = 0;
 }
 
 void CPlugin::SetFoobarPlaybackActive(bool active) noexcept

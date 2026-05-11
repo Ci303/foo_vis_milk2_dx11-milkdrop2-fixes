@@ -91,6 +91,8 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
         MESSAGE_HANDLER_EX(WM_IME_NOTIFY, OnImeNotify)
         MESSAGE_HANDLER_EX(WM_QUIT, OnQuit)
         MESSAGE_HANDLER_EX(WM_MILK2, OnMilk2Message)
+        MESSAGE_HANDLER_EX(WM_MILK2_RENDER, OnRenderMessage)
+        MESSAGE_HANDLER_EX(WM_MILK2_RESTORE_WINDOWED, OnRestoreWindowed)
         MESSAGE_HANDLER_EX(WM_CONFIG_CHANGE, OnConfigurationChange)
     END_MSG_MAP()
     // clang-format on
@@ -148,6 +150,8 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     LRESULT OnImeNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT OnQuit(UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT OnMilk2Message(UINT uMsg, WPARAM wParam, LPARAM lParam);
+    LRESULT OnRenderMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
+    LRESULT OnRestoreWindowed(UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT OnConfigurationChange(UINT uMsg, WPARAM wParam, LPARAM lParam);
 
     PWCHAR GetWnd() { swprintf_s(m_szWnd, TEXT("0x%p %dfs %dt"), get_wnd(), s_fullscreen, s_in_toggle); return m_szWnd; }
@@ -287,11 +291,25 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
 #endif
 
 #ifdef TIMER_TP
-    // Thread pool timer
+    // QPC-paced render scheduler
     void StartTimer() noexcept;
     void StopTimer() noexcept;
-    static VOID CALLBACK TimerCallback(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_TIMER Timer) noexcept;
-    PTP_TIMER m_tpTimer;
+    void ScheduleNextFrameTimer() noexcept;
+    void FramePacerThreadLoop() noexcept;
+    static DWORD WINAPI FramePacerThreadProc(LPVOID context) noexcept;
+    bool TryBeginFrame(LONGLONG& renderQpc) noexcept;
+    void FinishFrameTiming(LONGLONG renderQpc) noexcept;
+    void SetFrameTimerResolution(bool enabled) noexcept;
+    bool QueueRenderMessage() noexcept;
+    LONGLONG m_frameTimerFrequencyQpc;
+    std::atomic<LONGLONG> m_frameIntervalQpc{0};
+    std::atomic<LONGLONG> m_nextFrameQpc{0};
+    std::atomic_bool m_renderPending{false};
+    std::atomic<DWORD> m_renderPostTick{0};
+    HANDLE m_framePacerThread;
+    HANDLE m_framePacerStopEvent;
+    HANDLE m_framePacerWakeEvent;
+    bool m_timerResolutionActive;
 #endif
 
     // Topmost setting

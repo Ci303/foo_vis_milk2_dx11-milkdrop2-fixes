@@ -517,19 +517,10 @@ void DeviceResources::HandleDeviceLost()
 // Present the contents of the swap chain to the screen.
 void DeviceResources::Present()
 {
-    HRESULT hr = E_FAIL;
-    if (m_options & c_AllowTearing)
-    {
-        // Recommended to always use tearing if supported when using a sync interval of 0.
-        hr = m_swapChain->Present(0, DXGI_PRESENT_ALLOW_TEARING);
-    }
-    else
-    {
-        // The first argument instructs DXGI to block until VSync, putting the application
-        // to sleep until the next VSync. This ensures we don't waste any cycles rendering
-        // frames that will never be displayed to the screen.
-        hr = m_swapChain->Present(1, 0);
-    }
+    // The foobar component owns frame pacing. Present without DXGI vsync so
+    // preference-selected caps above monitor refresh are not silently clamped.
+    const UINT presentFlags = (m_options & c_AllowTearing) ? DXGI_PRESENT_ALLOW_TEARING : 0;
+    HRESULT hr = m_swapChain->Present(0, presentFlags);
 
     // Discard the contents of the render target.
     // This is a valid operation only when the existing contents will be entirely

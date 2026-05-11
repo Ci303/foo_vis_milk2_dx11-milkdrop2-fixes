@@ -44,6 +44,7 @@
 
 #include <wrl/client.h>
 
+#include <atomic>
 #include <array>
 #include <filesystem>
 #include <map>
@@ -92,8 +93,8 @@
 #include <vis_milk2/dxcontext.h>
 #include <vis_milk2/utility.h>
 
-//#define TIMER_TP // Thread pool timer
-#define TIMER_32 // Win32 timer
+#define TIMER_TP // Thread pool timer
+//#define TIMER_32 // Win32 timer
 //#define TIMER_DX // DirectX step timer
 #if !defined(TIMER_TP) && !defined(TIMER_32) && !defined(TIMER_DX)
 #error Missing timer selection.
@@ -108,11 +109,13 @@
 
 #define MAX_PROPERTY_PAGES 8
 #define MAX_DISPLAY_ADAPTERS 16
-#define MAX_MAX_FPS 144
+#define MAX_MAX_FPS 240
 #define MAX_DISPLAY_MODES 1024
 
 #define WM_MILK2 (WM_USER + 0)
 #define WM_CONFIG_CHANGE (WM_USER + 1)
+#define WM_MILK2_RENDER (WM_USER + 2)
+#define WM_MILK2_RESTORE_WINDOWED (WM_USER + 3)
 #define MILK2_WPARAM_REFRESH_PRESET_LIST 0x1001
 #define MILK2_WPARAM_RANDOM_PRESET 0x1002
 

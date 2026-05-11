@@ -275,6 +275,8 @@ static constexpr int default_nDepthBufferFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 static constexpr int default_nBackBufferCount = 2;
 static constexpr int default_nMinFeatureLevel = D3D_FEATURE_LEVEL_9_1;
 static constexpr UINT default_max_fps_fs = 30;
+static constexpr UINT supported_max_fps_values[] = {30u, 60u, 75u, 120u, 144u, 240u};
+static constexpr size_t supported_max_fps_count = sizeof(supported_max_fps_values) / sizeof(supported_max_fps_values[0]);
 static constexpr bool default_allow_page_tearing_fs = false;
 static constexpr const char* default_szTitleFormat = "%title%";
 static constexpr const char* default_szArtworkFormat = "";
@@ -324,6 +326,9 @@ class milk2_preferences_page : public preferences_page_instance, public CDialogI
         MSG_WM_INITDIALOG(OnInitDialog)
         MSG_WM_NOTIFY(OnNotify)
         MSG_WM_HSCROLL(OnHScroll)
+        MSG_WM_VSCROLL(OnVScroll)
+        MSG_WM_MOUSEWHEEL(OnMouseWheel)
+        MSG_WM_SIZE(OnSize)
         MSG_WM_CLOSE(OnClose)
         MSG_WM_DESTROY(OnDestroy)
         COMMAND_HANDLER_EX(IDC_CB_SCROLLON3, BN_CLICKED, OnButtonClick)
@@ -365,6 +370,8 @@ class milk2_preferences_page : public preferences_page_instance, public CDialogI
         COMMAND_HANDLER_EX(ID_FONTS, BN_CLICKED, OnButtonPushed)
         COMMAND_HANDLER_EX(ID_BLACKLIST, BN_CLICKED, OnButtonPushed)
         COMMAND_HANDLER_EX(IDC_FORMAT_INFO, BN_CLICKED, OnButtonPushed)
+        COMMAND_HANDLER_EX(IDC_OPEN_MILKDROP_FOLDER, BN_CLICKED, OnButtonPushed)
+        COMMAND_HANDLER_EX(IDC_OPEN_TEXTURES_FOLDER, BN_CLICKED, OnButtonPushed)
     END_MSG_MAP()
     // clang-format on
 
@@ -381,6 +388,9 @@ class milk2_preferences_page : public preferences_page_instance, public CDialogI
     void OnButtonClick(UINT uNotifyCode, int nID, CWindow wndCtl);
     void OnComboChange(UINT uNotifyCode, int nID, CWindow wndCtl);
     void OnHScroll(UINT nSBCode, UINT nPos, CScrollBar pScrollBar);
+    void OnVScroll(UINT nSBCode, UINT nPos, CScrollBar pScrollBar);
+    BOOL OnMouseWheel(UINT nFlags, short zDelta, CPoint pt);
+    void OnSize(UINT nType, CSize size);
     void AutoHideGamma16();
     bool HasChanged() const;
     void OnChanged();
@@ -388,21 +398,31 @@ class milk2_preferences_page : public preferences_page_instance, public CDialogI
     inline void AddItem(HWND ctrl, LPWSTR buffer, UINT id, DWORD itemdata);
     inline void AddItem(HWND ctrl, LPCWSTR text, DWORD itemdata);
     inline void SelectItemByPos(HWND ctrl, int pos);
-    int SelectItemByValue(HWND ctrl, LRESULT value);
+    int SelectItemByValue(HWND ctrl, LRESULT value) const;
     int64_t ReadCBValue(DWORD ctrl_id) const;
     bool IsComboDiff(DWORD ctrl_id, int64_t previous) const;
     wchar_t* FormImageCacheSizeString(LPCWSTR itemStr, const UINT sizeID);
     void UpdateMaxFps(int screenmode) const;
     void SaveMaxFps(int screenmode) const;
     void OpenToEdit(LPWSTR szDefault, LPCWSTR szFilename);
+    void OpenDirectory(LPCWSTR directory, LPCWSTR title);
     void InitFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2, DWORD bold_id, DWORD ital_id, DWORD aa_id, DWORD outline_id, HWND hdlg, DWORD ctrl4, const wchar_t* szFontName, int fontIndex);
     void SaveFontI(td_fontinfo* fi, DWORD ctrl1, DWORD ctrl2, DWORD bold_id, DWORD ital_id, DWORD aa_id, DWORD outline_id, HWND hdlg, int fontIndex, uint32_t& outlineMask);
+    void CapturePreferencesControlLayout();
+    void RepositionPreferencesControls();
+    int GetPreferencesContentHeight() const;
+    int GetPreferencesScrollMax() const;
+    void PositionPreferencesScrollBar(bool visible);
+    void UpdatePreferencesScrollBar();
+    void ScrollPreferencesTo(int scrollPos);
 
     const preferences_page_callback::ptr m_callback;
     bool m_resetpage;
+    int m_preferences_scroll_pos = 0;
 
     CToolTipCtrl m_tooltips;
     std::vector<std::wstring> m_tooltip_texts;
+    std::vector<std::pair<HWND, RECT>> m_preference_control_layout;
 
     fb2k::CDarkModeHooks m_dark;
     fb2k::CDarkModeHooks m_font_dialog_dark;
