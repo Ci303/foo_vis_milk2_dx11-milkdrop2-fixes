@@ -1070,7 +1070,10 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
     menu.AppendMenu(MF_STRING | (g_plugin.m_show_help ? MF_CHECKED : 0), IDM_SHOW_HELP, TEXT("Show Help Overlay"));
     menu.AppendMenu(MF_STRING, IDM_SHOW_PREFS, TEXT("Open Preferences"));
     menu.AppendMenu(MF_SEPARATOR);
-    menu.AppendMenu(MF_STRING | (s_popout ? MF_CHECKED : 0), IDM_TOGGLE_POPOUT, s_popout ? TEXT("Return to Panel") : TEXT("Pop Out Window"));
+    const UINT popoutFlags = MF_STRING
+        | (s_popout ? MF_CHECKED : 0)
+        | ((s_fullscreen && !s_popout) ? MF_GRAYED : 0);
+    menu.AppendMenu(popoutFlags, IDM_TOGGLE_POPOUT, s_popout ? TEXT("Return to Panel") : TEXT("Pop Out Window"));
     menu.AppendMenu(MF_STRING | ((s_fullscreen || s_popout_fullscreen) ? MF_CHECKED : 0), IDM_TOGGLE_FULLSCREEN, TEXT("Fullscreen"));
 
     //auto submenu = std::make_unique<CMenu>(menu.GetSubMenu(0));

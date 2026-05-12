@@ -55,6 +55,7 @@ This branch already includes the upstream DirectX 11 foobar2000 port. Recent mai
 - foobar2000 preferences are used for most component settings.
 - Presets, textures, custom messages, and custom sprites still use the `milkdrop2` profile directory.
 - MilkDrop can be popped out into a separate window from the visualiser context menu; closing it returns the visualiser to the embedded panel.
+- `Pop Out Window` is disabled while the embedded panel is already in normal fullscreen mode. Existing pop-out windows can still be returned to the panel from fullscreen.
 - Older presets can still fail, crash, hang, or remain black if they depend on unsupported EEL1 syntax, old shader assumptions, missing texture packs, or other compatibility issues.
 - This project is currently tested mainly on foobar2000 v2 x64, although the solution can still be built for other targets.
 - FPS caps are selected from standard monitor rates: 30, 60, 75, 120, 144, and 240 FPS.
@@ -68,7 +69,7 @@ This branch already includes the upstream DirectX 11 foobar2000 port. Recent mai
 - The easiest install path is the GitHub Releases page for this repository.
 - Current public packages are x64 builds intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
-- Close foobar2000, then run the release installer named like `foo_vis_milk2-0.2.1.28-installer.exe`. It installs the x64 component, shader data, recommended preset packs, textures, repaired preset additions, and an optional starter layout template into the foobar2000 v2 profile.
+- Close foobar2000, then run the release installer named like `foo_vis_milk2-0.2.1.29-installer.exe`. It installs the x64 component, shader data, recommended preset packs, textures, repaired preset additions, and an optional starter layout template into the foobar2000 v2 profile.
 - If foobar2000 x64 is not installed, the installer explains that foobar2000 is required, opens the official foobar2000 download page, and exits. Install foobar2000 v2 x64 first, close it, then run the MilkDrop installer again.
 - Restart foobar2000 after the component is installed.
 
@@ -157,6 +158,7 @@ The full shortcut list is also shown in the built-in help overlay.
 - Single left click can toggle play/pause when **Enable single-click play/pause** is turned on.
 - Double click still toggles fullscreen.
 - A pop-out MilkDrop window can be dragged and resized like a normal window. In borderless mode, drag the top band or hold left click and drag from the visual area; use the window edges to resize.
+- While the embedded panel is already fullscreen, exit fullscreen before popping it out. Detached pop-out windows keep their own fullscreen and return-to-panel controls.
 - When single-click play/pause is enabled, MilkDrop shows a short `Paused` overlay using the current animated song-title font settings.
 
 ### 8. Preset blacklist

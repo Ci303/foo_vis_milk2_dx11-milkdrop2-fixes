@@ -17,16 +17,16 @@
 #define APPLICATION_COMPANY_NAME "KernelOops" //"Jimmy Cassis"
 #define APPLICATION_FILE_IS_DLL 1
 #define APPLICATION_DESCRIPTION "MilkDrop 2 Visualization Library"
-#define APPLICATION_SOURCE_URL "https://github.com/Ci303/foobar2000-milkdrop2-fixes"
-#define APPLICATION_RELEASE_URL "https://github.com/Ci303/foobar2000-milkdrop2-fixes/releases"
-#define APPLICATION_DOCUMENTATION_URL "https://github.com/Ci303/foobar2000-milkdrop2-fixes"
-#define APPLICATION_DISCUSSION_URL "https://github.com/Ci303/foobar2000-milkdrop2-fixes/issues"
+#define APPLICATION_SOURCE_URL "https://github.com/Ci303/foo_vis_milk2_dx11-milkdrop2-fixes"
+#define APPLICATION_RELEASE_URL "https://github.com/Ci303/foo_vis_milk2_dx11-milkdrop2-fixes/releases"
+#define APPLICATION_DOCUMENTATION_URL "https://github.com/Ci303/foo_vis_milk2_dx11-milkdrop2-fixes"
+#define APPLICATION_DISCUSSION_URL "https://github.com/Ci303/foo_vis_milk2_dx11-milkdrop2-fixes/issues"
 #define LIBRARY_DOCUMENTATION_URL "https://www.geisswerks.com/milkdrop/milkdrop.html"
 
 #define APPLICATION_VERSION_MAJOR 0
 #define APPLICATION_VERSION_MINOR 2
 #define APPLICATION_VERSION_BUILD 1
-#define APPLICATION_VERSION_REVISION 28 // -3: alpha, -2: beta, -1: release candidate, >= 0 && < 32768: not development version
+#define APPLICATION_VERSION_REVISION 29 // -3: alpha, -2: beta, -1: release candidate, >= 0 && < 32768: not development version
 
 #define LIBRARY_VERSION_MAJOR 2 // INT_VERSION / 100
 #define LIBRARY_VERSION_MINOR 25 // INT_VERSION % 100

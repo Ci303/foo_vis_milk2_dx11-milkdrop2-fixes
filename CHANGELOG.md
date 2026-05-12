@@ -2,6 +2,14 @@
 
 ## Release History
 
+### 0.2.1.29 - 2026-05-12
+
+Fullscreen pop-out menu polish for the foobar2000 x64 component.
+
+- Greyed out `Pop Out Window` while the embedded MilkDrop panel is already in normal fullscreen mode, avoiding an ambiguous window ownership path.
+- Kept `Return to Panel` available when an existing pop-out window is in fullscreen, so detached MilkDrop windows can still be restored directly from the context menu.
+- Updated component metadata links to the current DX11 maintenance repository.
+
 ### 0.2.1.28 - 2026-05-12
 
 Pop-out window update for the foobar2000 x64 component.
