@@ -301,6 +301,7 @@ milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_ins
     m_minimized = false;
     m_focus_hotkeys_registered = false;
     m_pending_single_click = false;
+    m_popout_drag_candidate = false;
     m_render_due_from_timer = false;
     m_click_pause_confirmation_required = false;
     m_click_pause_confirmation_pending = false;
@@ -488,6 +489,11 @@ int milk2_ui_element::OnCreate(LPCREATESTRUCT cs)
 void milk2_ui_element::OnClose()
 {
     MILK2_CONSOLE_LOG("OnClose ", GetWnd())
+    if (s_popout)
+    {
+        ReturnPopoutToPanel();
+        return;
+    }
     //DestroyWindow();
 }
 
@@ -523,6 +529,9 @@ void milk2_ui_element::OnDestroy()
         s_fullscreen = false;
         s_in_toggle = false;
         s_was_topmost = false;
+        s_popout = false;
+        s_popout_fullscreen = false;
+        s_popout_parent = nullptr;
         s_milk2 = false;
 #ifdef TIMER_TP
         delete_cs = true;
@@ -531,8 +540,11 @@ void milk2_ui_element::OnDestroy()
         g_plugin.PluginQuit();
 
         HWND parent = GetRealParent(get_wnd());
-        ::SetClassLongPtr(parent, GCLP_HICON, NULL);
-        ::SetClassLongPtr(parent, GCLP_HICONSM, NULL);
+        if (parent && parent != ::GetDesktopWindow())
+        {
+            ::SetClassLongPtr(parent, GCLP_HICON, NULL);
+            ::SetClassLongPtr(parent, GCLP_HICONSM, NULL);
+        }
     }
     else
     {
@@ -816,12 +828,82 @@ void milk2_ui_element::OnExitSizeMove()
     }
 }
 
+LRESULT milk2_ui_element::OnNcHitTest(UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    UNREFERENCED_PARAMETER(uMsg);
+    UNREFERENCED_PARAMETER(wParam);
+
+    if (!s_popout || s_popout_fullscreen || !s_config.settings.m_bPopoutBorderless)
+    {
+        SetMsgHandled(FALSE);
+        return 0;
+    }
+
+    RECT windowRect{};
+    if (!::GetWindowRect(get_wnd(), &windowRect))
+    {
+        SetMsgHandled(FALSE);
+        return 0;
+    }
+
+    POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+    const int resizeBorder = 8;
+    const int dragBand = 40;
+
+    const bool left = point.x >= windowRect.left && point.x < windowRect.left + resizeBorder;
+    const bool right = point.x <= windowRect.right && point.x > windowRect.right - resizeBorder;
+    const bool top = point.y >= windowRect.top && point.y < windowRect.top + resizeBorder;
+    const bool bottom = point.y <= windowRect.bottom && point.y > windowRect.bottom - resizeBorder;
+
+    if (top && left)
+        return HTTOPLEFT;
+    if (top && right)
+        return HTTOPRIGHT;
+    if (bottom && left)
+        return HTBOTTOMLEFT;
+    if (bottom && right)
+        return HTBOTTOMRIGHT;
+    if (left)
+        return HTLEFT;
+    if (right)
+        return HTRIGHT;
+    if (top)
+        return HTTOP;
+    if (bottom)
+        return HTBOTTOM;
+
+    if (point.y >= windowRect.top && point.y < windowRect.top + dragBand)
+        return HTCAPTION;
+
+    return HTCLIENT;
+}
+
+LRESULT milk2_ui_element::OnNcLButtonDblClk(UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    UNREFERENCED_PARAMETER(uMsg);
+    UNREFERENCED_PARAMETER(lParam);
+
+    if (s_popout && !s_popout_fullscreen && s_config.settings.m_bPopoutBorderless && wParam == HTCAPTION)
+    {
+        TogglePopoutFullscreen();
+        return 0;
+    }
+
+    SetMsgHandled(FALSE);
+    return 0;
+}
+
 // To avoid a 1-pixel-thick border of noise.
 LRESULT milk2_ui_element::OnNcCalcSize(BOOL bCalcValidRects, LPARAM lParam)
 {
     UNREFERENCED_PARAMETER(lParam);
 
     MILK2_CONSOLE_LOG("OnNcCalcSize ", GetWnd())
+    if (s_popout && !s_popout_fullscreen && !s_config.settings.m_bPopoutBorderless)
+    {
+        SetMsgHandled(FALSE);
+        return 0;
+    }
     if (bCalcValidRects == TRUE)
     {
         //auto& params = *reinterpret_cast<NCCALCSIZE_PARAMS*>(lParam);
@@ -988,7 +1070,8 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
     menu.AppendMenu(MF_STRING | (g_plugin.m_show_help ? MF_CHECKED : 0), IDM_SHOW_HELP, TEXT("Show Help Overlay"));
     menu.AppendMenu(MF_STRING, IDM_SHOW_PREFS, TEXT("Open Preferences"));
     menu.AppendMenu(MF_SEPARATOR);
-    menu.AppendMenu(MF_STRING | (s_fullscreen ? MF_CHECKED : 0), IDM_TOGGLE_FULLSCREEN, TEXT("Fullscreen"));
+    menu.AppendMenu(MF_STRING | (s_popout ? MF_CHECKED : 0), IDM_TOGGLE_POPOUT, s_popout ? TEXT("Return to Panel") : TEXT("Pop Out Window"));
+    menu.AppendMenu(MF_STRING | ((s_fullscreen || s_popout_fullscreen) ? MF_CHECKED : 0), IDM_TOGGLE_FULLSCREEN, TEXT("Fullscreen"));
 
     //auto submenu = std::make_unique<CMenu>(menu.GetSubMenu(0));
     //b = menu.RemoveMenu(0, MF_BYPOSITION);
@@ -1004,6 +1087,9 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
         case IDM_TOGGLE_FULLSCREEN:
             if (g_plugin.GetFrame() > 0)
                 ToggleFullScreen();
+            break;
+        case IDM_TOGGLE_POPOUT:
+            TogglePopout();
             break;
         case IDM_NEXT_PRESET:
             NextPreset();
@@ -1431,6 +1517,15 @@ LRESULT milk2_ui_element::OnConfigurationChange(UINT uMsg, WPARAM wParam, LPARAM
                     m_title.reset();
                     g_plugin.PanelSettings(&s_config.settings);
                     ApplyFrameRateLimit();
+                    if (s_popout && !s_popout_fullscreen)
+                    {
+                        const DWORD baseStyle = WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+                        const DWORD style = s_config.settings.m_bPopoutBorderless ? (WS_POPUP | baseStyle) : (WS_OVERLAPPEDWINDOW | baseStyle);
+                        ::SetWindowLongPtr(get_wnd(), GWL_STYLE, static_cast<LONG_PTR>(style));
+                        ::SetWindowLongPtr(get_wnd(), GWL_EXSTYLE, static_cast<LONG_PTR>(WS_EX_APPWINDOW));
+                        ::SetWindowPos(get_wnd(), nullptr, 0, 0, 0, 0,
+                                       SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                    }
 #ifdef TIMER_TP
                     StartTimer();
 #elif defined(TIMER_32)
@@ -1494,7 +1589,7 @@ bool milk2_ui_element::Initialize(HWND window, int width, int height)
         }
 
         g_plugin.SetWinampWindow(window);
-        g_plugin.SetScreenMode(s_fullscreen ? FULLSCREEN : WINDOWED);
+        g_plugin.SetScreenMode((s_fullscreen || s_popout_fullscreen) ? FULLSCREEN : WINDOWED);
         ApplyFrameRateLimit();
 
         if (!s_milk2)
@@ -1517,7 +1612,7 @@ bool milk2_ui_element::Initialize(HWND window, int width, int height)
             lock_held = true;
 #endif
             g_plugin.SetWinampWindow(window);
-            g_plugin.SetScreenMode(s_fullscreen ? FULLSCREEN : WINDOWED);
+            g_plugin.SetScreenMode((s_fullscreen || s_popout_fullscreen) ? FULLSCREEN : WINDOWED);
             g_plugin.OnWindowSwap(window, width, height);
 #ifdef TIMER_TP
             if (lock_held)
@@ -1792,6 +1887,24 @@ void milk2_ui_element::RestartRefreshTimer() noexcept
 }
 #endif
 
+void milk2_ui_element::ResizePluginToCurrentClient(const char* context, bool wait_for_lock) noexcept
+{
+    RECT rect{};
+    if (!::GetClientRect(get_wnd(), &rect))
+        return;
+
+    int width = rect.right - rect.left;
+    int height = rect.bottom - rect.top;
+    if (width <= 0 || height <= 0)
+        return;
+
+    normalize_render_size(width, height);
+    run_plugin_locked(context, [&] {
+        g_plugin.OnWindowMoved();
+        g_plugin.OnWindowSizeChanged(width, height);
+    }, wait_for_lock);
+}
+
 void milk2_ui_element::SetPwd(std::wstring pwd) noexcept
 {
     m_pwd.assign(pwd);
@@ -1800,6 +1913,12 @@ void milk2_ui_element::SetPwd(std::wstring pwd) noexcept
 void milk2_ui_element::ToggleFullScreen()
 {
     MILK2_CONSOLE_LOG("ToggleFullScreen0 ", GetWnd())
+    if (s_popout)
+    {
+        TogglePopoutFullscreen();
+        return;
+    }
+
     if (m_milk2)
     {
         try
@@ -2070,6 +2189,205 @@ void milk2_ui_element::UpdateChannelMode()
     {
         m_vis_stream->set_channel_mode(s_config.settings.m_bEnableDownmix ? visualisation_stream_v3::channel_mode_mono : visualisation_stream_v3::channel_mode_default);
     }
+}
+
+void milk2_ui_element::TogglePopout()
+{
+    if (s_popout)
+        ReturnPopoutToPanel();
+    else
+        OpenPopoutWindow();
+}
+
+void milk2_ui_element::OpenPopoutWindow()
+{
+    if (!m_milk2 || s_popout || s_fullscreen || !::IsWindow(get_wnd()))
+        return;
+
+    HWND hwnd = get_wnd();
+    HWND parent = ::GetParent(hwnd);
+    if (!parent || !::IsWindow(parent))
+        return;
+
+    RECT windowRect{};
+    RECT parentRect{};
+    if (!::GetWindowRect(hwnd, &windowRect))
+        return;
+
+    parentRect = windowRect;
+    ::MapWindowPoints(nullptr, parent, reinterpret_cast<POINT*>(&parentRect), 2);
+
+    int width = windowRect.right - windowRect.left;
+    int height = windowRect.bottom - windowRect.top;
+    width = (std::max)(width, 800);
+    height = (std::max)(height, 600);
+
+    HMONITOR monitor = ::MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO monitorInfo{};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    if (!::GetMonitorInfo(monitor, &monitorInfo))
+        monitorInfo.rcWork = {100, 100, 100 + width, 100 + height};
+
+    const int workWidth = monitorInfo.rcWork.right - monitorInfo.rcWork.left;
+    const int workHeight = monitorInfo.rcWork.bottom - monitorInfo.rcWork.top;
+    width = (std::min)(width, workWidth);
+    height = (std::min)(height, workHeight);
+    const int x = monitorInfo.rcWork.left + (workWidth - width) / 2;
+    const int y = monitorInfo.rcWork.top + (workHeight - height) / 2;
+
+    s_popout_parent = parent;
+    s_popout_panel_style = ::GetWindowLongPtr(hwnd, GWL_STYLE);
+    s_popout_panel_exstyle = ::GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+    s_popout_panel_rect = parentRect;
+    s_popout_window_rect = {x, y, x + width, y + height};
+    s_popout = true;
+    s_popout_fullscreen = false;
+
+#ifdef TIMER_TP
+    StopTimer();
+#endif
+
+    const DWORD baseStyle = WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+    const DWORD style = s_config.settings.m_bPopoutBorderless ? (WS_POPUP | baseStyle) : (WS_OVERLAPPEDWINDOW | baseStyle);
+    const DWORD exstyle = WS_EX_APPWINDOW;
+
+    ::SetParent(hwnd, nullptr);
+    ::SetWindowLongPtr(hwnd, GWL_STYLE, static_cast<LONG_PTR>(style));
+    ::SetWindowLongPtr(hwnd, GWL_EXSTYLE, static_cast<LONG_PTR>(exstyle));
+    ::SetWindowText(hwnd, L"MilkDrop");
+    ::SetWindowPos(hwnd, HWND_TOP, x, y, width, height, SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    ::ShowWindow(hwnd, SW_SHOWNORMAL);
+    ::SetForegroundWindow(hwnd);
+    ::SetFocus(hwnd);
+
+    run_plugin_locked("OpenPopoutWindow mode", [&] { g_plugin.SetScreenMode(WINDOWED); }, true);
+    ApplyFrameRateLimit();
+    ResizePluginToCurrentClient("OpenPopoutWindow resize", true);
+
+#ifdef TIMER_TP
+    StartTimer();
+    QueueRenderMessage();
+#elif defined(TIMER_32)
+    RestartRefreshTimer();
+#endif
+    InvalidateRect(nullptr, FALSE);
+}
+
+void milk2_ui_element::ReturnPopoutToPanel()
+{
+    if (!s_popout || !::IsWindow(get_wnd()))
+        return;
+
+    HWND hwnd = get_wnd();
+    if (!s_popout_fullscreen)
+        ::GetWindowRect(hwnd, &s_popout_window_rect);
+
+    HWND parent = s_popout_parent;
+    if (!parent || !::IsWindow(parent))
+    {
+        s_popout = false;
+        s_popout_fullscreen = false;
+        s_popout_parent = nullptr;
+        return;
+    }
+
+#ifdef TIMER_TP
+    StopTimer();
+#endif
+
+    s_popout = false;
+    s_popout_fullscreen = false;
+    ::SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    ::SetWindowLongPtr(hwnd, GWL_STYLE, s_popout_panel_style);
+    ::SetWindowLongPtr(hwnd, GWL_EXSTYLE, s_popout_panel_exstyle);
+    ::SetParent(hwnd, parent);
+    ::SetWindowText(hwnd, SHORTNAME);
+
+    const int width = (std::max)(1L, s_popout_panel_rect.right - s_popout_panel_rect.left);
+    const int height = (std::max)(1L, s_popout_panel_rect.bottom - s_popout_panel_rect.top);
+    ::SetWindowPos(hwnd,
+                   HWND_TOP,
+                   s_popout_panel_rect.left,
+                   s_popout_panel_rect.top,
+                   width,
+                   height,
+                   SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    s_popout_parent = nullptr;
+
+    run_plugin_locked("ReturnPopoutToPanel mode", [&] { g_plugin.SetScreenMode(WINDOWED); }, true);
+    ApplyFrameRateLimit();
+    ResizePluginToCurrentClient("ReturnPopoutToPanel resize", true);
+
+#ifdef TIMER_TP
+    StartTimer();
+    QueueRenderMessage();
+#elif defined(TIMER_32)
+    RestartRefreshTimer();
+#endif
+    InvalidateRect(nullptr, FALSE);
+}
+
+void milk2_ui_element::TogglePopoutFullscreen()
+{
+    if (!s_popout || !m_milk2 || !::IsWindow(get_wnd()))
+        return;
+
+    HWND hwnd = get_wnd();
+
+#ifdef TIMER_TP
+    StopTimer();
+#endif
+
+    const DWORD baseStyle = WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+    if (!s_popout_fullscreen)
+    {
+        ::GetWindowRect(hwnd, &s_popout_window_rect);
+        HMONITOR monitor = ::MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO monitorInfo{};
+        monitorInfo.cbSize = sizeof(monitorInfo);
+        if (!::GetMonitorInfo(monitor, &monitorInfo))
+            monitorInfo.rcMonitor = s_popout_window_rect;
+
+        s_popout_fullscreen = true;
+        ::SetWindowLongPtr(hwnd, GWL_STYLE, static_cast<LONG_PTR>(WS_POPUP | baseStyle));
+        ::SetWindowLongPtr(hwnd, GWL_EXSTYLE, static_cast<LONG_PTR>(WS_EX_APPWINDOW));
+        ::SetWindowPos(hwnd,
+                       HWND_TOPMOST,
+                       monitorInfo.rcMonitor.left,
+                       monitorInfo.rcMonitor.top,
+                       monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left,
+                       monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top,
+                       SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+        run_plugin_locked("TogglePopoutFullscreen enter", [&] { g_plugin.SetScreenMode(FULLSCREEN); }, true);
+    }
+    else
+    {
+        s_popout_fullscreen = false;
+        const DWORD style = s_config.settings.m_bPopoutBorderless ? (WS_POPUP | baseStyle) : (WS_OVERLAPPEDWINDOW | baseStyle);
+        ::SetWindowLongPtr(hwnd, GWL_STYLE, static_cast<LONG_PTR>(style));
+        ::SetWindowLongPtr(hwnd, GWL_EXSTYLE, static_cast<LONG_PTR>(WS_EX_APPWINDOW));
+        ::SetWindowPos(hwnd,
+                       HWND_NOTOPMOST,
+                       s_popout_window_rect.left,
+                       s_popout_window_rect.top,
+                       s_popout_window_rect.right - s_popout_window_rect.left,
+                       s_popout_window_rect.bottom - s_popout_window_rect.top,
+                       SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+        run_plugin_locked("TogglePopoutFullscreen leave", [&] { g_plugin.SetScreenMode(WINDOWED); }, true);
+    }
+
+    ApplyFrameRateLimit();
+    ResizePluginToCurrentClient("TogglePopoutFullscreen resize", true);
+    ::SetForegroundWindow(hwnd);
+    ::SetFocus(hwnd);
+
+#ifdef TIMER_TP
+    StartTimer();
+    QueueRenderMessage();
+#elif defined(TIMER_32)
+    RestartRefreshTimer();
+#endif
+    InvalidateRect(nullptr, FALSE);
 }
 // clang-format on
 

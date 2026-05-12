@@ -21,6 +21,13 @@ static bool s_fullscreen = false;
 static bool s_in_toggle = false;
 static bool s_was_topmost = false;
 static bool s_milk2 = false;
+static bool s_popout = false;
+static bool s_popout_fullscreen = false;
+static HWND s_popout_parent = nullptr;
+static LONG_PTR s_popout_panel_style = 0;
+static LONG_PTR s_popout_panel_exstyle = 0;
+static RECT s_popout_panel_rect{};
+static RECT s_popout_window_rect{100, 100, 900, 700};
 static ULONGLONG s_count = 0ull;
 static constexpr ULONGLONG s_debug_limit = 1ull;
 static milk2_config s_config;
@@ -68,6 +75,8 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
         MSG_WM_MOVE(OnMove)
         MSG_WM_ENTERSIZEMOVE(OnEnterSizeMove)
         MSG_WM_EXITSIZEMOVE(OnExitSizeMove)
+        MESSAGE_HANDLER_EX(WM_NCHITTEST, OnNcHitTest)
+        MESSAGE_HANDLER_EX(WM_NCLBUTTONDBLCLK, OnNcLButtonDblClk)
         MSG_WM_NCCALCSIZE(OnNcCalcSize)
         MSG_WM_COPYDATA(OnCopyData)
         MSG_WM_DISPLAYCHANGE(OnDisplayChange)
@@ -83,6 +92,8 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
         MSG_WM_SETFOCUS(OnSetFocus)
         MSG_WM_KILLFOCUS(OnKillFocus)
         MSG_WM_LBUTTONDOWN(OnLButtonDown)
+        MSG_WM_LBUTTONUP(OnLButtonUp)
+        MSG_WM_MOUSEMOVE(OnMouseMove)
         MSG_WM_MOUSEWHEEL(OnMouseWheel)
         MSG_WM_CONTEXTMENU(OnContextMenu)
         MSG_WM_LBUTTONDBLCLK(OnLButtonDblClk)
@@ -127,6 +138,8 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     void OnMove(CPoint ptPos);
     void OnEnterSizeMove();
     void OnExitSizeMove();
+    LRESULT OnNcHitTest(UINT uMsg, WPARAM wParam, LPARAM lParam);
+    LRESULT OnNcLButtonDblClk(UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT OnNcCalcSize(BOOL bCalcValidRects, LPARAM lParam);
     BOOL OnCopyData(CWindow wnd, PCOPYDATASTRUCT pCopyDataStruct);
     void OnDisplayChange(UINT uBitsPerPixel, CSize sizeScreen);
@@ -143,6 +156,8 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     void OnSetFocus(CWindow wndOld);
     void OnKillFocus(CWindow wndFocus);
     void OnLButtonDown(UINT nFlags, CPoint point);
+    void OnLButtonUp(UINT nFlags, CPoint point);
+    void OnMouseMove(UINT nFlags, CPoint point);
     BOOL OnMouseWheel(UINT nFlags, short zDelta, CPoint point);
     void OnContextMenu(CWindow wnd, CPoint point);
     void OnLButtonDblClk(UINT nFlags, CPoint point);
@@ -164,12 +179,14 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     bool m_minimized;
     bool m_focus_hotkeys_registered;
     bool m_pending_single_click;
+    bool m_popout_drag_candidate;
     bool m_render_due_from_timer;
     bool m_click_pause_confirmation_required;
     bool m_click_pause_confirmation_pending;
     UINT m_blacklist_load_retries;
     DWORD m_last_left_double_click_tick;
     DWORD m_click_pause_confirmation_tick;
+    CPoint m_popout_drag_origin;
     enum class pending_animated_text_kind
     {
         none,
@@ -212,6 +229,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
         IDM_SHOW_TITLE = 4,
         IDM_SHOW_ALBUM = 5,
         IDM_BLACKLIST_PRESET = 6,
+        IDM_TOGGLE_POPOUT = 7,
         IDM_SHOW_MENU = ID_VIS_MENU,
         IDM_SHOW_PREFS = ID_VIS_CFG,
         IDM_SHOW_HELP = ID_SHOWHELP,
@@ -270,6 +288,11 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     void SetPwd(std::wstring pwd) noexcept;
     void UpdateChannelMode();
     void ToggleFullScreen();
+    void TogglePopout();
+    void OpenPopoutWindow();
+    void ReturnPopoutToPanel();
+    void TogglePopoutFullscreen();
+    void ResizePluginToCurrentClient(const char* context, bool wait_for_lock = false) noexcept;
     void ToggleHelp();
     void TogglePlaylist();
     void ToggleSongTitle();

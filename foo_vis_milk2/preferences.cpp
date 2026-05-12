@@ -250,6 +250,7 @@ static cfg_bool cfg_bShowAlbum(guid_cfg_bShowAlbum, default_bShowAlbum);
 static cfg_bool cfg_bEnableMouseWheelVolume(guid_cfg_bEnableMouseWheelVolume, default_bEnableMouseWheelVolume);
 static cfg_bool cfg_bEnableMouseClickPlayPause(guid_cfg_bEnableMouseClickPlayPause, default_bEnableMouseClickPlayPause);
 static cfg_bool cfg_bSeparateClickPromptFont(guid_cfg_bSeparateClickPromptFont, default_bSeparateClickPromptFont);
+static cfg_bool cfg_bPopoutBorderless(guid_cfg_bPopoutBorderless, default_bPopoutBorderless);
 static cfg_bool cfg_bEnableHDR(guid_cfg_bEnableHDR, default_bEnableHDR);
 static config_store_int cfg_max_fps_fs(guid_cfg_max_fps_fs, static_cast<int64_t>(default_max_fps_fs));
 static cfg_int cfg_n16BitGamma(guid_cfg_n16BitGamma, static_cast<int64_t>(default_n16BitGamma));
@@ -605,6 +606,7 @@ BOOL milk2_preferences_page::OnInitDialog(CWindow, LPARAM)
     CheckDlgButton(IDC_CB_NOCOMPSHADER, static_cast<UINT>(cfg_bSkipCompShader));
     CheckDlgButton(IDC_CB_MOUSE_WHEEL_VOLUME, static_cast<UINT>(cfg_bEnableMouseWheelVolume));
     CheckDlgButton(IDC_CB_MOUSE_CLICK_PLAYPAUSE, static_cast<UINT>(cfg_bEnableMouseClickPlayPause));
+    CheckDlgButton(IDC_CB_POPOUT_BORDERLESS, static_cast<UINT>(cfg_bPopoutBorderless));
     CheckDlgButton(IDC_CB_SEPARATE_CLICK_PROMPT_FONT, static_cast<UINT>(cfg_bSeparateClickPromptFont));
 
     // Maximum FPS.
@@ -1804,6 +1806,7 @@ void milk2_preferences_page::reset()
     CheckDlgButton(IDC_CB_NOCOMPSHADER, static_cast<UINT>(default_bSkipCompShader));
     CheckDlgButton(IDC_CB_MOUSE_WHEEL_VOLUME, static_cast<UINT>(default_bEnableMouseWheelVolume));
     CheckDlgButton(IDC_CB_MOUSE_CLICK_PLAYPAUSE, static_cast<UINT>(default_bEnableMouseClickPlayPause));
+    CheckDlgButton(IDC_CB_POPOUT_BORDERLESS, static_cast<UINT>(default_bPopoutBorderless));
     CheckDlgButton(IDC_CB_SEPARATE_CLICK_PROMPT_FONT, static_cast<UINT>(default_bSeparateClickPromptFont));
 
     CheckDlgButton(IDC_CB_FSPT, static_cast<UINT>(default_allow_page_tearing_fs));
@@ -1878,6 +1881,7 @@ void milk2_preferences_page::apply()
     cfg_bSkipCompShader = static_cast<bool>(IsDlgButtonChecked(IDC_CB_NOCOMPSHADER));
     cfg_bEnableMouseWheelVolume = static_cast<bool>(IsDlgButtonChecked(IDC_CB_MOUSE_WHEEL_VOLUME));
     cfg_bEnableMouseClickPlayPause = static_cast<bool>(IsDlgButtonChecked(IDC_CB_MOUSE_CLICK_PLAYPAUSE));
+    cfg_bPopoutBorderless = static_cast<bool>(IsDlgButtonChecked(IDC_CB_POPOUT_BORDERLESS));
     cfg_bSeparateClickPromptFont = static_cast<bool>(IsDlgButtonChecked(IDC_CB_SEPARATE_CLICK_PROMPT_FONT));
 
     cfg_allow_page_tearing_fs = static_cast<bool>(IsDlgButtonChecked(IDC_CB_FSPT));
@@ -1982,6 +1986,7 @@ bool milk2_preferences_page::HasChanged() const
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_NOCOMPSHADER)) != cfg_bSkipCompShader) ||
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_MOUSE_WHEEL_VOLUME)) != cfg_bEnableMouseWheelVolume) ||
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_MOUSE_CLICK_PLAYPAUSE)) != cfg_bEnableMouseClickPlayPause) ||
+                            (static_cast<bool>(IsDlgButtonChecked(IDC_CB_POPOUT_BORDERLESS)) != cfg_bPopoutBorderless) ||
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_SEPARATE_CLICK_PROMPT_FONT)) != cfg_bSeparateClickPromptFont) ||
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_FSPT)) != cfg_allow_page_tearing_fs) ||
                             (static_cast<bool>(IsDlgButtonChecked(IDC_CB_HARDCUTS)) != cfg_bHardCutsDisabled) ||
@@ -2593,6 +2598,7 @@ void milk2_config::reset()
     settings.m_bEnableMouseWheelVolume = cfg_bEnableMouseWheelVolume;
     settings.m_bEnableMouseClickPlayPause = cfg_bEnableMouseClickPlayPause;
     settings.m_bSeparateClickPromptFont = cfg_bSeparateClickPromptFont;
+    settings.m_bPopoutBorderless = cfg_bPopoutBorderless;
     settings.m_bEnableHDR = default_bEnableHDR;
     settings.m_bSkipCompShader = static_cast<uint32_t>(cfg_bSkipCompShader);
     settings.m_nBackBufferFormat = default_nBackBufferFormat;
@@ -2869,6 +2875,7 @@ void milk2_config::build(ui_element_config_builder& builder, const bool full_res
         cfg_bEnableMouseWheelVolume = settings.m_bEnableMouseWheelVolume;
         cfg_bEnableMouseClickPlayPause = settings.m_bEnableMouseClickPlayPause;
         cfg_bSeparateClickPromptFont = settings.m_bSeparateClickPromptFont;
+        cfg_bPopoutBorderless = settings.m_bPopoutBorderless;
         cfg_bEnableHDR = settings.m_bEnableHDR;
 
         cfg_szTitleFormat = pfc::utf8FromWide(settings.m_szTitleFormat);
@@ -2885,5 +2892,6 @@ void milk2_config::persist_runtime_settings() const
     cfg_bEnableMouseWheelVolume = settings.m_bEnableMouseWheelVolume;
     cfg_bEnableMouseClickPlayPause = settings.m_bEnableMouseClickPlayPause;
     cfg_bSeparateClickPromptFont = settings.m_bSeparateClickPromptFont;
+    cfg_bPopoutBorderless = settings.m_bPopoutBorderless;
 }
 #pragma endregion

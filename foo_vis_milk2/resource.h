@@ -938,6 +938,7 @@
 #define IDC_OPEN_MILKDROP_FOLDER        1136
 #define IDC_OPEN_TEXTURES_FOLDER        1137
 #define IDC_PREFS_SCROLLBAR             1138
+#define IDC_CB_POPOUT_BORDERLESS        1139
 #define ID_SHOWHELP                     40007
 #define ID_SHOWPLAYLIST                 40008
 #define ID_QUIT                         40009

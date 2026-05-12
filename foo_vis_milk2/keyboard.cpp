@@ -1455,7 +1455,7 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                 {
                     ToggleHelp();
                 }
-                else if (s_fullscreen)
+                else if (s_fullscreen || s_popout_fullscreen)
                 {
                     ToggleFullScreen();
                 }
@@ -1949,12 +1949,18 @@ LRESULT milk2_ui_element::OnHotKey(UINT uMsg, WPARAM wParam, LPARAM lParam)
 void milk2_ui_element::OnLButtonDown(UINT nFlags, CPoint point)
 {
     UNREFERENCED_PARAMETER(nFlags);
-    UNREFERENCED_PARAMETER(point);
 
     const HWND focus = ::GetFocus();
     const bool hadFocus = (focus == get_wnd()) || ::IsChild(get_wnd(), focus);
     if (!hadFocus)
         ::SetFocus(get_wnd());
+
+    if (s_popout && !s_popout_fullscreen && s_config.settings.m_bPopoutBorderless)
+    {
+        m_popout_drag_candidate = true;
+        m_popout_drag_origin = point;
+        ::SetCapture(get_wnd());
+    }
 
     if (!s_config.settings.m_bEnableMouseClickPlayPause)
         return;
@@ -1979,6 +1985,55 @@ void milk2_ui_element::OnLButtonDown(UINT nFlags, CPoint point)
 
     m_pending_single_click = true;
     SetTimer(ID_CLICK_TIMER, GetDoubleClickTime(), nullptr);
+}
+
+void milk2_ui_element::OnLButtonUp(UINT nFlags, CPoint point)
+{
+    UNREFERENCED_PARAMETER(nFlags);
+    UNREFERENCED_PARAMETER(point);
+
+    if (m_popout_drag_candidate)
+    {
+        m_popout_drag_candidate = false;
+        if (::GetCapture() == get_wnd())
+            ::ReleaseCapture();
+    }
+}
+
+void milk2_ui_element::OnMouseMove(UINT nFlags, CPoint point)
+{
+    if (!m_popout_drag_candidate)
+        return;
+
+    if ((nFlags & MK_LBUTTON) == 0)
+    {
+        m_popout_drag_candidate = false;
+        if (::GetCapture() == get_wnd())
+            ::ReleaseCapture();
+        return;
+    }
+
+    const int dragX = (std::max)(1, ::GetSystemMetrics(SM_CXDRAG));
+    const int dragY = (std::max)(1, ::GetSystemMetrics(SM_CYDRAG));
+    if (std::abs(point.x - m_popout_drag_origin.x) < dragX &&
+        std::abs(point.y - m_popout_drag_origin.y) < dragY)
+    {
+        return;
+    }
+
+    m_popout_drag_candidate = false;
+    KillTimer(ID_CLICK_TIMER);
+    m_pending_single_click = false;
+    m_click_pause_confirmation_pending = false;
+    if (::GetCapture() == get_wnd())
+        ::ReleaseCapture();
+
+    POINT screenPoint{point.x, point.y};
+    ::ClientToScreen(get_wnd(), &screenPoint);
+    ::SendMessage(get_wnd(),
+                  WM_NCLBUTTONDOWN,
+                  HTCAPTION,
+                  MAKELPARAM(static_cast<SHORT>(screenPoint.x), static_cast<SHORT>(screenPoint.y)));
 }
 
 BOOL milk2_ui_element::OnMouseWheel(UINT nFlags, short zDelta, CPoint point)

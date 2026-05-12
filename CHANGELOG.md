@@ -2,6 +2,17 @@
 
 ## Release History
 
+### 0.2.1.28 - 2026-05-12
+
+Pop-out window update for the foobar2000 x64 component.
+
+- Added a right-click `Pop Out Window` command so MilkDrop can move out of the embedded Default UI panel into its own window.
+- Added `Return to Panel` handling so closing the pop-out or using the context menu restores MilkDrop to the original embedded panel.
+- Added a `Borderless pop-out window` preference for users who want a clean detached visualiser surface without a normal window frame.
+- Added borderless pop-out dragging and edge resizing, including top-band drag support and hold-left-click drag from the visual area.
+- Kept double-click fullscreen and `Alt+Enter` fullscreen behavior working from the pop-out window.
+- Preserved the embedded panel while popped out and restored it cleanly when the pop-out closes.
+
 ### 0.2.1.27 - 2026-05-11
 
 Frame pacing, fullscreen restore, and preferences parity update for the foobar2000 x64 component.
