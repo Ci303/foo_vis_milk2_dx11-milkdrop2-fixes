@@ -178,6 +178,24 @@ static void CopyPShaderInfo(PShaderInfo& dst, const PShaderInfo& src)
 #define IsAlphanumericChar(x) ((x >= 'a' && x <= 'z') || (x >= 'A' && x <= 'Z') || (x >= '0' && x <= '9') || x == '.')
 #define IsNumericChar(x) (x >= '0' && x <= '9')
 
+static unsigned long long GetPresetNavigationNumber(const std::wstring& filename) noexcept
+{
+    const wchar_t* cursor = filename.c_str();
+    while (*cursor && (*cursor < L'0' || *cursor > L'9'))
+        cursor++;
+
+    if (!*cursor)
+        return ~0ULL;
+
+    unsigned long long value = 0;
+    while (*cursor >= L'0' && *cursor <= L'9')
+    {
+        value = (value * 10ULL) + static_cast<unsigned long long>(*cursor - L'0');
+        cursor++;
+    }
+    return value;
+}
+
 // Check if file exists.
 static BOOL FileExists(LPCTSTR szPath)
 {
@@ -5657,52 +5675,101 @@ void CPlugin::ConsoleMessage(const wchar_t* function_name, int message_id, int t
 
 void CPlugin::PrevPreset(float fBlendTime)
 {
-    if (m_bSequentialPresetOrder)
-    {
-        std::wstring presetFilename;
-        wchar_t presetDir[MAX_PATH] = {0};
-
-        EnterCriticalSection(&g_cs);
-        const int presetCount = std::min(m_nPresets, static_cast<int>(m_presets.size()));
-        const int dirCount = std::min(std::max(0, m_nDirs), presetCount);
-        if (presetCount > dirCount)
-        {
-            m_nCurrentPreset--;
-            if (m_nCurrentPreset < dirCount)
-                m_nCurrentPreset = presetCount - 1;
-            if (m_nCurrentPreset >= presetCount)
-                m_nCurrentPreset = dirCount;
-
-            presetFilename = m_presets[m_nCurrentPreset].szFilename;
-            wcscpy_s(presetDir, m_szPresetDir);
-        }
-        LeaveCriticalSection(&g_cs);
-
-        if (presetFilename.empty())
-            return;
-
-        wchar_t szFile[MAX_PATH] = {0};
-        wcscpy_s(szFile, presetDir); // note: m_szPresetDir always ends with '\'
-        wcscat_s(szFile, presetFilename.c_str());
-
-        LoadPreset(szFile, fBlendTime);
-    }
-    else
-    {
-        int prev = (m_presetHistoryPos - 1 + PRESET_HIST_LEN) % PRESET_HIST_LEN;
-        if (m_presetHistoryPos != m_presetHistoryBackFence)
-        {
-            m_presetHistoryPos = prev;
-            LoadPreset(m_presetHistory[m_presetHistoryPos].c_str(), fBlendTime);
-            SetPresetListPosition(m_presetHistory[m_presetHistoryPos]);
-        }
-    }
+    LoadAdjacentPreset(fBlendTime, -1);
 }
 
-// If not retracing former steps, it will choose a random one.
 void CPlugin::NextPreset(float fBlendTime)
 {
-    LoadRandomPreset(fBlendTime);
+    LoadAdjacentPreset(fBlendTime, 1);
+}
+
+void CPlugin::LoadAdjacentPreset(float fBlendTime, int direction)
+{
+    const auto presetBlacklist = GetPresetBlacklist();
+    std::wstring presetFilename;
+    wchar_t presetDir[MAX_PATH] = {0};
+
+    EnterCriticalSection(&g_cs);
+    {
+        std::vector<int> allowedPresetIndices;
+        const int presetCount = std::min(m_nPresets, static_cast<int>(m_presets.size()));
+        const int dirCount = std::min(std::max(0, m_nDirs), presetCount);
+        allowedPresetIndices.reserve(std::max(0, presetCount - dirCount));
+
+        for (int i = dirCount; i < presetCount; i++)
+        {
+            const bool blacklisted = std::any_of(presetBlacklist.begin(), presetBlacklist.end(), [this, i](const std::wstring& entry) {
+                return _wcsicmp(entry.c_str(), m_presets[i].szFilename.c_str()) == 0;
+            });
+            if (!blacklisted)
+                allowedPresetIndices.push_back(i);
+        }
+
+        std::sort(allowedPresetIndices.begin(), allowedPresetIndices.end(), [this](int lhs, int rhs) {
+            const unsigned long long lhsNumber = GetPresetNavigationNumber(m_presets[lhs].szFilename);
+            const unsigned long long rhsNumber = GetPresetNavigationNumber(m_presets[rhs].szFilename);
+            if (lhsNumber != rhsNumber)
+                return lhsNumber < rhsNumber;
+            return _wcsicmp(m_presets[lhs].szFilename.c_str(), m_presets[rhs].szFilename.c_str()) < 0;
+        });
+
+        if (!allowedPresetIndices.empty())
+        {
+            std::wstring currentFilename;
+            if (m_nCurrentPreset >= dirCount && m_nCurrentPreset < presetCount)
+            {
+                currentFilename = m_presets[m_nCurrentPreset].szFilename;
+            }
+            else if (m_szCurrentPresetFile[0])
+            {
+                const wchar_t* basename = wcsrchr(m_szCurrentPresetFile, L'\\');
+                currentFilename = (basename) ? (basename + 1) : m_szCurrentPresetFile;
+            }
+
+            auto current = std::find(allowedPresetIndices.begin(), allowedPresetIndices.end(), m_nCurrentPreset);
+            if (current == allowedPresetIndices.end() && !currentFilename.empty())
+            {
+                current = std::find_if(allowedPresetIndices.begin(), allowedPresetIndices.end(), [this, &currentFilename](int index) {
+                    return _wcsicmp(m_presets[index].szFilename.c_str(), currentFilename.c_str()) == 0;
+                });
+            }
+
+            int targetIndex = (direction >= 0) ? allowedPresetIndices.front() : allowedPresetIndices.back();
+            if (current != allowedPresetIndices.end())
+            {
+                if (direction >= 0)
+                {
+                    current++;
+                    targetIndex = (current == allowedPresetIndices.end()) ? allowedPresetIndices.front() : *current;
+                }
+                else
+                {
+                    targetIndex = (current == allowedPresetIndices.begin()) ? allowedPresetIndices.back() : *(current - 1);
+                }
+            }
+
+            m_nCurrentPreset = targetIndex;
+            m_nPresetListCurPos = targetIndex;
+            presetFilename = m_presets[targetIndex].szFilename;
+            wcscpy_s(presetDir, m_szPresetDir);
+        }
+    }
+    LeaveCriticalSection(&g_cs);
+
+    if (presetFilename.empty())
+    {
+        wchar_t buf[1024] = {0};
+        swprintf_s(buf, WASABI_API_LNGSTRINGW(IDS_ERROR_NO_PRESET_FILE_FOUND_IN_X_MILK), m_szPresetDir);
+        AddError(buf, 6.0f, ERR_MISC, true);
+        return;
+    }
+
+    wchar_t szFile[MAX_PATH] = {0};
+    wcscpy_s(szFile, presetDir); // note: m_szPresetDir always ends with '\'
+    wcscat_s(szFile, presetFilename.c_str());
+
+    LoadPreset(szFile, fBlendTime);
+    SetPresetListPosition(szFile);
 }
 
 void CPlugin::LoadRandomPreset(float fBlendTime)

@@ -468,7 +468,8 @@ class CPlugin : public CPluginShell
     int m_presetHistoryBackFence;
     int m_presetHistoryFwdFence;
     void PrevPreset(float fBlendTime);
-    void NextPreset(float fBlendTime); // if not retracing our former steps, it will choose a random one.
+    void NextPreset(float fBlendTime);
+    void LoadAdjacentPreset(float fBlendTime, int direction);
     void OnFinishedLoadingPreset();
 
     FFT mdfft{NUM_AUDIO_BUFFER_SAMPLES, NUM_FFT_SAMPLES, true, 1.0f};

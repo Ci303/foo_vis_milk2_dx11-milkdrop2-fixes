@@ -2,6 +2,14 @@
 
 ## Release History
 
+### 0.2.1.30 - 2026-05-12
+
+Preset navigation update for the foobar2000 x64 component.
+
+- Changed right-click `Next Preset` and `Previous Preset` to move through presets in numeric filename order instead of choosing another random preset.
+- Kept `Random Preset` as the dedicated random selection command and renamed the context menu item from `Shuffle Preset` to `Random Preset`.
+- Preserved blacklist filtering during adjacent preset navigation so blacklisted presets are still skipped.
+
 ### 0.2.1.29 - 2026-05-12
 
 Fullscreen pop-out menu polish for the foobar2000 x64 component.
