@@ -230,6 +230,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
         IDM_SHOW_ALBUM = 5,
         IDM_BLACKLIST_PRESET = 6,
         IDM_TOGGLE_POPOUT = 7,
+        IDM_LOAD_PRESET_FILE = 8,
         IDM_SHOW_MENU = ID_VIS_MENU,
         IDM_SHOW_PREFS = ID_VIS_CFG,
         IDM_SHOW_HELP = ID_SHOWHELP,
@@ -262,6 +263,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     void PrevPreset(float fBlendTime = s_config.settings.m_fBlendTimeUser);
     void NextPreset(float fBlendTime = s_config.settings.m_fBlendTimeUser);
     bool LoadPreset(int select);
+    void LoadPresetFromFile();
     void RandomPreset(float fBlendTime = s_config.settings.m_fBlendTimeUser);
     void LockPreset(bool lockUnlock);
     bool IsPresetLock();

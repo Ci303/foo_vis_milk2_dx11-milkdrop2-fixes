@@ -1056,6 +1056,7 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
     menu.AppendMenu(MF_STRING, IDM_NEXT_PRESET, TEXT("Next Preset"));
     menu.AppendMenu(MF_STRING, IDM_PREVIOUS_PRESET, TEXT("Previous Preset"));
     menu.AppendMenu(MF_STRING, IDM_SHUFFLE_PRESET, TEXT("Random Preset"));
+    menu.AppendMenu(MF_STRING, IDM_LOAD_PRESET_FILE, TEXT("Load Preset..."));
     menu.AppendMenu(MF_STRING | (IsPresetLock() ? MF_CHECKED : 0), IDM_LOCK_PRESET, TEXT("Lock Preset"));
     menu.AppendMenu(currentPreset.empty() ? (MF_STRING | MF_GRAYED) : MF_STRING, IDM_BLACKLIST_PRESET, TEXT("Never Show Again"));
     menu.AppendMenu(MF_SEPARATOR);
@@ -1108,6 +1109,9 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
             break;
         case IDM_SHUFFLE_PRESET:
             RandomPreset();
+            break;
+        case IDM_LOAD_PRESET_FILE:
+            LoadPresetFromFile();
             break;
         case IDM_ENABLE_DOWNMIX:
             s_config.settings.m_bEnableDownmix = !s_config.settings.m_bEnableDownmix;
@@ -2071,6 +2075,46 @@ bool milk2_ui_element::LoadPreset(int select)
     UNREFERENCED_PARAMETER(select);
 #endif
     return true;
+}
+
+void milk2_ui_element::LoadPresetFromFile()
+{
+    wchar_t selectedFile[MAX_PATH]{};
+    wchar_t initialDir[MAX_PATH]{};
+
+    run_plugin_locked("LoadPresetFromFile init", [&] {
+        const std::wstring currentPath = g_plugin.GetCurrentPresetPath();
+        if (!currentPath.empty() && currentPath.size() < std::size(selectedFile))
+        {
+            wcscpy_s(selectedFile, currentPath.c_str());
+        }
+
+        const wchar_t* presetDir = g_plugin.GetPresetDir();
+        if (presetDir && presetDir[0])
+        {
+            wcscpy_s(initialDir, presetDir);
+        }
+    });
+
+    OPENFILENAME ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = m_hWnd;
+    ofn.lpstrFile = selectedFile;
+    ofn.nMaxFile = static_cast<DWORD>(std::size(selectedFile));
+    ofn.lpstrInitialDir = initialDir[0] ? initialDir : nullptr;
+    ofn.lpstrFilter = L"MilkDrop presets (*.milk)\0*.milk\0All files (*.*)\0*.*\0";
+    ofn.lpstrDefExt = L"milk";
+    ofn.lpstrTitle = L"Load MilkDrop preset";
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+
+    if (!GetOpenFileName(&ofn))
+        return;
+
+    MILK2_CONSOLE_LOG("Manual preset load: ", selectedFile)
+    run_plugin_locked("LoadPresetFromFile load", [&] {
+        g_plugin.LoadPreset(selectedFile, 0.0f);
+        g_plugin.SetPresetListPosition(selectedFile);
+    }, true);
 }
 
 std::wstring milk2_ui_element::GetCurrentPreset()

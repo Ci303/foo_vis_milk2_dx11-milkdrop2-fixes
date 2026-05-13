@@ -2,6 +2,14 @@
 
 ## Release History
 
+### 0.2.1.31 - 2026-05-13
+
+Manual preset loading update for the foobar2000 x64 component.
+
+- Added a right-click `Load Preset...` command to open a `.milk` preset picker directly from the MilkDrop panel.
+- Starts the picker from the current preset/preset directory, loads the selected preset immediately, and syncs the internal preset-list position so adjacent navigation continues from the loaded file.
+- Validated against the live DX11 install with manually selected presets, including `md-101151.milk`.
+
 ### 0.2.1.30 - 2026-05-12
 
 Preset navigation update for the foobar2000 x64 component.
