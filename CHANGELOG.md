@@ -2,6 +2,14 @@
 
 ## Release History
 
+### 0.2.1.32 - 2026-05-15
+
+Fullscreen and pop-out cursor polish for the foobar2000 x64 component.
+
+- Added cursor auto-hide after three seconds of no mouse movement while MilkDrop is fullscreen or running in a pop-out window.
+- Restored the cursor immediately on mouse movement, clicks, focus return, or when returning to the embedded panel.
+- Kept normal embedded-panel rendering unchanged so the cursor remains visible during ordinary foobar2000 layout use.
+
 ### 0.2.1.31 - 2026-05-13
 
 Manual preset loading update for the foobar2000 x64 component.

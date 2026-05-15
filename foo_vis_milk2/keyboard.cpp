@@ -1904,6 +1904,7 @@ void milk2_ui_element::OnSetFocus(CWindow wndOld)
 
     MILK2_CONSOLE_LOG("OnSetFocus ", GetWnd())
     RegisterFocusHotkeys();
+    ArmCursorAutoHideIfNeeded();
     //g_plugin.m_bOrigScrollLockState = GetKeyState(VK_SCROLL) & 1;
     //SetScrollLock(g_plugin.m_bMilkdropScrollLockState);
 }
@@ -1913,6 +1914,7 @@ void milk2_ui_element::OnKillFocus(CWindow wndFocus)
     UNREFERENCED_PARAMETER(wndFocus);
 
     MILK2_CONSOLE_LOG("OnKillFocus ", GetWnd())
+    DisarmCursorAutoHide();
     UnregisterFocusHotkeys();
     KillTimer(ID_CLICK_TIMER);
     m_pending_single_click = false;
@@ -1949,6 +1951,9 @@ LRESULT milk2_ui_element::OnHotKey(UINT uMsg, WPARAM wParam, LPARAM lParam)
 void milk2_ui_element::OnLButtonDown(UINT nFlags, CPoint point)
 {
     UNREFERENCED_PARAMETER(nFlags);
+
+    ShowAutoHiddenCursor();
+    ArmCursorAutoHideIfNeeded();
 
     const HWND focus = ::GetFocus();
     const bool hadFocus = (focus == get_wnd()) || ::IsChild(get_wnd(), focus);
@@ -2002,6 +2007,9 @@ void milk2_ui_element::OnLButtonUp(UINT nFlags, CPoint point)
 
 void milk2_ui_element::OnMouseMove(UINT nFlags, CPoint point)
 {
+    ShowAutoHiddenCursor();
+    ArmCursorAutoHideIfNeeded();
+
     if (!m_popout_drag_candidate)
         return;
 
@@ -2034,6 +2042,21 @@ void milk2_ui_element::OnMouseMove(UINT nFlags, CPoint point)
                   WM_NCLBUTTONDOWN,
                   HTCAPTION,
                   MAKELPARAM(static_cast<SHORT>(screenPoint.x), static_cast<SHORT>(screenPoint.y)));
+}
+
+LRESULT milk2_ui_element::OnSetCursorMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    UNREFERENCED_PARAMETER(uMsg);
+    UNREFERENCED_PARAMETER(wParam);
+
+    if (ShouldAutoHideCursor() && m_cursor_auto_hidden && LOWORD(lParam) == HTCLIENT)
+    {
+        ::SetCursor(nullptr);
+        return TRUE;
+    }
+
+    SetMsgHandled(FALSE);
+    return FALSE;
 }
 
 BOOL milk2_ui_element::OnMouseWheel(UINT nFlags, short zDelta, CPoint point)

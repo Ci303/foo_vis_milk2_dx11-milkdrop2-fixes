@@ -305,6 +305,7 @@ milk2_ui_element::milk2_ui_element(ui_element_config::ptr config, ui_element_ins
     m_render_due_from_timer = false;
     m_click_pause_confirmation_required = false;
     m_click_pause_confirmation_pending = false;
+    m_cursor_auto_hidden = false;
     m_blacklist_load_retries = 0;
     m_last_left_double_click_tick = 0;
     m_click_pause_confirmation_tick = 0;
@@ -500,6 +501,7 @@ void milk2_ui_element::OnClose()
 void milk2_ui_element::OnDestroy()
 {
     MILK2_CONSOLE_LOG("OnDestroy ", GetWnd())
+    DisarmCursorAutoHide();
     UnregisterFocusHotkeys();
 #if defined(TIMER_TP)
     m_renderPending = false;
@@ -563,6 +565,13 @@ void milk2_ui_element::OnDestroy()
 
 void milk2_ui_element::OnTimer(UINT_PTR nIDEvent)
 {
+    if (nIDEvent == ID_CURSOR_HIDE_TIMER)
+    {
+        KillTimer(ID_CURSOR_HIDE_TIMER);
+        HideCursorIfIdle();
+        return;
+    }
+
     if (nIDEvent == ID_CLICK_TIMER)
     {
         KillTimer(ID_CLICK_TIMER);
@@ -1028,6 +1037,7 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
     UNREFERENCED_PARAMETER(wnd);
 
     MILK2_CONSOLE_LOG("OnContextMenu ", point.x, ", ", point.y, ", ", GetWnd())
+    DisarmCursorAutoHide();
     if (m_callback->is_edit_mode_enabled())
     {
         SetMsgHandled(FALSE);
@@ -1142,6 +1152,7 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
     }
 
     Invalidate();
+    ArmCursorAutoHideIfNeeded();
 }
 
 LRESULT milk2_ui_element::OnImeNotify(UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -1628,6 +1639,7 @@ bool milk2_ui_element::Initialize(HWND window, int width, int height)
         }
 
         m_milk2 = true;
+        ArmCursorAutoHideIfNeeded();
         return true;
     }
     catch (const std::exception& exc)
@@ -1833,15 +1845,19 @@ void milk2_ui_element::OnActivated()
 
     if (s_fullscreen)
         ApplyFullscreenWindowOrder();
+
+    ArmCursorAutoHideIfNeeded();
 }
 
 void milk2_ui_element::OnDeactivated()
 {
+    DisarmCursorAutoHide();
     UnregisterFocusHotkeys();
 }
 
 void milk2_ui_element::OnSuspending()
 {
+    DisarmCursorAutoHide();
 }
 
 void milk2_ui_element::OnResuming()
@@ -1849,6 +1865,67 @@ void milk2_ui_element::OnResuming()
 #ifdef TIMER_DX
     m_timer.ResetElapsedTime();
 #endif
+    ArmCursorAutoHideIfNeeded();
+}
+
+bool milk2_ui_element::ShouldAutoHideCursor() noexcept
+{
+    return ::IsWindow(get_wnd()) && (s_fullscreen || s_popout);
+}
+
+bool milk2_ui_element::IsCursorInsideWindow() noexcept
+{
+    if (!::IsWindow(get_wnd()))
+        return false;
+
+    POINT point{};
+    if (!::GetCursorPos(&point))
+        return false;
+
+    RECT rect{};
+    return ::GetWindowRect(get_wnd(), &rect) && ::PtInRect(&rect, point);
+}
+
+void milk2_ui_element::ArmCursorAutoHideIfNeeded() noexcept
+{
+    if (!ShouldAutoHideCursor())
+    {
+        DisarmCursorAutoHide();
+        return;
+    }
+
+    KillTimer(ID_CURSOR_HIDE_TIMER);
+    SetTimer(ID_CURSOR_HIDE_TIMER, ID_CURSOR_HIDE_DELAY_MS, nullptr);
+}
+
+void milk2_ui_element::DisarmCursorAutoHide() noexcept
+{
+    KillTimer(ID_CURSOR_HIDE_TIMER);
+    ShowAutoHiddenCursor();
+}
+
+void milk2_ui_element::ShowAutoHiddenCursor() noexcept
+{
+    if (!m_cursor_auto_hidden)
+        return;
+
+    m_cursor_auto_hidden = false;
+    ::SetCursor(::LoadCursor(nullptr, IDC_ARROW));
+}
+
+void milk2_ui_element::HideCursorIfIdle() noexcept
+{
+    if (!ShouldAutoHideCursor())
+    {
+        DisarmCursorAutoHide();
+        return;
+    }
+
+    if (!IsCursorInsideWindow())
+        return;
+
+    m_cursor_auto_hidden = true;
+    ::SetCursor(nullptr);
 }
 #pragma endregion
 
@@ -1965,6 +2042,10 @@ void milk2_ui_element::ToggleFullScreen()
             s_in_toggle = true;
             s_fullscreen = enteringFullscreen;
             ApplyFrameRateLimit();
+            if (enteringFullscreen)
+                ArmCursorAutoHideIfNeeded();
+            else
+                DisarmCursorAutoHide();
 #ifdef TIMER_32
             RestartRefreshTimer();
 #endif
@@ -2289,6 +2370,7 @@ void milk2_ui_element::OpenPopoutWindow()
     s_popout_window_rect = {x, y, x + width, y + height};
     s_popout = true;
     s_popout_fullscreen = false;
+    ArmCursorAutoHideIfNeeded();
 
 #ifdef TIMER_TP
     StopTimer();
@@ -2344,6 +2426,7 @@ void milk2_ui_element::ReturnPopoutToPanel()
 
     s_popout = false;
     s_popout_fullscreen = false;
+    DisarmCursorAutoHide();
     ::SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     ::SetWindowLongPtr(hwnd, GWL_STYLE, s_popout_panel_style);
     ::SetWindowLongPtr(hwnd, GWL_EXSTYLE, s_popout_panel_exstyle);
@@ -2396,6 +2479,7 @@ void milk2_ui_element::TogglePopoutFullscreen()
             monitorInfo.rcMonitor = s_popout_window_rect;
 
         s_popout_fullscreen = true;
+        ArmCursorAutoHideIfNeeded();
         ::SetWindowLongPtr(hwnd, GWL_STYLE, static_cast<LONG_PTR>(WS_POPUP | baseStyle));
         ::SetWindowLongPtr(hwnd, GWL_EXSTYLE, static_cast<LONG_PTR>(WS_EX_APPWINDOW));
         ::SetWindowPos(hwnd,
@@ -2410,6 +2494,7 @@ void milk2_ui_element::TogglePopoutFullscreen()
     else
     {
         s_popout_fullscreen = false;
+        ArmCursorAutoHideIfNeeded();
         const DWORD style = s_config.settings.m_bPopoutBorderless ? (WS_POPUP | baseStyle) : (WS_OVERLAPPEDWINDOW | baseStyle);
         ::SetWindowLongPtr(hwnd, GWL_STYLE, static_cast<LONG_PTR>(style));
         ::SetWindowLongPtr(hwnd, GWL_EXSTYLE, static_cast<LONG_PTR>(WS_EX_APPWINDOW));

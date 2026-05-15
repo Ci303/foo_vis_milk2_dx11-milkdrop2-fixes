@@ -94,6 +94,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
         MSG_WM_LBUTTONDOWN(OnLButtonDown)
         MSG_WM_LBUTTONUP(OnLButtonUp)
         MSG_WM_MOUSEMOVE(OnMouseMove)
+        MESSAGE_HANDLER_EX(WM_SETCURSOR, OnSetCursorMessage)
         MSG_WM_MOUSEWHEEL(OnMouseWheel)
         MSG_WM_CONTEXTMENU(OnContextMenu)
         MSG_WM_LBUTTONDBLCLK(OnLButtonDblClk)
@@ -158,6 +159,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     void OnLButtonDown(UINT nFlags, CPoint point);
     void OnLButtonUp(UINT nFlags, CPoint point);
     void OnMouseMove(UINT nFlags, CPoint point);
+    LRESULT OnSetCursorMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
     BOOL OnMouseWheel(UINT nFlags, short zDelta, CPoint point);
     void OnContextMenu(CWindow wnd, CPoint point);
     void OnLButtonDblClk(UINT nFlags, CPoint point);
@@ -183,6 +185,7 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     bool m_render_due_from_timer;
     bool m_click_pause_confirmation_required;
     bool m_click_pause_confirmation_pending;
+    bool m_cursor_auto_hidden;
     UINT m_blacklist_load_retries;
     DWORD m_last_left_double_click_tick;
     DWORD m_click_pause_confirmation_tick;
@@ -213,9 +216,11 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
 #endif
     static constexpr UINT_PTR ID_CLICK_TIMER = 2;
     static constexpr UINT_PTR ID_BLACKLIST_TIMER = 3;
+    static constexpr UINT_PTR ID_CURSOR_HIDE_TIMER = 4;
     static constexpr DWORD ID_CLICK_CONFIRM_TIMEOUT_MS = 3500;
     static constexpr UINT ID_BLACKLIST_RETRY_DELAY_MS = 50;
     static constexpr UINT ID_BLACKLIST_MAX_RETRIES = 20;
+    static constexpr UINT ID_CURSOR_HIDE_DELAY_MS = 3000;
 
     enum milk2_ui_menu_id
     {
@@ -280,6 +285,12 @@ class milk2_ui_element : public ui_element_instance, public CWindowImpl<milk2_ui
     void OnResuming();
     void RegisterFocusHotkeys() noexcept;
     void UnregisterFocusHotkeys() noexcept;
+    bool ShouldAutoHideCursor() noexcept;
+    bool IsCursorInsideWindow() noexcept;
+    void ArmCursorAutoHideIfNeeded() noexcept;
+    void DisarmCursorAutoHide() noexcept;
+    void ShowAutoHiddenCursor() noexcept;
+    void HideCursorIfIdle() noexcept;
 
     // Properties
     void GetDefaultSize(int& width, int& height) const noexcept;
