@@ -2,6 +2,14 @@
 
 ## Release History
 
+### 0.2.1.33 - 2026-05-17
+
+Preset load transition polish for the foobar2000 x64 component.
+
+- Changed manual `Load Preset...` loads to use the configured user preset blend time instead of hard-cutting.
+- Changed blacklist replacement preset loads to use the configured user preset blend time after `Never Show Again`.
+- Kept the recent experimental preset/shader diagnostics out of this release so the live DX11 build stays on the stable rendering path.
+
 ### 0.2.1.32 - 2026-05-15
 
 Fullscreen and pop-out cursor polish for the foobar2000 x64 component.

@@ -69,7 +69,7 @@ This branch already includes the upstream DirectX 11 foobar2000 port. Recent mai
 - The easiest install path is the GitHub Releases page for this repository.
 - Current public packages are x64 builds intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
-- Close foobar2000, then run the release installer named like `foo_vis_milk2-0.2.1.32-installer.exe`. It installs the x64 component, shader data, recommended preset packs, textures, repaired preset additions, and an optional starter layout template into the foobar2000 v2 profile.
+- Close foobar2000, then run the release installer named like `foo_vis_milk2-0.2.1.33-installer.exe`. It installs the x64 component, shader data, recommended preset packs, textures, repaired preset additions, and an optional starter layout template into the foobar2000 v2 profile.
 - If foobar2000 x64 is not installed, the installer explains that foobar2000 is required, opens the official foobar2000 download page, and exits. Install foobar2000 v2 x64 first, close it, then run the MilkDrop installer again.
 - Restart foobar2000 after the component is installed.
 

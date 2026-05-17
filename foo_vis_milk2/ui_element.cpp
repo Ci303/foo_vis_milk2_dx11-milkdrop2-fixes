@@ -590,7 +590,7 @@ void milk2_ui_element::OnTimer(UINT_PTR nIDEvent)
     if (nIDEvent == ID_BLACKLIST_TIMER)
     {
         KillTimer(ID_BLACKLIST_TIMER);
-        if (!run_plugin_locked("BlacklistCurrentPreset load replacement", [&] { g_plugin.LoadRandomPreset(0.0f); }, true))
+        if (!run_plugin_locked("BlacklistCurrentPreset load replacement", [&] { g_plugin.LoadRandomPreset(g_plugin.m_fBlendTimeUser); }, true))
         {
             if (++m_blacklist_load_retries <= ID_BLACKLIST_MAX_RETRIES)
                 SetTimer(ID_BLACKLIST_TIMER, ID_BLACKLIST_RETRY_DELAY_MS, nullptr);
@@ -2193,7 +2193,7 @@ void milk2_ui_element::LoadPresetFromFile()
 
     MILK2_CONSOLE_LOG("Manual preset load: ", selectedFile)
     run_plugin_locked("LoadPresetFromFile load", [&] {
-        g_plugin.LoadPreset(selectedFile, 0.0f);
+        g_plugin.LoadPreset(selectedFile, g_plugin.m_fBlendTimeUser);
         g_plugin.SetPresetListPosition(selectedFile);
     }, true);
 }
