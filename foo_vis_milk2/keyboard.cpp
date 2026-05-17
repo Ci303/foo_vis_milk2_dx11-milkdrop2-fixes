@@ -1505,11 +1505,7 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
             case VK_SPACE:
                 if (UI_mode == UI_LOAD)
                     goto HitEnterFromLoadMenu;
-                if (!IsPresetLock())
-                {
-                    NextPreset(0.0f);
-                    g_plugin.m_fHardCutThresh *= 2.0f;
-                }
+                m_playback_control->play_or_pause();
                 return;
             case VK_PRIOR:
                 if (UI_mode == UI_LOAD || UI_mode == UI_MASHUP)

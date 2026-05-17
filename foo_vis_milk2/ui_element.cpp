@@ -66,6 +66,12 @@ void normalize_render_size(int& width, int& height) noexcept
         height = 128;
 }
 
+void clear_waves(std::array<std::array<float, NUM_AUDIO_BUFFER_SAMPLES>, 2>& target) noexcept
+{
+    for (auto& channel : target)
+        channel.fill(0.0f);
+}
+
 void log_runtime_exception(const char* where, const std::exception& exc) noexcept
 {
     FB2K_console_print(core_api::get_my_file_name(), ": ", where, " failed - ", exc.what());
@@ -1048,6 +1054,26 @@ void milk2_ui_element::OnContextMenu(CWindow wnd, CPoint point)
     // A (-1,-1) point is due to context menu key rather than right click.
     // `GetContextMenuPoint()` fixes that, returning a proper point at which the menu should be shown.
     //point = m_list.GetContextMenuPoint(point);
+    if (point.x == -1 && point.y == -1)
+    {
+        RECT client{};
+        if (::GetClientRect(get_wnd(), &client))
+        {
+            POINT menuPoint{
+                (client.left + client.right) / 2,
+                (client.top + client.bottom) / 2
+            };
+            if (::ClientToScreen(get_wnd(), &menuPoint))
+            {
+                point.x = menuPoint.x;
+                point.y = menuPoint.y;
+            }
+        }
+
+        if (point.x == -1 && point.y == -1)
+            ::GetCursorPos(&point);
+    }
+
     CMenu menu;
     WIN32_OP_D(menu.CreatePopupMenu()); // ID_VIS_MENU
     //BOOL b = TRUE;
@@ -1771,14 +1797,16 @@ void milk2_ui_element::BuildWaves()
 {
     if (!m_vis_stream.is_valid() || !m_playback_control->is_playing() || m_playback_control->is_paused())
     {
-        for (uint32_t i = 0; i < static_cast<uint32_t>(NUM_AUDIO_BUFFER_SAMPLES); ++i)
-            waves[0][i] = waves[1][i] = 0.0f;
+        clear_waves(waves);
         return;
     }
 
     double time;
     if (!m_vis_stream->get_absolute_time(time))
+    {
+        clear_waves(waves);
         return;
+    }
 
     double dt = time - m_last_time;
     m_last_time = time;
@@ -1800,10 +1828,7 @@ void milk2_ui_element::BuildWaves()
     if (use_fake || !m_vis_stream->get_chunk_absolute(chunk, time - dt, dt))
     {
         //m_vis_stream->make_fake_chunk_absolute(chunk, time - dt, dt);
-        for (uint32_t i = 0; i < static_cast<uint32_t>(NUM_AUDIO_BUFFER_SAMPLES); ++i)
-        {
-            waves[0][i] = waves[1][i] = 0U;
-        }
+        clear_waves(waves);
         return;
     }
     auto count = chunk.get_sample_count();
@@ -1811,8 +1836,7 @@ void milk2_ui_element::BuildWaves()
     auto channels = chunk.get_channel_count();
     if (channels == 0)
     {
-        for (uint32_t i = 0; i < static_cast<uint32_t>(NUM_AUDIO_BUFFER_SAMPLES); ++i)
-            waves[0][i] = waves[1][i] = 0.0f;
+        clear_waves(waves);
         return;
     }
     audio_sample* audio_data = chunk.get_data();
@@ -1820,8 +1844,7 @@ void milk2_ui_element::BuildWaves()
     size_t top = std::min(count / channels, static_cast<size_t>(NUM_AUDIO_BUFFER_SAMPLES));
     if (!audio_data || top == 0)
     {
-        for (uint32_t i = 0; i < static_cast<uint32_t>(NUM_AUDIO_BUFFER_SAMPLES); ++i)
-            waves[0][i] = waves[1][i] = 0.0f;
+        clear_waves(waves);
         return;
     }
     for (size_t i = 0; i < top; ++i)
@@ -2730,7 +2753,11 @@ void milk2_ui_element::TogglePlaybackFromClick()
     m_click_pause_confirmation_pending = false;
 
     const bool was_playing = m_playback_control->is_playing() && !m_playback_control->is_paused();
-    m_playback_control->toggle_pause();
+    if (m_playback_control->is_playing())
+        m_playback_control->toggle_pause();
+    else
+        m_playback_control->start();
+
     if (was_playing)
     {
         const int clickPromptFont = s_config.settings.m_bSeparateClickPromptFont ? CLICKPROMPT_FONT : SONGTITLE_FONT;

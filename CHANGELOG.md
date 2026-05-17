@@ -2,6 +2,17 @@
 
 ## Release History
 
+### 0.2.1.34 - 2026-05-17
+
+Help overlay and input cleanup release for the foobar2000 x64 component.
+
+- Restored the F1 help overlay to a stable two-column layout with explicit column splitting and line-ending normalization.
+- Updated the help text to match current keyboard and mouse behaviour, including double-click fullscreen, `H` hard cut, `Space` playback pause/play, and preset navigation controls.
+- Changed `Space` in normal visualization mode to use foobar2000 play/pause while preserving `Space` and Enter selection in the preset loader.
+- Fixed keyboard-opened context menus so they appear at a valid panel position instead of `(-1, -1)`.
+- Cleared stale waveform buffers whenever foobar2000 does not provide valid visualization audio data.
+- Made single-click playback control start playback when stopped instead of only toggling pause.
+
 ### 0.2.1.33 - 2026-05-17
 
 Preset load transition polish for the foobar2000 x64 component.

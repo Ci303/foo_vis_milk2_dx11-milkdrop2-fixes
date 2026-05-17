@@ -1,43 +1,52 @@
-SCREEN
-ESC: exit help / menus / fullscreen
-ALT+ENTER: toggle fullscreen
-
-PRESETS
-SPACE / H: hard cut to next preset
-BACKSPACE: previous preset
-SCROLL LOCK: lock or unlock current preset
-R: random or sequential order
-L: load specific preset
-+ / -: rate current preset
-
-EDITING
-M: preset-editing menu
-S: save preset
-A: random mini-mash-up
-D: shader lock mode
+MILKDROP HELP
 
 PLAYBACK
-Z: previous track
-X: play
-C: pause
-V: stop
-B: next track
-P: show or hide playlist
-U / Shift+U: cycle playback order
-mouse wheel: volume up or down (if enabled)
+Z Previous track
+X Play
+C Play/Pause
+Space Pause
+V Stop
+B Next track
+Up/Down Volume
+Left/Right Seek 5s
+Shift+Left/Right 30s
+U / Shift+U Shuffle
+P Playlist
+Mouse wheel Volume
+Single click Play/Pause
 
-DISPLAY
-F1: help
-F2: song title
-F3: song time / length
-F4: preset name
-F5: frames per second
-F6: preset rating
-F7 / Y: reload custom messages
-F8: jump to presets directory
-F9: shader help
+MESSAGES / SPRITES
+T Song title animation
+Y Custom message mode
+K Sprite mode
+Ctrl+T/Y Clear text
+Ctrl+K Kill all sprites
+Del Newest sprite
+Shift+Del Oldest
+---RIGHT---
+VISUALS
+Alt+Enter Fullscreen
+Double-click Fullscreen
+Esc Help/fullscreen off
+H Hard cut next preset
+Backspace Previous preset
+R Random/sequential
+L Load preset
+Scroll Lock Lock preset
++/- Rate preset
+F2 Song title
+F3 Song time
+F4 Preset name
+F5 FPS
+F6 Rating
+F8 Change preset dir
+F9 Shader help
 
-SEEK / VOLUME
-up / down: volume
-left / right: seek 5 seconds
-SHIFT + left/right: seek 30 seconds
+PRESET TWEAKS
+I Zoom in/out
+W Waveform next/prev
+J Waveform size
+E Wave opacity
+G Gamma
+Q Echo zoom (MD1)
+F Echo flip (MD1)

@@ -102,6 +102,46 @@ std::wstring LoadHelpResourceText()
     return static_cast<wchar_t*>(wideHelp);
 }
 
+std::wstring NormalizeHelpLineEndings(std::wstring text)
+{
+    size_t pos = 0;
+    while ((pos = text.find(L"\r\n", pos)) != std::wstring::npos)
+        text.replace(pos, 2, L"\n");
+
+    for (wchar_t& ch : text)
+    {
+        if (ch == L'\r')
+            ch = L'\n';
+    }
+
+    return text;
+}
+
+bool SplitHelpColumns(const std::wstring& text, std::wstring& leftText, std::wstring& rightText)
+{
+    constexpr wchar_t explicitMarker[] = L"\n---RIGHT---\n";
+    size_t split = text.find(explicitMarker);
+    if (split != std::wstring::npos)
+    {
+        leftText = text.substr(0, split);
+        rightText = text.substr(split + std::wcslen(explicitMarker));
+        return true;
+    }
+
+    constexpr wchar_t legacyMarker[] = L"\nPLAYBACK\n";
+    split = text.find(legacyMarker);
+    if (split != std::wstring::npos)
+    {
+        leftText = text.substr(0, split);
+        rightText = text.substr(split + 1);
+        return true;
+    }
+
+    leftText = text;
+    rightText.clear();
+    return false;
+}
+
 FLOAT MeasureHelpTextWidth(CTextManager& text, TextStyle* style, TextElement& element, const std::wstring& value, DWORD color, int height)
 {
     if (value.empty())
@@ -1436,16 +1476,10 @@ void CPluginShell::RenderBuiltInTextMsgs()
 
             //int y = m_upper_left_corner_y;
 
-            std::wstring helpText = LoadHelpResourceText();
-            const std::wstring splitMarker = L"\nPLAYBACK\n";
-            std::wstring leftText = helpText;
+            std::wstring helpText = NormalizeHelpLineEndings(LoadHelpResourceText());
+            std::wstring leftText;
             std::wstring rightText;
-            size_t split = helpText.find(splitMarker);
-            if (split != std::wstring::npos)
-            {
-                leftText = helpText.substr(0, split);
-                rightText = helpText.substr(split + 1);
-            }
+            SplitHelpColumns(helpText, leftText, rightText);
 
             const FLOAT columnGap = PLAYLIST_INNER_MARGIN * 6.0f;
             D2D1_RECT_F measuredLeft = D2D1::RectF(0.0f, 0.0f, static_cast<FLOAT>(GetWidth()), static_cast<FLOAT>(GetHeight()));
