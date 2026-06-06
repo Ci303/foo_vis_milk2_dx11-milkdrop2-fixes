@@ -18,7 +18,7 @@ on:
 jobs:
   build:
     name: Build and test library
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
     continue-on-error: ${{ (matrix.platform == 'ARM64') || (matrix.platform == 'ARM64EC') }}
     strategy:
       matrix:
@@ -64,6 +64,12 @@ jobs:
           git.exe add foobar2000\ libppui\ pfc\
           git.exe commit -m 'Initial commit'
           git.exe apply --ignore-whitespace --whitespace=nowarn --verbose "$(Get-Location)\fb2ksdk.patch"
+          Rename-Item -Path "$(Get-Location)\foobar2000\component_client" -NewName foobar2000_component_client
+          Get-ChildItem -Path "$(Get-Location)\foobar2000", "$(Get-Location)\libppui", "$(Get-Location)\pfc" -Recurse -Filter *.vcxproj | ForEach-Object {
+            (Get-Content -LiteralPath $_.FullName -Raw) `
+              -replace '<PlatformToolset>v14[23]</PlatformToolset>', '<PlatformToolset>v145</PlatformToolset>' |
+              Set-Content -LiteralPath $_.FullName -NoNewline
+          }
           Remove-Item -Path "$(Get-Location)\.git" -Recurse -Force
       - name: Clone projectm-eval repository
         uses: actions/checkout@v4
@@ -140,7 +146,7 @@ jobs:
   package:
     name: Package foobar2000 MilkDrop 2 component
     needs: build
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
     steps:
       - name: Clone foo_vis_milk2 repository
         uses: actions/checkout@v4
