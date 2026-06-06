@@ -125,6 +125,137 @@ static std::unordered_set<std::wstring> g_shaderFallbackPresets;
 static std::unordered_set<std::wstring> g_slowLoadPresets;
 static std::unordered_map<std::wstring, unsigned> g_runtimeSafetyCounts;
 static wchar_t g_runtimeSafetyCacheFile[MAX_PATH] = {};
+static wchar_t g_runtimeSafetyResetFile[MAX_PATH] = {};
+static constexpr unsigned RUNTIME_SAFETY_SKIP_THRESHOLD = 2;
+static wchar_t g_shaderBytecodeCacheDir[MAX_PATH] = {};
+
+struct PresetScanCacheEntry
+{
+    ULONGLONG size = 0;
+    DWORD writeTimeLow = 0;
+    DWORD writeTimeHigh = 0;
+    int maxPSVersion = 0;
+    bool runnable = false;
+    bool ratingKnown = false;
+    float rating = 3.0f;
+};
+
+static SRWLOCK g_presetScanCacheLock = SRWLOCK_INIT;
+static std::unordered_map<std::wstring, PresetScanCacheEntry> g_presetScanCache;
+static wchar_t g_presetScanCacheFile[MAX_PATH] = {};
+static bool g_presetScanCacheLoaded = false;
+static bool g_presetScanCacheDirty = false;
+
+static bool EnsureDirectoryExists(const wchar_t* path)
+{
+    if (!path || !path[0])
+        return false;
+
+    if (CreateDirectory(path, nullptr))
+        return true;
+
+    return GetLastError() == ERROR_ALREADY_EXISTS;
+}
+
+static std::wstring MakeLowercaseCopy(std::wstring value);
+
+static void HashBytes(unsigned long long& hash, const void* data, size_t size)
+{
+    const unsigned char* bytes = static_cast<const unsigned char*>(data);
+    for (size_t i = 0; i < size; ++i)
+    {
+        hash ^= bytes[i];
+        hash *= 1099511628211ull;
+    }
+}
+
+static unsigned long long ShaderBytecodeHash(const char* shaderText, const char* entryPoint, const char* profile, int shaderType)
+{
+    unsigned long long hash = 14695981039346656037ull;
+    HashBytes(hash, &shaderType, sizeof(shaderType));
+    if (entryPoint)
+        HashBytes(hash, entryPoint, strlen(entryPoint) + 1);
+    if (profile)
+        HashBytes(hash, profile, strlen(profile) + 1);
+    if (shaderText)
+        HashBytes(hash, shaderText, strlen(shaderText) + 1);
+    return hash;
+}
+
+static bool ShaderBytecodeCachePath(unsigned long long hash, wchar_t* path, size_t pathSize)
+{
+    if (!g_shaderBytecodeCacheDir[0])
+        return false;
+
+    if (!EnsureDirectoryExists(g_shaderBytecodeCacheDir))
+        return false;
+
+    swprintf_s(path, pathSize, L"%ls%016llx.cso", g_shaderBytecodeCacheDir, hash);
+    return true;
+}
+
+static bool ShaderBytecodeCacheLoad(unsigned long long hash, ID3DBlob** blob)
+{
+    if (!blob)
+        return false;
+    *blob = nullptr;
+
+    wchar_t path[MAX_PATH] = {};
+    if (!ShaderBytecodeCachePath(hash, path, ARRAYSIZE(path)))
+        return false;
+
+    FILE* file = nullptr;
+    if (_wfopen_s(&file, path, L"rb") != 0 || !file)
+        return false;
+
+    if (_fseeki64(file, 0, SEEK_END) != 0)
+    {
+        fclose(file);
+        return false;
+    }
+    const __int64 size = _ftelli64(file);
+    if (size <= 0 || size > 16 * 1024 * 1024)
+    {
+        fclose(file);
+        return false;
+    }
+    rewind(file);
+
+    ID3DBlob* loadedBlob = nullptr;
+    if (FAILED(D3DCreateBlob(static_cast<SIZE_T>(size), &loadedBlob)))
+    {
+        fclose(file);
+        return false;
+    }
+
+    const size_t bytesRead = fread(loadedBlob->GetBufferPointer(), 1, static_cast<size_t>(size), file);
+    fclose(file);
+    if (bytesRead != static_cast<size_t>(size))
+    {
+        loadedBlob->Release();
+        return false;
+    }
+
+    *blob = loadedBlob;
+    return true;
+}
+
+static void ShaderBytecodeCacheSave(unsigned long long hash, ID3DBlob* blob)
+{
+    if (!blob || !blob->GetBufferPointer() || blob->GetBufferSize() == 0)
+        return;
+
+    wchar_t path[MAX_PATH] = {};
+    if (!ShaderBytecodeCachePath(hash, path, ARRAYSIZE(path)))
+        return;
+
+    FILE* file = nullptr;
+    if (_wfopen_s(&file, path, L"wb") != 0 || !file)
+        return;
+
+    fwrite(blob->GetBufferPointer(), 1, blob->GetBufferSize(), file);
+    fclose(file);
+}
 
 static std::wstring RuntimeSafetyNormalizePresetName(const wchar_t* preset)
 {
@@ -159,6 +290,8 @@ static void RuntimeSafetySaveCache()
         return;
 
     fputws(L"# foo_vis_milk2 runtime safety cache\n", file);
+    fputws(L"# Delete this file, or create reset-runtime-safety-cache.txt beside it before starting foobar2000, to allow all presets again.\n", file);
+    fwprintf(file, L"# Presets are only auto-skipped after %u recorded slow-load or shader-fallback events.\n", RUNTIME_SAFETY_SKIP_THRESHOLD);
     fputws(L"# type<TAB>count<TAB>preset\n", file);
 
     for (const auto& preset : g_shaderFallbackPresets)
@@ -184,9 +317,21 @@ static void RuntimeSafetyLoadCache(const wchar_t* milkdropPath)
     g_slowLoadPresets.clear();
     g_runtimeSafetyCounts.clear();
     g_runtimeSafetyCacheFile[0] = 0;
+    g_runtimeSafetyResetFile[0] = 0;
 
     if (milkdropPath && milkdropPath[0])
+    {
         swprintf_s(g_runtimeSafetyCacheFile, L"%lsruntime-safety-cache.txt", milkdropPath);
+        swprintf_s(g_runtimeSafetyResetFile, L"%lsreset-runtime-safety-cache.txt", milkdropPath);
+    }
+
+    if (g_runtimeSafetyResetFile[0] && GetFileAttributes(g_runtimeSafetyResetFile) != INVALID_FILE_ATTRIBUTES)
+    {
+        DeleteFile(g_runtimeSafetyCacheFile);
+        DeleteFile(g_runtimeSafetyResetFile);
+        ReleaseSRWLockExclusive(&g_runtimeSafetyCacheLock);
+        return;
+    }
 
     FILE* file = nullptr;
     if (g_runtimeSafetyCacheFile[0] && _wfopen_s(&file, g_runtimeSafetyCacheFile, L"rt, ccs=UTF-8") == 0 && file)
@@ -229,6 +374,176 @@ static void RuntimeSafetyLoadCache(const wchar_t* milkdropPath)
     ReleaseSRWLockExclusive(&g_runtimeSafetyCacheLock);
 }
 
+static void RuntimeCacheSetProfilePath(const wchar_t* milkdropPath)
+{
+    g_shaderBytecodeCacheDir[0] = 0;
+
+    AcquireSRWLockExclusive(&g_presetScanCacheLock);
+    g_presetScanCache.clear();
+    g_presetScanCacheFile[0] = 0;
+    g_presetScanCacheLoaded = false;
+    g_presetScanCacheDirty = false;
+
+    if (milkdropPath && milkdropPath[0])
+    {
+        swprintf_s(g_shaderBytecodeCacheDir, L"%lsshader-cache\\", milkdropPath);
+        swprintf_s(g_presetScanCacheFile, L"%lspreset-scan-cache.txt", milkdropPath);
+    }
+
+    ReleaseSRWLockExclusive(&g_presetScanCacheLock);
+}
+
+static std::wstring PresetScanCacheKey(const wchar_t* presetPath)
+{
+    std::wstring key = presetPath ? presetPath : L"";
+    return MakeLowercaseCopy(std::move(key));
+}
+
+static void PresetScanCacheLoadLocked()
+{
+    if (g_presetScanCacheLoaded)
+        return;
+
+    g_presetScanCacheLoaded = true;
+    if (!g_presetScanCacheFile[0])
+        return;
+
+    FILE* file = nullptr;
+    if (_wfopen_s(&file, g_presetScanCacheFile, L"rt, ccs=UTF-8") != 0 || !file)
+        return;
+
+    wchar_t line[2048] = {};
+    while (fgetws(line, ARRAYSIZE(line), file))
+    {
+        wchar_t* key = line;
+        if (*key == 0xFEFF)
+            key++;
+        if (*key == L'#' || *key == L'\0')
+            continue;
+
+        wchar_t* values[7] = {};
+        wchar_t* cursor = key;
+        for (size_t i = 0; i < ARRAYSIZE(values); ++i)
+        {
+            values[i] = wcschr(cursor, L'\t');
+            if (!values[i])
+                break;
+            *values[i]++ = L'\0';
+            cursor = values[i];
+        }
+        if (!values[6])
+            continue;
+
+        const std::wstring cacheKey = PresetScanCacheKey(key);
+        if (cacheKey.empty())
+            continue;
+
+        PresetScanCacheEntry entry;
+        entry.size = _wcstoui64(values[0], nullptr, 10);
+        entry.writeTimeLow = static_cast<DWORD>(wcstoul(values[1], nullptr, 10));
+        entry.writeTimeHigh = static_cast<DWORD>(wcstoul(values[2], nullptr, 10));
+        entry.maxPSVersion = _wtoi(values[3]);
+        entry.runnable = _wtoi(values[4]) != 0;
+        entry.ratingKnown = _wtoi(values[5]) != 0;
+        _swscanf_s_l(values[6], L"%f", g_use_C_locale, &entry.rating);
+        g_presetScanCache[cacheKey] = entry;
+    }
+
+    fclose(file);
+}
+
+static void PresetScanCacheSave()
+{
+    AcquireSRWLockExclusive(&g_presetScanCacheLock);
+
+    if (!g_presetScanCacheDirty || !g_presetScanCacheFile[0])
+    {
+        ReleaseSRWLockExclusive(&g_presetScanCacheLock);
+        return;
+    }
+
+    FILE* file = nullptr;
+    if (_wfopen_s(&file, g_presetScanCacheFile, L"wt, ccs=UTF-8") != 0 || !file)
+    {
+        ReleaseSRWLockExclusive(&g_presetScanCacheLock);
+        return;
+    }
+
+    fputws(L"# foo_vis_milk2 preset scan cache\n", file);
+    fputws(L"# path<TAB>size<TAB>write-low<TAB>write-high<TAB>max-ps<TAB>runnable<TAB>rating-known<TAB>rating\n", file);
+    for (const auto& item : g_presetScanCache)
+    {
+        const auto& e = item.second;
+        fwprintf(file, L"%ls\t%llu\t%lu\t%lu\t%d\t%d\t%d\t%.6f\n",
+                 item.first.c_str(),
+                 e.size,
+                 e.writeTimeLow,
+                 e.writeTimeHigh,
+                 e.maxPSVersion,
+                 e.runnable ? 1 : 0,
+                 e.ratingKnown ? 1 : 0,
+                 e.rating);
+    }
+
+    fclose(file);
+    g_presetScanCacheDirty = false;
+    ReleaseSRWLockExclusive(&g_presetScanCacheLock);
+}
+
+static bool PresetScanCacheGet(const wchar_t* presetPath, const WIN32_FIND_DATA& fd, int maxPSVersion, float& rating, bool& runnable)
+{
+    const std::wstring key = PresetScanCacheKey(presetPath);
+    if (key.empty())
+        return false;
+
+    AcquireSRWLockExclusive(&g_presetScanCacheLock);
+    PresetScanCacheLoadLocked();
+
+    const auto found = g_presetScanCache.find(key);
+    if (found == g_presetScanCache.end())
+    {
+        ReleaseSRWLockExclusive(&g_presetScanCacheLock);
+        return false;
+    }
+
+    const ULONGLONG fileSize = (static_cast<ULONGLONG>(fd.nFileSizeHigh) << 32) | fd.nFileSizeLow;
+    const auto& entry = found->second;
+    const bool hit = entry.size == fileSize &&
+                     entry.writeTimeLow == fd.ftLastWriteTime.dwLowDateTime &&
+                     entry.writeTimeHigh == fd.ftLastWriteTime.dwHighDateTime &&
+                     entry.maxPSVersion == maxPSVersion;
+    if (hit)
+    {
+        rating = entry.rating;
+        runnable = entry.runnable;
+    }
+
+    ReleaseSRWLockExclusive(&g_presetScanCacheLock);
+    return hit;
+}
+
+static void PresetScanCachePut(const wchar_t* presetPath, const WIN32_FIND_DATA& fd, int maxPSVersion, bool runnable, bool ratingKnown, float rating)
+{
+    const std::wstring key = PresetScanCacheKey(presetPath);
+    if (key.empty())
+        return;
+
+    PresetScanCacheEntry entry;
+    entry.size = (static_cast<ULONGLONG>(fd.nFileSizeHigh) << 32) | fd.nFileSizeLow;
+    entry.writeTimeLow = fd.ftLastWriteTime.dwLowDateTime;
+    entry.writeTimeHigh = fd.ftLastWriteTime.dwHighDateTime;
+    entry.maxPSVersion = maxPSVersion;
+    entry.runnable = runnable;
+    entry.ratingKnown = ratingKnown;
+    entry.rating = rating;
+
+    AcquireSRWLockExclusive(&g_presetScanCacheLock);
+    PresetScanCacheLoadLocked();
+    g_presetScanCache[key] = entry;
+    g_presetScanCacheDirty = true;
+    ReleaseSRWLockExclusive(&g_presetScanCacheLock);
+}
+
 static bool RuntimeSafetyShouldSkipPreset(const wchar_t* preset)
 {
     const std::wstring normalized = RuntimeSafetyNormalizePresetName(preset);
@@ -236,8 +551,10 @@ static bool RuntimeSafetyShouldSkipPreset(const wchar_t* preset)
         return false;
 
     AcquireSRWLockShared(&g_runtimeSafetyCacheLock);
-    const bool skip = g_shaderFallbackPresets.find(normalized) != g_shaderFallbackPresets.end() ||
-                      g_slowLoadPresets.find(normalized) != g_slowLoadPresets.end();
+    const auto count = g_runtimeSafetyCounts.find(normalized);
+    const bool skip = count != g_runtimeSafetyCounts.end() && count->second >= RUNTIME_SAFETY_SKIP_THRESHOLD &&
+                      (g_shaderFallbackPresets.find(normalized) != g_shaderFallbackPresets.end() ||
+                       g_slowLoadPresets.find(normalized) != g_slowLoadPresets.end());
     ReleaseSRWLockShared(&g_runtimeSafetyCacheLock);
     return skip;
 }
@@ -958,6 +1275,7 @@ void CPlugin::MilkDropPreInitialize()
     swprintf_s(m_szMsgIniFile, L"%ls%ls", szConfigDir, MSG_INIFILE);
     swprintf_s(m_szImgIniFile, L"%ls%ls", szConfigDir, IMG_INIFILE);
     RuntimeSafetyLoadCache(m_szMilkdrop2Path);
+    RuntimeCacheSetProfilePath(m_szMilkdrop2Path);
 }
 
 // Reads the user's settings from the .INI file.
@@ -3570,21 +3888,31 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
     bool failed = false;
     size_t len = strlen(szShaderText);
     int flags = D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY | D3DCOMPILE_SKIP_OPTIMIZATION;
-    const ULONGLONG compileStart = GetTickCount64();
-    if (S_OK != D3DCompile(szShaderText, len, NULL, NULL, NULL, szFn, szProfile, flags, 0, &pShaderByteCode, &m_pShaderCompileErrors))
+    unsigned long long shaderHash = ShaderBytecodeHash(szShaderText, szFn, szProfile, shaderType);
+    bool bytecodeLoadedFromCache = ShaderBytecodeCacheLoad(shaderHash, &pShaderByteCode);
+
+    const ULONGLONG compileStart = bytecodeLoadedFromCache ? 0 : GetTickCount64();
+    if (!bytecodeLoadedFromCache && S_OK != D3DCompile(szShaderText, len, NULL, NULL, NULL, szFn, szProfile, flags, 0, &pShaderByteCode, &m_pShaderCompileErrors))
     {
         failed = true;
     }
-    const ULONGLONG compileMs = GetTickCount64() - compileStart;
-    if (compileMs > 750 && (shaderType == SHADER_WARP || shaderType == SHADER_COMP))
+    const ULONGLONG compileMs = bytecodeLoadedFromCache ? 0 : (GetTickCount64() - compileStart);
+    if (!bytecodeLoadedFromCache && !failed)
+        ShaderBytecodeCacheSave(shaderHash, pShaderByteCode);
+    if (!bytecodeLoadedFromCache && compileMs > 750 && (shaderType == SHADER_WARP || shaderType == SHADER_COMP))
         RuntimeSafetyRecordPreset(m_szLoadingPreset[0] ? m_szLoadingPreset : m_szCurrentPresetFile, false, true);
 
     if (failed && !strcmp(szProfile, "ps_4_0_level_9_1"))
     {
         SafeRelease(m_pShaderCompileErrors);
-        if (S_OK == D3DCompile(szShaderText, len, NULL, NULL, NULL, szFn, "ps_4_0_level_9_3", flags, 0, &pShaderByteCode, &m_pShaderCompileErrors))
+        SafeRelease(pShaderByteCode);
+        shaderHash = ShaderBytecodeHash(szShaderText, szFn, "ps_4_0_level_9_3", shaderType);
+        bytecodeLoadedFromCache = ShaderBytecodeCacheLoad(shaderHash, &pShaderByteCode);
+        if (bytecodeLoadedFromCache || S_OK == D3DCompile(szShaderText, len, NULL, NULL, NULL, szFn, "ps_4_0_level_9_3", flags, 0, &pShaderByteCode, &m_pShaderCompileErrors))
         {
             failed = false;
+            if (!bytecodeLoadedFromCache)
+                ShaderBytecodeCacheSave(shaderHash, pShaderByteCode);
         }
     }
 
@@ -3645,6 +3973,12 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
         else
             AddError(temp, 6.0f, ERR_PRESET, true);
         */
+        if (*ppConstTable)
+        {
+            (*ppConstTable)->Release();
+            *ppConstTable = nullptr;
+        }
+        SafeRelease(pShaderByteCode);
         return false;
     }
 
@@ -7028,13 +7362,28 @@ retry:
                 // If missing, assume it is 2.
                 wchar_t szFullPath[MAX_PATH];
                 swprintf_s(szFullPath, L"%s%s", szPresetDir, fd.cFileName);
-                bool bRatingKnown = false;
-                if (!TryReadPresetListScanInfo(szFullPath, nMaxPSVersion, fRating, bRatingKnown))
-                    bSkip = true;
-                else if (!bRatingKnown)
-                    fRating = GetPrivateProfileFloat(L"preset00", L"fRating", 3.0f, szFullPath);
+                bool runnable = false;
+                if (PresetScanCacheGet(szFullPath, fd, nMaxPSVersion, fRating, runnable))
+                {
+                    bSkip = !runnable;
+                }
+                else
+                {
+                    bool bRatingKnown = false;
+                    runnable = TryReadPresetListScanInfo(szFullPath, nMaxPSVersion, fRating, bRatingKnown);
+                    if (!runnable)
+                    {
+                        bSkip = true;
+                    }
+                    else if (!bRatingKnown)
+                    {
+                        fRating = GetPrivateProfileFloat(L"preset00", L"fRating", 3.0f, szFullPath);
+                        bRatingKnown = true;
+                    }
 
-                fRating = std::max(0.0f, std::min(5.0f, fRating));
+                    fRating = std::max(0.0f, std::min(5.0f, fRating));
+                    PresetScanCachePut(szFullPath, fd, nMaxPSVersion, runnable, bRatingKnown, fRating);
+                }
             }
         }
 
@@ -7123,6 +7472,8 @@ retry:
         for (int i = 1; i < temp_nPresets; i++)
             temp_presets[i].fRatingCum = temp_presets[static_cast<size_t>(i) - 1].fRatingCum + temp_presets[i].fRatingThis;
     }
+
+    PresetScanCacheSave();
 
     EnterCriticalSection(&g_cs);
 

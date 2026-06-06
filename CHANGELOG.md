@@ -2,6 +2,17 @@
 
 ## Release History
 
+### 0.2.1.35 - 2026-06-06
+
+Runtime cache and VS2026 toolchain release for the foobar2000 x64 component.
+
+- Retargeted tracked project files from the Visual Studio 2022 `v143` toolset to the Visual Studio 2026 `v145` toolset.
+- Added a persistent shader bytecode cache under `<foobar2000 profile folder>\milkdrop2\shader-cache` to avoid recompiling unchanged preset shaders on repeat loads.
+- Added a persistent preset scan cache under `<foobar2000 profile folder>\milkdrop2\preset-scan-cache.txt` to reduce repeat directory scan overhead for unchanged preset files.
+- Hardened runtime safety tracking so presets are only skipped from automatic rotation after repeated slow-load or shader-fallback evidence.
+- Added reset support for runtime safety tracking via `reset-runtime-safety-cache.txt`.
+- Documented the Se7enSlasher/Incubo_ third-party preset collection from the Winamp forum thread.
+
 ### 0.2.1.34 - 2026-05-17
 
 Help overlay and input cleanup release for the foobar2000 x64 component.

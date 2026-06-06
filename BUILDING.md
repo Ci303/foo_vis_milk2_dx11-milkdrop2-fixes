@@ -4,12 +4,12 @@
 
 A step-by-step on how to compile on Windows:
 
-1. Install [Visual Studio 2022](https://visualstudio.microsoft.com/vs/) and [Git](https://git-scm.com/).
+1. Install [Visual Studio 2026](https://visualstudio.microsoft.com/vs/) and [Git](https://git-scm.com/).
    1. Clone the repository.
    ```powershell
-   git.exe clone https://github.com/jecassis/foo_vis_milk2.git -b master --depth 1 foo_vis_milk2
+   git.exe clone https://github.com/Ci303/foo_vis_milk2_dx11-milkdrop2-fixes.git -b main --depth 1 foo_vis_milk2
    ```
-   2. In Visual Studio "_Open a project or solution_" and point it to the [`foo_vis_milk2.sln`](foo_vis_milk2.sln) file in the repository.
+   2. In Visual Studio "_Open a project or solution_" and point it to the [`foo_vis_milk2.sln`](foo_vis_milk2.sln) file in the repository. The tracked project files target the Visual Studio 2026 `v145` platform toolset.
    3. Ensure all additional tools for Visual Studio are installed by running the installer using **Tools > Get Tools and Features...**. In the installer that comes up hit the "_More_" dropdown and select "_Import configuration_". In the file selection dialog, point it to [`.vsconfig`](.vsconfig) in the repository to install things like NuGet, ATL and a few other prerequisites.
       > Note: Additional debug tools such as those for graphics and memory debugging are not included in this `.vsconfig`, however they might be useful for development.
    4. In Solution Explorer, if the "*foo_vis_milk2*" project is not bold font, right click on it and select "_Set as Starter Project_".

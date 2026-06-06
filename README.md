@@ -43,6 +43,8 @@ This branch already includes the upstream DirectX 11 foobar2000 port. Recent mai
 - Safer text-editor handling for preset, wave, and shape code editing.
 - Render-lock hardening around album-art updates, blacklist preset replacement, and play/pause overlay launching.
 - Persistent preset blacklist support, including `Never Show Again`, blacklist manager editing, and import/export.
+- Persistent shader bytecode and preset scan caches reduce repeat preset load and large preset folder scan cost.
+- Runtime safety tracking records repeatedly slow or fallback-heavy presets and skips them from automatic rotation after repeated evidence.
 
 ### Diagnostics and Runtime Noise
 
@@ -69,7 +71,7 @@ This branch already includes the upstream DirectX 11 foobar2000 port. Recent mai
 - The easiest install path is the GitHub Releases page for this repository.
 - Current public packages are x64 builds intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
-- Close foobar2000, then run the release installer named like `foo_vis_milk2-0.2.1.34-installer.exe`. It installs the x64 component, shader data, recommended preset packs, textures, repaired preset additions, and an optional starter layout template into the foobar2000 v2 profile.
+- Close foobar2000, then run the release installer named like `foo_vis_milk2-0.2.1.35-installer.exe`. It installs the x64 component, shader data, recommended preset packs, textures, repaired preset additions, and an optional starter layout template into the foobar2000 v2 profile.
 - If foobar2000 x64 is not installed, the installer explains that foobar2000 is required, opens the official foobar2000 download page, and exits. Install foobar2000 v2 x64 first, close it, then run the MilkDrop installer again.
 - Restart foobar2000 after the component is installed.
 
@@ -89,6 +91,7 @@ The same template is stored in this repository at [templates/foobar2000-milkdrop
 
 - Presets go in `<foobar2000 profile folder>\milkdrop2\presets`.
 - Texture packs go in `<foobar2000 profile folder>\milkdrop2\textures`.
+- Runtime caches are stored under `<foobar2000 profile folder>\milkdrop2\`, including `preset-scan-cache.txt`, `runtime-safety-cache.txt`, and the `shader-cache` directory. They can be deleted safely while foobar2000 is closed.
 - The release installer already installs the recommended packs and repaired preset additions.
 - If you install `foo_vis_milk2.fb2k-component` manually, run [tools/install-milkdrop-resources.ps1](tools/install-milkdrop-resources.ps1) to install the same vendored presets, textures, and repaired additions.
 - Many "blank" or obviously broken presets are caused by missing textures.
@@ -100,6 +103,7 @@ Useful preset sources:
 - [Milkdrop 2 Presets](https://github.com/projectM-visualizer/presets-milkdrop-original)
 - [Vendored resource archive snapshots](third_party/milkdrop-resources)
 - [Fixed blacklist preset overrides](presets/fixed-blacklisted)
+- [Se7enSlasher's New MilkDrop Visualizer Presets 2025](https://drive.google.com/file/d/1VF8l5p01EPMrXuM0_PyWhS7tlK9Pxtqf/view?usp=drive_link), shared by Incubo_ in the Winamp forum thread [My Milkdrop Presets Collection](https://forums.winamp.com/forum/visualizations/milkdrop/milkdrop-presets/4623131-my-milkdrop-presets-collection). This is a third-party preset archive; check the forum thread for author notes and credits before redistributing it.
 
 Manual resource install example:
 
@@ -196,7 +200,7 @@ Prerequisites to build the `foo_vis_milk2.dll` component for foobar2000:
 - [projectM EEL](https://github.com/projectM-visualizer/projectm-eval): clone into `external/`, checkout `master`, and apply the [patch](external/pmeel.patch).
 - [DirectXTK](https://github.com/Microsoft/DirectXTK): fetched via NuGet.
 - [Windows Template Library (WTL)](https://wtl.sourceforge.io/): fetched via NuGet.
-- [Visual Studio 2022](https://visualstudio.microsoft.com/vs/): open [`foo_vis_milk2.sln`](foo_vis_milk2.sln), set `foo_vis_milk2` as the Startup Project, install the NuGet packages, select a configuration, and build.
+- [Visual Studio 2026](https://visualstudio.microsoft.com/vs/): open [`foo_vis_milk2.sln`](foo_vis_milk2.sln), set `foo_vis_milk2` as the Startup Project, install the NuGet packages, select a configuration, and build. The tracked project files target the `v145` platform toolset.
 
 > Import the Visual Studio [installation configuration](.vsconfig) file to install required components such as the Windows SDK, ATL, and NuGet Package Manager.
 
