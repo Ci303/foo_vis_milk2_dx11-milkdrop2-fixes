@@ -101,7 +101,7 @@ index 7e21609..07b667e 100644
  projectm_eval_mem_buffer prjm_eval_memory_global()
 @@ -63,6 +64,8 @@ void prjm_eval_memory_free(projectm_eval_mem_buffer buffer)
  
- void prjm_eval_memory_free_block(projectm_eval_mem_buffer buffer, int block)
+ void prjm_eval_memory_free_block(projectm_eval_mem_buffer buffer, int32_t block)
  {
 +    (buffer);
 +
@@ -751,9 +751,7 @@ diff --git a/tests/TreeFunctionsTest.cpp b/tests/TreeFunctionsTest.cpp
 index 56fa450..56e2654 100644
 --- a/tests/TreeFunctionsTest.cpp
 +++ b/tests/TreeFunctionsTest.cpp
-@@ -1,8 +1,11 @@
- #include "TreeFunctionsTest.hpp"
- 
+@@ -8,4 +8,7 @@
  #ifdef _MSC_VER
 -#define strcasecmp stricmp
 +#define strcasecmp _stricmp
@@ -762,5 +760,3 @@ index 56fa450..56e2654 100644
 +#define strdup _strdup
 +#endif
  #endif
- 
- prjm_eval_variable_def_t* TreeFunctions::FindVariable(const char* name)
