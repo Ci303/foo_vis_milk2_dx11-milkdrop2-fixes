@@ -81,6 +81,11 @@ jobs:
         run: |
           Set-Location -Path "$(Get-Location)\external\projectm-eval"
           git.exe apply --ignore-whitespace --whitespace=nowarn --verbose "$(Get-Location)\..\pmeel.patch"
+          Get-ChildItem -Path "$(Get-Location)" -Recurse -Filter *.vcxproj | ForEach-Object {
+            (Get-Content -LiteralPath $_.FullName -Raw) `
+              -replace '<PlatformToolset>v14[23]</PlatformToolset>', '<PlatformToolset>v145</PlatformToolset>' |
+              Set-Content -LiteralPath $_.FullName -NoNewline
+          }
       - name: Cache NuGet packages (DirectXTK and WTL)
         uses: actions/cache@v4
         id: nuget
