@@ -407,6 +407,7 @@ class CPlugin : public CPluginShell
     CState* m_pNewState; // points to upcoming CState; not yet blending to it because still compiling the shaders for it!
     int m_nLoadingPreset;
     wchar_t m_szLoadingPreset[MAX_PATH];
+    float m_fLoadingPresetStartTime;
     float m_fLoadingPresetBlendTime;
     int m_nPresetsLoadedTotal;    // important for texture eviction age-tracking...
     CState m_state_DO_NOT_USE[3]; // do not use; use pState and pOldState instead.

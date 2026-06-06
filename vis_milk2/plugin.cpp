@@ -75,6 +75,8 @@
 #include "pch.h"
 #include "plugin.h"
 
+#include <cwctype>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "defines.h"
@@ -117,6 +119,150 @@ volatile HANDLE g_hThread;        // only r/w from our MAIN thread
 volatile bool g_bThreadAlive;     // set true by MAIN thread, and set false upon exit from 2nd thread.
 volatile int g_bThreadShouldQuit; // set by MAIN thread to flag 2nd thread that it wants it to exit.
 static CRITICAL_SECTION g_cs;
+
+static SRWLOCK g_runtimeSafetyCacheLock = SRWLOCK_INIT;
+static std::unordered_set<std::wstring> g_shaderFallbackPresets;
+static std::unordered_set<std::wstring> g_slowLoadPresets;
+static std::unordered_map<std::wstring, unsigned> g_runtimeSafetyCounts;
+static wchar_t g_runtimeSafetyCacheFile[MAX_PATH] = {};
+
+static std::wstring RuntimeSafetyNormalizePresetName(const wchar_t* preset)
+{
+    if (!preset)
+        return {};
+
+    std::wstring normalized = preset;
+    const size_t slash = normalized.find_last_of(L"\\/");
+    if (slash != std::wstring::npos)
+        normalized.erase(0, slash + 1);
+
+    const wchar_t* whitespace = L" \t\r\n";
+    const size_t first = normalized.find_first_not_of(whitespace);
+    if (first == std::wstring::npos)
+        return {};
+    const size_t last = normalized.find_last_not_of(whitespace);
+    normalized = normalized.substr(first, last - first + 1);
+
+    for (wchar_t& ch : normalized)
+        ch = static_cast<wchar_t>(towlower(ch));
+
+    return normalized;
+}
+
+static void RuntimeSafetySaveCache()
+{
+    if (!g_runtimeSafetyCacheFile[0])
+        return;
+
+    FILE* file = nullptr;
+    if (_wfopen_s(&file, g_runtimeSafetyCacheFile, L"wt, ccs=UTF-8") != 0 || !file)
+        return;
+
+    fputws(L"# foo_vis_milk2 runtime safety cache\n", file);
+    fputws(L"# type<TAB>count<TAB>preset\n", file);
+
+    for (const auto& preset : g_shaderFallbackPresets)
+    {
+        const auto count = g_runtimeSafetyCounts.find(preset);
+        fwprintf(file, L"shader-fallback\t%u\t%ls\n", count != g_runtimeSafetyCounts.end() ? count->second : 1u, preset.c_str());
+    }
+
+    for (const auto& preset : g_slowLoadPresets)
+    {
+        const auto count = g_runtimeSafetyCounts.find(preset);
+        fwprintf(file, L"slow-load\t%u\t%ls\n", count != g_runtimeSafetyCounts.end() ? count->second : 1u, preset.c_str());
+    }
+
+    fclose(file);
+}
+
+static void RuntimeSafetyLoadCache(const wchar_t* milkdropPath)
+{
+    AcquireSRWLockExclusive(&g_runtimeSafetyCacheLock);
+
+    g_shaderFallbackPresets.clear();
+    g_slowLoadPresets.clear();
+    g_runtimeSafetyCounts.clear();
+    g_runtimeSafetyCacheFile[0] = 0;
+
+    if (milkdropPath && milkdropPath[0])
+        swprintf_s(g_runtimeSafetyCacheFile, L"%lsruntime-safety-cache.txt", milkdropPath);
+
+    FILE* file = nullptr;
+    if (g_runtimeSafetyCacheFile[0] && _wfopen_s(&file, g_runtimeSafetyCacheFile, L"rt, ccs=UTF-8") == 0 && file)
+    {
+        wchar_t line[1024] = {};
+        while (fgetws(line, ARRAYSIZE(line), file))
+        {
+            wchar_t* type = line;
+            if (*type == 0xFEFF)
+                type++;
+            if (*type == L'#' || *type == L'\0')
+                continue;
+
+            wchar_t* countText = wcschr(type, L'\t');
+            if (!countText)
+                continue;
+            *countText++ = L'\0';
+
+            wchar_t* presetText = wcschr(countText, L'\t');
+            if (!presetText)
+                continue;
+            *presetText++ = L'\0';
+
+            const std::wstring preset = RuntimeSafetyNormalizePresetName(presetText);
+            if (preset.empty())
+                continue;
+
+            if (!_wcsicmp(type, L"shader-fallback"))
+                g_shaderFallbackPresets.insert(preset);
+            else if (!_wcsicmp(type, L"slow-load"))
+                g_slowLoadPresets.insert(preset);
+            else
+                continue;
+
+            g_runtimeSafetyCounts[preset] = std::max(1u, static_cast<unsigned>(_wtoi(countText)));
+        }
+        fclose(file);
+    }
+
+    ReleaseSRWLockExclusive(&g_runtimeSafetyCacheLock);
+}
+
+static bool RuntimeSafetyShouldSkipPreset(const wchar_t* preset)
+{
+    const std::wstring normalized = RuntimeSafetyNormalizePresetName(preset);
+    if (normalized.empty())
+        return false;
+
+    AcquireSRWLockShared(&g_runtimeSafetyCacheLock);
+    const bool skip = g_shaderFallbackPresets.find(normalized) != g_shaderFallbackPresets.end() ||
+                      g_slowLoadPresets.find(normalized) != g_slowLoadPresets.end();
+    ReleaseSRWLockShared(&g_runtimeSafetyCacheLock);
+    return skip;
+}
+
+static void RuntimeSafetyRecordPreset(const wchar_t* preset, bool shaderFallback, bool slowLoad)
+{
+    const std::wstring normalized = RuntimeSafetyNormalizePresetName(preset);
+    if (normalized.empty())
+        return;
+
+    bool changed = false;
+    AcquireSRWLockExclusive(&g_runtimeSafetyCacheLock);
+    if (shaderFallback)
+        changed = g_shaderFallbackPresets.insert(normalized).second || changed;
+    if (slowLoad)
+        changed = g_slowLoadPresets.insert(normalized).second || changed;
+    if (shaderFallback || slowLoad)
+    {
+        g_runtimeSafetyCounts[normalized]++;
+        changed = true;
+    }
+    if (changed)
+        RuntimeSafetySaveCache();
+    ReleaseSRWLockExclusive(&g_runtimeSafetyCacheLock);
+}
 
 static void ClearPShaderSet(PShaderSet& shaders)
 {
@@ -161,6 +307,60 @@ enum LoadingPresetStage
     LOAD_PRESET_LOAD_COMP_SHADER = 6,
     LOAD_PRESET_APPLY = 7,
 };
+
+static size_t CountShaderToken(const char* text, const char* token)
+{
+    if (!text || !token || !*token)
+        return 0;
+
+    size_t count = 0;
+    const size_t tokenLength = strlen(token);
+    for (const char* p = strstr(text, token); p; p = strstr(p + tokenLength, token))
+        count++;
+
+    return count;
+}
+
+static bool ShaderLikelyToStallD3DCompiler(const char* shaderText, int PSVersion)
+{
+    if (PSVersion < MD2_PS_4_0 || !shaderText)
+        return false;
+
+    size_t shaderLength = 0;
+    size_t shaderLines = 1;
+    for (const char* p = shaderText; *p; ++p)
+    {
+        shaderLength++;
+        if (*p == LINEFEED_CONTROL_CHAR)
+            shaderLines++;
+    }
+
+    if (shaderLength > 32000 || shaderLines > 240)
+        return true;
+
+    const size_t loopCount = CountShaderToken(shaderText, "for (") +
+                             CountShaderToken(shaderText, "for(") +
+                             CountShaderToken(shaderText, "while (") +
+                             CountShaderToken(shaderText, "while(");
+    const size_t volumeTextureCount = CountShaderToken(shaderText, "tex3D");
+    const size_t heavyMathCount = CountShaderToken(shaderText, "refract") +
+                                  CountShaderToken(shaderText, "reflect") +
+                                  CountShaderToken(shaderText, "atan2") +
+                                  CountShaderToken(shaderText, "cross") +
+                                  CountShaderToken(shaderText, "pow(") +
+                                  CountShaderToken(shaderText, "tan(");
+
+    // D3DCompiler_47 can spend minutes in code generation on compact but very
+    // dense PS4 MilkDrop shaders. These are untrusted preset inputs, so skip
+    // the known-risk shape and use the existing fallback shader path instead.
+    if (shaderLength > 8000 && volumeTextureCount >= 8 && loopCount >= 2)
+        return true;
+
+    if (shaderLength > 10000 && volumeTextureCount >= 4 && loopCount >= 1 && heavyMathCount >= 16)
+        return true;
+
+    return false;
+}
 
 static void CopyPShaderInfo(PShaderInfo& dst, const PShaderInfo& src)
 {
@@ -641,6 +841,7 @@ void CPlugin::MilkDropPreInitialize()
     m_fPresetStartTime = 0.0f;
     m_fNextPresetTime = -1.0f; // negative value means no time set (...it will be auto-set on first call to UpdateTime)
     m_nLoadingPreset = 0;
+    m_fLoadingPresetStartTime = 0.0f;
     m_nPresetsLoadedTotal = 0;
     m_fSnapPoint = 0.5f;
     m_pState = &m_state_DO_NOT_USE[0];
@@ -756,6 +957,7 @@ void CPlugin::MilkDropPreInitialize()
     swprintf_s(m_szPresetDir, L"%lspresets\\", m_szMilkdrop2Path);
     swprintf_s(m_szMsgIniFile, L"%ls%ls", szConfigDir, MSG_INIFILE);
     swprintf_s(m_szImgIniFile, L"%ls%ls", szConfigDir, IMG_INIFILE);
+    RuntimeSafetyLoadCache(m_szMilkdrop2Path);
 }
 
 // Reads the user's settings from the .INI file.
@@ -3099,24 +3301,13 @@ bool CPlugin::RecompilePShader(const char* szShadersText, PShaderInfo* si, int s
 
     si->Clear();
 
-    // Some imported MilkDrop packs contain very large shader-model 4 presets
-    // that can stall inside D3DCompile or the display driver. Treat those as a
-    // preset shader failure and let the normal fallback shader path handle them.
-    if (PSVersion >= MD2_PS_4_0 && szShadersText)
+    // Some imported MilkDrop packs contain shader-model 4 presets that can
+    // stall inside D3DCompile or the display driver. Treat those as a preset
+    // shader failure and let the normal fallback shader path handle them.
+    if (ShaderLikelyToStallD3DCompiler(szShadersText, PSVersion))
     {
-        size_t shaderLength = 0;
-        size_t shaderLines = 1;
-        for (const char* p = szShadersText; *p; ++p)
-        {
-            shaderLength++;
-            if (*p == LINEFEED_CONTROL_CHAR)
-                shaderLines++;
-        }
-
-        constexpr size_t maxSafeHighModelShaderLength = 32000;
-        constexpr size_t maxSafeHighModelShaderLines = 240;
-        if (shaderLength > maxSafeHighModelShaderLength || shaderLines > maxSafeHighModelShaderLines)
-            return false;
+        RuntimeSafetyRecordPreset(m_szLoadingPreset[0] ? m_szLoadingPreset : m_szCurrentPresetFile, true, true);
+        return false;
     }
 
     // Load shader.
@@ -3160,6 +3351,7 @@ bool CPlugin::LoadShaders(PShaderSet* sh, CState* pState, bool bTick)
         if (!bOK)
         {
             m_lastPresetUsedFallback = true;
+            RuntimeSafetyRecordPreset(m_szLoadingPreset[0] ? m_szLoadingPreset : m_szCurrentPresetFile, true, false);
             // Switch to fallback shader.
             CopyPShaderInfo(sh->warp, m_fallbackShaders_ps.warp);
             // Cancel any slow-preset-load.
@@ -3176,6 +3368,7 @@ bool CPlugin::LoadShaders(PShaderSet* sh, CState* pState, bool bTick)
         if (!bOK)
         {
             m_lastPresetUsedFallback = true;
+            RuntimeSafetyRecordPreset(m_szLoadingPreset[0] ? m_szLoadingPreset : m_szCurrentPresetFile, true, false);
             // Switch to fallback shader.
             CopyPShaderInfo(sh->comp, m_fallbackShaders_ps.comp);
             // Cancel any slow-preset-load.
@@ -3376,11 +3569,15 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
     // Now really try to compile the shader.
     bool failed = false;
     size_t len = strlen(szShaderText);
-    int flags = D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY;
+    int flags = D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY | D3DCOMPILE_SKIP_OPTIMIZATION;
+    const ULONGLONG compileStart = GetTickCount64();
     if (S_OK != D3DCompile(szShaderText, len, NULL, NULL, NULL, szFn, szProfile, flags, 0, &pShaderByteCode, &m_pShaderCompileErrors))
     {
         failed = true;
     }
+    const ULONGLONG compileMs = GetTickCount64() - compileStart;
+    if (compileMs > 750 && (shaderType == SHADER_WARP || shaderType == SHADER_COMP))
+        RuntimeSafetyRecordPreset(m_szLoadingPreset[0] ? m_szLoadingPreset : m_szCurrentPresetFile, false, true);
 
     if (failed && !strcmp(szProfile, "ps_4_0_level_9_1"))
     {
@@ -3487,10 +3684,16 @@ void CPlugin::CleanUpMilkDropDX11(int /* final_cleanup */)
 {
     if (m_nLoadingPreset != 0)
     {
-        // Finish any staged preset load now so the state/shader pointers stay coherent
-        // across a device teardown.
-        while (m_nLoadingPreset != 0)
-            LoadPresetTick();
+        // A fullscreen/windowed swap can arrive while a preset is being staged.
+        // Finishing that load here can force D3DCompile on the UI thread during
+        // device teardown, which is exactly when some drivers can stop
+        // responding. Keep the active preset and discard the staged one.
+        ClearPShaderSet(m_NewShaders);
+        m_pNewState->FreeVarsAndCode();
+        m_nLoadingPreset = 0;
+        m_fLoadingPresetStartTime = 0.0f;
+        m_szLoadingPreset[0] = 0;
+        m_lastPresetUsedFallback = false;
     }
 
     // Force this.
@@ -6134,6 +6337,8 @@ void CPlugin::LoadPreset(const wchar_t* szPresetFilename, float fBlendTime)
 
     if (fBlendTime == 0)
     {
+        const float loadStartTime = GetTime();
+
         // Do it all NOW!
         wchar_t previousPresetFile[MAX_PATH] = {0};
         wcscpy_s(previousPresetFile, m_szCurrentPresetFile);
@@ -6171,6 +6376,9 @@ void CPlugin::LoadPreset(const wchar_t* szPresetFilename, float fBlendTime)
 
         m_lastPresetUsedFallback = false;
         LoadShaders(&m_shaders, m_pState, false);
+        const float loadSeconds = GetTime() - loadStartTime;
+        if (loadSeconds > 1.25f)
+            RuntimeSafetyRecordPreset(m_szCurrentPresetFile, false, true);
 
         if (!m_lastPresetUsedFallback)
         {
@@ -6194,6 +6402,7 @@ void CPlugin::LoadPreset(const wchar_t* szPresetFilename, float fBlendTime)
             return;
 
         m_nLoadingPreset = LOAD_PRESET_PREPARE_EXPRESSIONS;
+        m_fLoadingPresetStartTime = GetTime();
 
         m_fLoadingPresetBlendTime = fBlendTime;
         wcscpy_s(m_szLoadingPreset, szPresetFilename);
@@ -6263,7 +6472,11 @@ void CPlugin::LoadPresetTick()
             wcscpy_s(m_szRememberedPreset, m_szCurrentPresetFile);
 
         // End slow-preset-load mode.
+        const float loadSeconds = GetTime() - m_fLoadingPresetStartTime;
+        if (loadSeconds > 1.25f || m_lastPresetUsedFallback)
+            RuntimeSafetyRecordPreset(m_szCurrentPresetFile, m_lastPresetUsedFallback, loadSeconds > 1.25f);
         m_nLoadingPreset = 0;
+        m_fLoadingPresetStartTime = 0.0f;
 
         OnFinishedLoadingPreset();
     }
@@ -6801,6 +7014,8 @@ retry:
             if (len < 5 || wcscmp(fd.cFileName + len - 5, L".milk"))
                 bSkip = true;
             else if (!presetBlacklist.empty() && presetBlacklist.find(MakeLowercaseCopy(fd.cFileName)) != presetBlacklist.end())
+                bSkip = true;
+            else if (RuntimeSafetyShouldSkipPreset(fd.cFileName))
                 bSkip = true;
 
             // If it is `.milk`, make sure to know how to run its pixel shaders -
