@@ -182,6 +182,7 @@ int texmgr::LoadTex(wchar_t* szFilename, int iSlot, char* szInitCode, char* szCo
 {
     if (iSlot < 0) return TEXMGR_ERR_BAD_INDEX;
     if (iSlot >= NUM_TEX) return TEXMGR_ERR_BAD_INDEX;
+    if (!m_lpDD || !szFilename || szFilename[0] == L'\0') return TEXMGR_ERR_BADFILE;
 
     // First, if this texture is already loaded, just add another instance.
     bool bTextureInstanced = false;
@@ -550,7 +551,7 @@ int texmgr::LoadTex(wchar_t* szFilename, int iSlot, char* szInitCode, char* szCo
         ret |= TEXMGR_WARN_ERROR_IN_INIT_CODE;
 
     // Compile and save per-frame code.
-    strcpy_s(m_tex[iSlot].m_szExpr, szCode);
+    strcpy_s(m_tex[iSlot].m_szExpr, szCode ? szCode : "");
     FreeCode(iSlot);
     if (!RecompileExpressions(iSlot))
         ret |= TEXMGR_WARN_ERROR_IN_REG_CODE;
@@ -566,6 +567,8 @@ int texmgr::LoadTex(std::vector<uint8_t> rawdata, int iSlot, char* szInitCode, c
         return TEXMGR_ERR_BAD_INDEX;
     if (iSlot >= NUM_TEX)
         return TEXMGR_ERR_BAD_INDEX;
+    if (!m_lpDD || rawdata.empty())
+        return TEXMGR_ERR_BADFILE;
 
     // Free old resources.
     KillTex(iSlot);
@@ -608,7 +611,7 @@ int texmgr::LoadTex(std::vector<uint8_t> rawdata, int iSlot, char* szInitCode, c
         ret |= TEXMGR_WARN_ERROR_IN_INIT_CODE;
 
     // Compile and save per-frame code.
-    strcpy_s(m_tex[iSlot].m_szExpr, szCode);
+    strcpy_s(m_tex[iSlot].m_szExpr, szCode ? szCode : "");
     FreeCode(iSlot);
     if (!RecompileExpressions(iSlot))
         ret |= TEXMGR_WARN_ERROR_IN_REG_CODE;
@@ -646,6 +649,15 @@ void texmgr::KillTex(int iSlot)
 // Restriction: sizeof(dest) must be >= sizeof(src).
 void texmgr::StripLinefeedCharsAndComments(char* src, char* dest)
 {
+    if (!dest)
+        return;
+
+    if (!src)
+    {
+        dest[0] = 0;
+        return;
+    }
+
     int i2 = 0;
     size_t len = strlen(src);
     int bComment = false;
@@ -676,7 +688,7 @@ bool texmgr::RunInitCode(int iSlot, char* szInitCode)
     FreeVars(iSlot);
     RegisterBuiltInVariables(iSlot);
 
-    strcpy_s(m_tex[iSlot].m_szExpr, szInitCode);
+    strcpy_s(m_tex[iSlot].m_szExpr, szInitCode ? szInitCode : "");
     bool ret = RecompileExpressions(iSlot);
 
     // Set default values of output variables.

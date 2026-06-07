@@ -2,6 +2,20 @@
 
 ## Release History
 
+### 0.2.1.36 - 2026-06-07
+
+MilkDrop3-inspired preset navigation, transition, and crash-hardening update.
+
+- Changed random automatic preset selection to avoid recently played presets where enough non-recent candidates are available.
+- Added substring search to the in-visualisation preset load menu, including numeric/punctuation filename search and Backspace editing.
+- Added four additional soft-transition alpha patterns: corner wipe, checkerboard patches, spiral wipe, and Venetian blind wipe.
+- Updated enabled hard cuts to combine broad loudness, bass beat, and treble beat checks with a one-second cooldown.
+- Added sprite `blendmode` values `5` multiply and `6` screen while preserving existing modes `0` through `4`.
+- Hardened preset load and mashup keyboard handling against empty, stale, or out-of-range preset-list selections.
+- Fixed a mashup preset-list text-element overrun that could corrupt UI state when browsing larger preset collections.
+- Synced the highlighted preset-list row after current-preset changes so adjacent navigation and display state stay aligned.
+- Added a fade-and-drift exit animation for track title overlays so they no longer vanish abruptly at the end of the title animation.
+
 ### 0.2.1.35 - 2026-06-06
 
 Runtime cache and VS2026 toolchain release for the foobar2000 x64 component.

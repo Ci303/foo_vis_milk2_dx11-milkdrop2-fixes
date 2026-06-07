@@ -310,6 +310,7 @@ class CPlugin : public CPluginShell
     float m_fHardCutLoudnessThresh;
     float m_fHardCutHalflife;
     float m_fHardCutThresh;
+    float m_fLastHardCutTime;
     //int m_nWidth;
     //int m_nHeight;
     //int m_nDispBits;
@@ -459,6 +460,8 @@ class CPlugin : public CPluginShell
     void UpdatePresetList(bool bBackground = false, bool bForce = false, bool bTryReselectCurrentPreset = true) const;
     wchar_t m_szUpdatePresetMask[MAX_PATH];
     volatile bool m_bPresetListReady;
+    std::wstring m_presetSearchText;
+    float m_fPresetSearchLastInputTime;
     //void UpdatePresetRatings();
     //int m_nRatingReadProgress;  // equals 'm_nPresets' if all ratings are read in & ready to go; -1 if uninitialized; otherwise, it's still reading them in, and range is: [0 .. m_nPresets-1]
     bool m_bInitialPresetSelected;
@@ -611,7 +614,11 @@ class CPlugin : public CPluginShell
     void DeletePresetFile(wchar_t* szDelFile);
     void RenamePresetFile(wchar_t* szOldFile, wchar_t* szNewFile);
     void SetCurrentPresetRating(float fNewRating);
-    void SeekToPreset(wchar_t cStartChar);
+    void ClearPresetSearch();
+    void BackspacePresetSearch();
+    std::wstring GetPresetSearchText() const;
+    bool SelectPresetBySearch(const std::wstring& search, bool cycleFromCurrent);
+    void SeekToPreset(wchar_t cSearchChar);
     bool ReversePropagatePoint(float fx, float fy, float* fx2, float* fy2) const;
     void ClearGraphicsWindow(); // for windowed mode only
     void LaunchCustomMessage(int nMsgNum);
@@ -723,6 +730,7 @@ class CPlugin : public CPluginShell
     TextElement m_menuText[MAX_PRESETS_PER_PAGE / 2];
     TextElement m_loadPresetInstruction;
     TextElement m_loadPresetDir;
+    TextElement m_loadPresetSearch;
     TextElement m_loadPresetItem[MAX_PRESETS_PER_PAGE];
     TextElement m_ddsTitle;
 };

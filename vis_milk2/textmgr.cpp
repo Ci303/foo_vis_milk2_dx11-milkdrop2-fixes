@@ -116,27 +116,55 @@ IDWriteTextFormat* TextStyle::GetTextFormat(IDWriteFactory* dwriteFactory)
 
     if (m_textFormat == nullptr)
     {
-        ThrowIfFailed(dwriteFactory->CreateTextFormat(
-                m_fontName.data(), // family
-                nullptr, // collection
-                m_fontWeight, // weight
-                m_fontStyle, // style
-                DWRITE_FONT_STRETCH_NORMAL, // stretch
-                m_fontSize, // size
-                L"en-US", // locale
-                &m_textFormat // text format object
-            )
+        HRESULT hr = dwriteFactory->CreateTextFormat(
+            m_fontName.data(), // family
+            nullptr, // collection
+            m_fontWeight, // weight
+            m_fontStyle, // style
+            DWRITE_FONT_STRETCH_NORMAL, // stretch
+            m_fontSize, // size
+            L"en-US", // locale
+            &m_textFormat // text format object
         );
+        if (FAILED(hr) || m_textFormat == nullptr)
+            return nullptr;
 
-        ThrowIfFailed(m_textFormat->SetTextAlignment(m_textAlignment));
-        ThrowIfFailed(m_textFormat->SetWordWrapping(m_wordWrapping));
+        hr = m_textFormat->SetTextAlignment(m_textAlignment);
+        if (FAILED(hr))
+        {
+            m_textFormat.Reset();
+            return nullptr;
+        }
 
-        ThrowIfFailed(m_textFormat->SetParagraphAlignment(m_paragraphAlignment));
+        hr = m_textFormat->SetWordWrapping(m_wordWrapping);
+        if (FAILED(hr))
+        {
+            m_textFormat.Reset();
+            return nullptr;
+        }
+
+        hr = m_textFormat->SetParagraphAlignment(m_paragraphAlignment);
+        if (FAILED(hr))
+        {
+            m_textFormat.Reset();
+            return nullptr;
+        }
 
         ComPtr<IDWriteInlineObject> spInlineObject;
-        ThrowIfFailed(dwriteFactory->CreateEllipsisTrimmingSign(m_textFormat.Get(), &spInlineObject));
+        hr = dwriteFactory->CreateEllipsisTrimmingSign(m_textFormat.Get(), &spInlineObject);
+        if (FAILED(hr) || spInlineObject == nullptr)
+        {
+            m_textFormat.Reset();
+            return nullptr;
+        }
+
         DWRITE_TRIMMING trimming = {m_trimmingGranularity, 0, 0};
-        ThrowIfFailed(m_textFormat->SetTrimming(&trimming, spInlineObject.Get()));
+        hr = m_textFormat->SetTrimming(&trimming, spInlineObject.Get());
+        if (FAILED(hr))
+        {
+            m_textFormat.Reset();
+            return nullptr;
+        }
     }
 
     return m_textFormat.Get();
@@ -229,21 +257,46 @@ TextElement::TextElement() :
 
 void TextElement::Initialize(ID2D1RenderTarget* d2dRenderTarget)
 {
-    ThrowIfFailed(d2dRenderTarget->CreateSolidColorBrush(ColorF(ColorF::White), m_textColorBrush.ReleaseAndGetAddressOf()));
-    ThrowIfFailed(d2dRenderTarget->CreateSolidColorBrush(ColorF(ColorF::Black), m_shadowColorBrush.ReleaseAndGetAddressOf()));
-    ThrowIfFailed(d2dRenderTarget->CreateSolidColorBrush(ColorF(ColorF::LightSlateGray), m_boxColorBrush.ReleaseAndGetAddressOf()));
+    if (!d2dRenderTarget)
+        return;
+
+    HRESULT hr = d2dRenderTarget->CreateSolidColorBrush(ColorF(ColorF::White), m_textColorBrush.ReleaseAndGetAddressOf());
+    if (FAILED(hr))
+        m_textColorBrush.Reset();
+
+    hr = d2dRenderTarget->CreateSolidColorBrush(ColorF(ColorF::Black), m_shadowColorBrush.ReleaseAndGetAddressOf());
+    if (FAILED(hr))
+        m_shadowColorBrush.Reset();
+
+    hr = d2dRenderTarget->CreateSolidColorBrush(ColorF(ColorF::LightSlateGray), m_boxColorBrush.ReleaseAndGetAddressOf());
+    if (FAILED(hr))
+        m_boxColorBrush.Reset();
 }
 
 void TextElement::Initialize(ID2D1DeviceContext* d2dContext)
 {
-    ThrowIfFailed(d2dContext->CreateSolidColorBrush(ColorF(ColorF::White), m_textColorBrush.ReleaseAndGetAddressOf()));
-    ThrowIfFailed(d2dContext->CreateSolidColorBrush(ColorF(ColorF::Black), m_shadowColorBrush.ReleaseAndGetAddressOf()));
-    ThrowIfFailed(d2dContext->CreateSolidColorBrush(ColorF(ColorF::LightSlateGray), m_boxColorBrush.ReleaseAndGetAddressOf()));
+    if (!d2dContext)
+        return;
+
+    HRESULT hr = d2dContext->CreateSolidColorBrush(ColorF(ColorF::White), m_textColorBrush.ReleaseAndGetAddressOf());
+    if (FAILED(hr))
+        m_textColorBrush.Reset();
+
+    hr = d2dContext->CreateSolidColorBrush(ColorF(ColorF::Black), m_shadowColorBrush.ReleaseAndGetAddressOf());
+    if (FAILED(hr))
+        m_shadowColorBrush.Reset();
+
+    hr = d2dContext->CreateSolidColorBrush(ColorF(ColorF::LightSlateGray), m_boxColorBrush.ReleaseAndGetAddressOf());
+    if (FAILED(hr))
+        m_boxColorBrush.Reset();
 }
 
 void TextElement::Update(float timeTotal, float timeDelta)
 {
     UNREFERENCED_PARAMETER(timeTotal);
+
+    if (m_textColorBrush == nullptr)
+        return;
 
     if (m_isFadingOut)
     {
@@ -274,13 +327,16 @@ void TextElement::Update(float timeTotal, float timeDelta)
 
 void TextElement::Render(ID2D1RenderTarget* d2dRenderTarget, IDWriteFactory* dwriteFactory)
 {
-    if (!m_textStyle || !d2dRenderTarget || !dwriteFactory)
+    if (!m_textStyle || !d2dRenderTarget || !dwriteFactory || m_textColorBrush == nullptr)
         return;
 
     D2D1_RECT_F bounds = GetBounds(dwriteFactory);
+    if (m_textLayout == nullptr)
+        return;
+
     D2D1_POINT_2F origin = Point2F(bounds.left - m_textExtents.left, bounds.top - m_textExtents.top);
 
-    if (m_hasBox)
+    if (m_hasBox && m_boxColorBrush != nullptr)
     {
         //D2D1_RECT_F r3 = bounds;
         //r3.left -= m_boxMargin.left;
@@ -291,7 +347,7 @@ void TextElement::Render(ID2D1RenderTarget* d2dRenderTarget, IDWriteFactory* dwr
         d2dRenderTarget->FillRectangle(m_boxRect, m_boxColorBrush.Get()); // draw a filled rectangle
     }
 
-    if (m_textStyle->HasTextOutline())
+    if (m_textStyle->HasTextOutline() && m_shadowColorBrush != nullptr)
     {
         constexpr D2D1_POINT_2F outlineOffsets[] = {
             {-2.0f, -2.0f},
@@ -307,7 +363,7 @@ void TextElement::Render(ID2D1RenderTarget* d2dRenderTarget, IDWriteFactory* dwr
         for (const auto& offset : outlineOffsets)
             d2dRenderTarget->DrawTextLayout(Point2F(origin.x + offset.x, origin.y + offset.y), m_textLayout.Get(), m_shadowColorBrush.Get(), D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
     }
-    else if (m_hasShadow)
+    else if (m_hasShadow && m_shadowColorBrush != nullptr)
     {
         m_shadowColorBrush->SetOpacity(m_textColorBrush->GetOpacity() * 0.5f);
         d2dRenderTarget->DrawTextLayout(Point2F(origin.x + 1.0f, origin.y + 1.0f), m_textLayout.Get(), m_shadowColorBrush.Get(), D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
@@ -318,13 +374,16 @@ void TextElement::Render(ID2D1RenderTarget* d2dRenderTarget, IDWriteFactory* dwr
 
 void TextElement::Render(ID2D1DeviceContext* d2dContext, IDWriteFactory* dwriteFactory)
 {
-    if (!m_textStyle || !d2dContext || !dwriteFactory)
+    if (!m_textStyle || !d2dContext || !dwriteFactory || m_textColorBrush == nullptr)
         return;
 
     D2D1_RECT_F bounds = GetBounds(dwriteFactory);
+    if (m_textLayout == nullptr)
+        return;
+
     D2D1_POINT_2F origin = Point2F(bounds.left - m_textExtents.left, bounds.top - m_textExtents.top);
 
-    if (m_hasBox)
+    if (m_hasBox && m_boxColorBrush != nullptr)
     {
         //D2D1_RECT_F r3 = bounds;
         //r3.left -= m_boxMargin.left;
@@ -335,7 +394,7 @@ void TextElement::Render(ID2D1DeviceContext* d2dContext, IDWriteFactory* dwriteF
         d2dContext->FillRectangle(m_boxRect, m_boxColorBrush.Get()); // draw a filled rectangle
     }
 
-    if (m_textStyle->HasTextOutline())
+    if (m_textStyle->HasTextOutline() && m_shadowColorBrush != nullptr)
     {
         constexpr D2D1_POINT_2F outlineOffsets[] = {
             {-2.0f, -2.0f},
@@ -351,7 +410,7 @@ void TextElement::Render(ID2D1DeviceContext* d2dContext, IDWriteFactory* dwriteF
         for (const auto& offset : outlineOffsets)
             d2dContext->DrawTextLayout(Point2F(origin.x + offset.x, origin.y + offset.y), m_textLayout.Get(), m_shadowColorBrush.Get(), D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
     }
-    else if (m_hasShadow)
+    else if (m_hasShadow && m_shadowColorBrush != nullptr)
     {
         m_shadowColorBrush->SetOpacity(m_textColorBrush->GetOpacity() * 0.5f);
         d2dContext->DrawTextLayout(Point2F(origin.x + 1.0f, origin.y + 1.0f), m_textLayout.Get(), m_shadowColorBrush.Get(), D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
@@ -372,12 +431,14 @@ void TextElement::ReleaseDeviceDependentResources()
 
 void TextElement::SetTextColor(const D2D1_COLOR_F& textColor)
 {
-    m_textColorBrush->SetColor(textColor);
+    if (m_textColorBrush != nullptr)
+        m_textColorBrush->SetColor(textColor);
 }
 
 void TextElement::SetTextOpacity(float textOpacity)
 {
-    m_textColorBrush->SetOpacity(textOpacity);
+    if (m_textColorBrush != nullptr)
+        m_textColorBrush->SetOpacity(textOpacity);
 }
 
 void TextElement::SetTextShadow(bool hasShadow)
@@ -387,6 +448,9 @@ void TextElement::SetTextShadow(bool hasShadow)
 
 void TextElement::SetTextBox(const D2D1_COLOR_F boxColor, const D2D1_RECT_F boxRect)
 {
+    if (m_boxColorBrush == nullptr)
+        return;
+
     m_boxColorBrush->SetColor(boxColor);
     m_boxColorBrush->SetOpacity(boxColor.a);
     m_boxRect = boxRect;
@@ -395,6 +459,12 @@ void TextElement::SetTextBox(const D2D1_COLOR_F boxColor, const D2D1_RECT_F boxR
 
 void TextElement::SetText(__nullterminated WCHAR* text)
 {
+    if (!text)
+    {
+        SetText(std::wstring());
+        return;
+    }
+
     SetText(std::wstring(text));
 }
 
@@ -409,6 +479,13 @@ void TextElement::SetText(std::wstring text)
 
 void TextElement::FadeOut(float fadeOutTime)
 {
+    if (m_textColorBrush == nullptr || fadeOutTime <= 0.0f)
+    {
+        m_isFadingOut = false;
+        SetVisible(false);
+        return;
+    }
+
     m_fadeStartingOpacity = m_textColorBrush->GetOpacity();
     m_fadeOutTime = fadeOutTime;
     m_fadeOutTimeElapsed = 0.0f;
@@ -417,6 +494,12 @@ void TextElement::FadeOut(float fadeOutTime)
 
 void TextElement::FadeIn(float fadeOutTime)
 {
+    if (m_textColorBrush == nullptr || fadeOutTime <= 0.0f)
+    {
+        m_isFadingIn = false;
+        return;
+    }
+
     m_fadeStartingOpacity = m_textColorBrush->GetOpacity();
     m_fadeOutTime = fadeOutTime;
     m_fadeOutTimeElapsed = 0.0f;
@@ -443,8 +526,21 @@ void TextElement::CalculateSize(IDWriteFactory* dwriteFactory)
 
     DWRITE_TEXT_METRICS metrics;
     DWRITE_OVERHANG_METRICS overhangMetrics;
-    ThrowIfFailed(m_textLayout->GetMetrics(&metrics));
-    ThrowIfFailed(m_textLayout->GetOverhangMetrics(&overhangMetrics));
+    HRESULT hr = m_textLayout->GetMetrics(&metrics);
+    if (FAILED(hr))
+    {
+        m_textExtents = RectF();
+        m_size = SizeF();
+        return;
+    }
+
+    hr = m_textLayout->GetOverhangMetrics(&overhangMetrics);
+    if (FAILED(hr))
+    {
+        m_textExtents = RectF();
+        m_size = SizeF();
+        return;
+    }
 
     m_textExtents = RectF(-overhangMetrics.left,
                           -overhangMetrics.top,
@@ -466,12 +562,14 @@ void TextElement::CreateTextLayout(IDWriteFactory* dwriteFactory)
         if (!textFormat)
             return;
 
-        ThrowIfFailed(dwriteFactory->CreateTextLayout(m_text.data(),
-                                                      static_cast<UINT32>(m_text.size()),
-                                                      textFormat,
-                                                      m_container.right - m_container.left,
-                                                      m_container.bottom - m_container.top,
-                                                      m_textLayout.ReleaseAndGetAddressOf()));
+        HRESULT hr = dwriteFactory->CreateTextLayout(m_text.data(),
+                                                     static_cast<UINT32>(m_text.size()),
+                                                     textFormat,
+                                                     m_container.right - m_container.left,
+                                                     m_container.bottom - m_container.top,
+                                                     m_textLayout.ReleaseAndGetAddressOf());
+        if (FAILED(hr))
+            m_textLayout.Reset();
     }
 }
 #pragma endregion
@@ -494,10 +592,16 @@ void CTextManager::Init(DXContext* lpDX
 #endif
 )
 {
+    if (!lpDX)
+        return;
+
     m_lpDX = lpDX;
     m_dwriteFactory = m_lpDX->GetDWriteFactory();
     m_d2dDevice = m_lpDX->GetD2DDevice();
     m_d2dContext = m_lpDX->GetD2DDeviceContext();
+    if (!m_dwriteFactory || !m_d2dDevice || !m_d2dContext)
+        return;
+
 #ifndef _FOOBAR
     m_lpTextSurface = lpTextSurface;
     m_blit_additively = bAdditive;
@@ -505,9 +609,16 @@ void CTextManager::Init(DXContext* lpDX
 
     ComPtr<ID2D1Factory> factory;
     m_d2dDevice->GetFactory(&factory);
+    if (factory == nullptr)
+        return;
 
-    ThrowIfFailed(factory.As(&m_d2dFactory));
-    ThrowIfFailed(m_d2dFactory->CreateDrawingStateBlock(&m_stateBlock));
+    HRESULT hr = factory.As(&m_d2dFactory);
+    if (FAILED(hr) || m_d2dFactory == nullptr)
+        return;
+
+    hr = m_d2dFactory->CreateDrawingStateBlock(&m_stateBlock);
+    if (FAILED(hr))
+        m_stateBlock.Reset();
 
 #ifndef _FOOBAR
     m_b = 0;
@@ -561,7 +672,7 @@ void CTextManager::DrawBox(D2D1_RECT_F* pRect, DWORD boxColor)
 // Returns height of the text in logical units.
 int CTextManager::DrawD2DText(TextStyle* pFont, TextElement* pElement, const wchar_t* szText, D2D1_RECT_F* pRect, DWORD flags, DWORD color, bool bBox, DWORD boxColor)
 {
-    if (!(pFont && pElement && pRect && szText))
+    if (!(m_lpDX && pFont && pElement && pRect && szText))
         return 0;
 
     if (flags & DT_CALCRECT)
@@ -1162,6 +1273,9 @@ void CTextManager::Update(/* float timeTotal, float timeDelta */)
 
 void CTextManager::Render(Matrix3x2F orientation2D)
 {
+    if (!m_lpDX || !m_d2dContext || !m_stateBlock)
+        return;
+
     m_d2dContext->SaveDrawingState(m_stateBlock.Get());
     m_d2dContext->BeginDraw();
     m_d2dContext->SetTransform(orientation2D);
@@ -1180,21 +1294,24 @@ void CTextManager::Render(Matrix3x2F orientation2D)
     // Ignore D2DERR_RECREATE_TARGET here. This error indicates that the device
     // is lost. It will be handled during the next call to `Present()`.
     HRESULT hr = m_d2dContext->EndDraw();
-    if (hr != D2DERR_RECREATE_TARGET)
-    {
-        ThrowIfFailed(hr);
-    }
-
     m_d2dContext->RestoreDrawingState(m_stateBlock.Get());
+    if (FAILED(hr))
+        return;
 }
 
 void CTextManager::RegisterElement(ElementBase* element)
 {
+    if (!element)
+        return;
+
     m_elements.insert(element);
 }
 
 void CTextManager::UnregisterElement(ElementBase* element)
 {
+    if (!element)
+        return;
+
     auto iter = m_elements.find(element);
     if (iter != m_elements.end())
     {

@@ -76,6 +76,7 @@
 //#include <iterator>
 #include <list>
 #include <memory>
+#include <new>
 #include <set>
 #include <stdexcept>
 #include <string>

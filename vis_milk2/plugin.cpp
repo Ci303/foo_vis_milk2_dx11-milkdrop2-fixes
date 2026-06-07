@@ -638,9 +638,9 @@ static size_t CountShaderToken(const char* text, const char* token)
     return count;
 }
 
-static bool ShaderLikelyToStallD3DCompiler(const char* shaderText, int PSVersion)
+static bool ShaderTextLikelyToStallD3DCompiler(const char* shaderText)
 {
-    if (PSVersion < MD2_PS_4_0 || !shaderText)
+    if (!shaderText)
         return false;
 
     size_t shaderLength = 0;
@@ -660,6 +660,7 @@ static bool ShaderLikelyToStallD3DCompiler(const char* shaderText, int PSVersion
                              CountShaderToken(shaderText, "while (") +
                              CountShaderToken(shaderText, "while(");
     const size_t volumeTextureCount = CountShaderToken(shaderText, "tex3D");
+    const size_t highQualityNoiseCount = CountShaderToken(shaderText, "sampler_noisevol_hq");
     const size_t heavyMathCount = CountShaderToken(shaderText, "refract") +
                                   CountShaderToken(shaderText, "reflect") +
                                   CountShaderToken(shaderText, "atan2") +
@@ -668,12 +669,15 @@ static bool ShaderLikelyToStallD3DCompiler(const char* shaderText, int PSVersion
                                   CountShaderToken(shaderText, "tan(");
 
     // D3DCompiler_47 can spend minutes in code generation on compact but very
-    // dense PS4 MilkDrop shaders. These are untrusted preset inputs, so skip
+    // dense PS3+ MilkDrop shaders. These are untrusted preset inputs, so skip
     // the known-risk shape and use the existing fallback shader path instead.
     if (shaderLength > 8000 && volumeTextureCount >= 8 && loopCount >= 2)
         return true;
 
     if (shaderLength > 10000 && volumeTextureCount >= 4 && loopCount >= 1 && heavyMathCount >= 16)
+        return true;
+
+    if (highQualityNoiseCount >= 8 && heavyMathCount >= 12)
         return true;
 
     return false;
@@ -711,6 +715,44 @@ static unsigned long long GetPresetNavigationNumber(const std::wstring& filename
         cursor++;
     }
     return value;
+}
+
+static std::wstring NormalizePresetNameForMatching(std::wstring value)
+{
+    const size_t basename = value.find_last_of(L"\\/");
+    if (basename != std::wstring::npos)
+        value = value.substr(basename + 1);
+
+    if (!value.empty() && value[0] == L'*')
+        value.erase(value.begin());
+
+    return MakeLowercaseCopy(std::move(value));
+}
+
+static std::wstring NormalizePresetNameForSearch(std::wstring value)
+{
+    value = NormalizePresetNameForMatching(std::move(value));
+
+    const size_t extension = value.find_last_of(L'.');
+    if (extension != std::wstring::npos)
+        value.resize(extension);
+
+    for (wchar_t& ch : value)
+    {
+        if (ch == L'_' || ch == L'.')
+            ch = L' ';
+    }
+
+    return value;
+}
+
+static bool IsPresetSearchChar(wchar_t ch) noexcept
+{
+    return (ch >= L'0' && ch <= L'9') ||
+           (ch >= L'a' && ch <= L'z') ||
+           (ch >= L'A' && ch <= L'Z') ||
+           ch == L' ' || ch == L'-' || ch == L'_' || ch == L'.' ||
+           ch == L'(' || ch == L')' || ch == L'[' || ch == L']';
 }
 
 // Check if file exists.
@@ -1081,6 +1123,7 @@ void CPlugin::MilkDropPreInitialize()
     m_bHardCutsDisabled = true;
     m_fHardCutLoudnessThresh = 2.5f;
     m_fHardCutHalflife = 60.0f;
+    m_fLastHardCutTime = -1000.0f;
     //m_nWidth = 1024;
     //m_nHeight = 768;
     //m_nDispBits = 16;
@@ -1196,6 +1239,8 @@ void CPlugin::MilkDropPreInitialize()
     m_presetBlacklist.clear();
     m_bPresetBlacklistLoaded = false;
     m_bPresetListReady = false;
+    m_presetSearchText.clear();
+    m_fPresetSearchLastInputTime = -1000.0f;
     m_szUpdatePresetMask[0] = 0;
     //m_nRatingReadProgress = -1;
 
@@ -2639,6 +2684,9 @@ static DWORD dwCubicInterpolate(DWORD y0, DWORD y1, DWORD y2, DWORD y3, float t)
 //   4/8/16... -> cubic interpolate
 bool CPlugin::AddNoiseTex(const wchar_t* szTexName, int size, int zoom_factor)
 {
+    if (!szTexName || size <= 0 || zoom_factor <= 0)
+        return false;
+
     //wchar_t buf[2048], title[64];
     D3D11Shim* lpDevice = GetDevice();
     if (!lpDevice)
@@ -2674,6 +2722,7 @@ bool CPlugin::AddNoiseTex(const wchar_t* szTexName, int size, int zoom_factor)
         DumpDebugMessage(buf);
         MessageBox(GetPluginWindow(), buf, WASABI_API_LNGSTRINGW_BUF(IDS_MILKDROP_ERROR, title, 64), MB_OK | MB_SETFOREGROUND | MB_TOPMOST);
         */
+        SafeRelease(pNoiseTex);
         return false;
     }
 
@@ -2684,6 +2733,8 @@ bool CPlugin::AddNoiseTex(const wchar_t* szTexName, int size, int zoom_factor)
         DumpDebugMessage(buf);
         MessageBox(GetPluginWindow(), buf, WASABI_API_LNGSTRINGW_BUF(IDS_MILKDROP_ERROR, title, 64), MB_OK | MB_SETFOREGROUND | MB_TOPMOST);
         */
+        lpDevice->UnlockRect(pNoiseTex, 0);
+        SafeRelease(pNoiseTex);
         return false;
     }
 
@@ -2695,7 +2746,11 @@ bool CPlugin::AddNoiseTex(const wchar_t* szTexName, int size, int zoom_factor)
     {
         LARGE_INTEGER q;
         if (!QueryPerformanceCounter(&q))
-            throw std::exception();
+        {
+            lpDevice->UnlockRect(pNoiseTex, 0);
+            SafeRelease(pNoiseTex);
+            return false;
+        }
         srand(q.LowPart ^ q.HighPart ^ warand());
         for (int x = 0; x < size; x++)
         {
@@ -2765,7 +2820,7 @@ bool CPlugin::AddNoiseTex(const wchar_t* szTexName, int size, int zoom_factor)
 
     // Add it to `m_textures[]`.
     TexInfo x;
-    wcscpy_s(x.texname, szTexName);
+    wcsncpy_s(x.texname, szTexName, _TRUNCATE);
     x.texptr = pNoiseTex;
     //x.texsize_param = NULL;
     x.w = size;
@@ -2786,6 +2841,9 @@ bool CPlugin::AddNoiseTex(const wchar_t* szTexName, int size, int zoom_factor)
 //   4/8/16... = cubic interp.
 bool CPlugin::AddNoiseVol(const wchar_t* szTexName, int size, int zoom_factor)
 {
+    if (!szTexName || size <= 0 || zoom_factor <= 0)
+        return false;
+
     //wchar_t buf[2048], title[64];
     D3D11Shim* lpDevice = GetDevice();
     if (!lpDevice)
@@ -2822,6 +2880,7 @@ bool CPlugin::AddNoiseVol(const wchar_t* szTexName, int size, int zoom_factor)
     if (!lpDevice->LockRect(pNoiseTex, 0, D3D11_MAP_WRITE_DISCARD, &r))
     {
         PopupMessage(IDS_UNABLE_TO_INIT_DXCONTEXT, IDS_MILKDROP_ERROR, true);
+        SafeRelease(pNoiseTex);
         return false;
     }
     if (r.RowPitch < (unsigned)(size * 4) || r.DepthPitch < (unsigned)(size * size * 4))
@@ -2831,6 +2890,8 @@ bool CPlugin::AddNoiseVol(const wchar_t* szTexName, int size, int zoom_factor)
         DumpDebugMessage(buf);
         MessageBox(GetPluginWindow(), buf, WASABI_API_LNGSTRINGW_BUF(IDS_MILKDROP_ERROR, title, 64), MB_OK | MB_SETFOREGROUND | MB_TOPMOST);
         */
+        lpDevice->UnlockRect(pNoiseTex, 0);
+        SafeRelease(pNoiseTex);
         return false;
     }
 
@@ -2845,7 +2906,11 @@ bool CPlugin::AddNoiseVol(const wchar_t* szTexName, int size, int zoom_factor)
         {
             LARGE_INTEGER q;
             if (!QueryPerformanceCounter(&q))
-                throw std::exception();
+            {
+                lpDevice->UnlockRect(pNoiseTex, 0);
+                SafeRelease(pNoiseTex);
+                return false;
+            }
             srand(q.LowPart ^ q.HighPart ^ warand());
             for (int x = 0; x < size; x++)
             {
@@ -2939,7 +3004,7 @@ bool CPlugin::AddNoiseVol(const wchar_t* szTexName, int size, int zoom_factor)
 
     // Add it to `m_textures[]`.
     TexInfo x;
-    wcscpy_s(x.texname, szTexName);
+    wcsncpy_s(x.texname, szTexName, _TRUNCATE);
     x.texptr = pNoiseTex;
     //x.texsize_param = NULL;
     x.w = size;
@@ -3619,15 +3684,6 @@ bool CPlugin::RecompilePShader(const char* szShadersText, PShaderInfo* si, int s
 
     si->Clear();
 
-    // Some imported MilkDrop packs contain shader-model 4 presets that can
-    // stall inside D3DCompile or the display driver. Treat those as a preset
-    // shader failure and let the normal fallback shader path handle them.
-    if (ShaderLikelyToStallD3DCompiler(szShadersText, PSVersion))
-    {
-        RuntimeSafetyRecordPreset(m_szLoadingPreset[0] ? m_szLoadingPreset : m_szCurrentPresetFile, true, true);
-        return false;
-    }
-
     // Load shader.
     // Note: ps_1_4 required for dependent texture lookups.
     //       ps_2_0 required for tex2Dbias.
@@ -3701,6 +3757,9 @@ bool CPlugin::LoadShaders(PShaderSet* sh, CState* pState, bool bTick)
 
 bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szFn, const char* szProfile, CConstantTable** ppConstTable, void** ppShader, const int shaderType, const bool /*bHardErrors*/)
 {
+    if (!szOrigShaderText || !szFn || !szProfile || !ppConstTable || !ppShader)
+        return false;
+
     // clang-format off
     const char szWarpDefines[] = "#define rad _rad_ang.x\n"
                                  "#define ang _rad_ang.y\n"
@@ -3738,18 +3797,24 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
     size_t writePos = 0;
 
     // Paste the universal `#include`.
-    strcpy_s(&szShaderText[writePos], ARRAYSIZE(szShaderText), m_szShaderIncludeText); // first, paste in the contents of "include.fx" before the actual shader text. Has 13's and 10's.
+    if (m_nShaderIncludeTextLen >= ARRAYSIZE(szShaderText))
+        return false;
+
+    if (strcpy_s(&szShaderText[writePos], ARRAYSIZE(szShaderText) - writePos, m_szShaderIncludeText) != 0)
+        return false;
     writePos += m_nShaderIncludeTextLen;
 
     // Paste in any custom #defines for this shader type.
     if (shaderType == SHADER_WARP && szProfile[0] == 'p')
     {
-        strcpy_s(&szShaderText[writePos], ARRAYSIZE(szShaderText) - writePos, szWarpDefines);
+        if (strcpy_s(&szShaderText[writePos], ARRAYSIZE(szShaderText) - writePos, szWarpDefines) != 0)
+            return false;
         writePos += strlen(szWarpDefines);
     }
     else if (shaderType == SHADER_COMP && szProfile[0] == 'p')
     {
-        strcpy_s(&szShaderText[writePos], ARRAYSIZE(szShaderText) - writePos, szCompDefines);
+        if (strcpy_s(&szShaderText[writePos], ARRAYSIZE(szShaderText) - writePos, szCompDefines) != 0)
+            return false;
         writePos += strlen(szCompDefines);
     }
 
@@ -3841,12 +3906,16 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
         if (p)
         {
             // Insert "void PS(...params...)\n".
-            strcpy_s(temp, p);
+            if (strcpy_s(temp, p) != 0)
+                return false;
             const char* params = (shaderType == SHADER_WARP) ? szWarpParams : szCompParams;
             size_t remains = ARRAYSIZE(szShaderText) - (p - &szShaderText[0] + 1) + 1;
             int length = sprintf_s(p, remains, "void %s( %s )\n", szFn, params);
+            if (length <= 0 || static_cast<size_t>(length) >= remains)
+                return false;
             p += length;
-            strcpy_s(p, remains - length, temp);
+            if (strcpy_s(p, remains - length, temp) != 0)
+                return false;
 
             // Find the starting curly brace.
             p = strchr(p, '{');
@@ -3855,11 +3924,15 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
                 // Skip over it.
                 p++;
                 // Then insert "float3 ret = 0;".
-                strcpy_s(temp, p);
+                if (strcpy_s(temp, p) != 0)
+                    return false;
                 remains = ARRAYSIZE(szShaderText) - (p - &szShaderText[0] + 1) + 1;
                 length = sprintf_s(p, remains, "%s\n", szFirstLine);
+                if (length <= 0 || static_cast<size_t>(length) >= remains)
+                    return false;
                 p += length;
-                strcpy_s(p, remains - length, temp);
+                if (strcpy_s(p, remains - length, temp) != 0)
+                    return false;
 
                 // Find the ending curly brace.
                 p = strrchr(p, '}');
@@ -3867,7 +3940,9 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
                 if (p)
                 {
                     remains = ARRAYSIZE(szShaderText) - (p - &szShaderText[0] + 1) + 1;
-                    sprintf_s(p, remains, " %s\n}\n", szLastLine);
+                    length = sprintf_s(p, remains, " %s\n}\n", szLastLine);
+                    if (length <= 0 || static_cast<size_t>(length) >= remains)
+                        return false;
                 }
             }
         }
@@ -3890,6 +3965,13 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
     int flags = D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY | D3DCOMPILE_SKIP_OPTIMIZATION;
     unsigned long long shaderHash = ShaderBytecodeHash(szShaderText, szFn, szProfile, shaderType);
     bool bytecodeLoadedFromCache = ShaderBytecodeCacheLoad(shaderHash, &pShaderByteCode);
+    const bool isPresetPixelShader = (shaderType == SHADER_WARP || shaderType == SHADER_COMP) && szProfile[0] == 'p';
+    const bool shaderCompileIsHighRisk = isPresetPixelShader && ShaderTextLikelyToStallD3DCompiler(szShaderText);
+    if (!bytecodeLoadedFromCache && shaderCompileIsHighRisk)
+    {
+        RuntimeSafetyRecordPreset(m_szLoadingPreset[0] ? m_szLoadingPreset : m_szCurrentPresetFile, true, true);
+        return false;
+    }
 
     const ULONGLONG compileStart = bytecodeLoadedFromCache ? 0 : GetTickCount64();
     if (!bytecodeLoadedFromCache && S_OK != D3DCompile(szShaderText, len, NULL, NULL, NULL, szFn, szProfile, flags, 0, &pShaderByteCode, &m_pShaderCompileErrors))
@@ -5400,12 +5482,20 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
         }
         else if (m_UI_mode == UI_LOAD_DEL)
         {
-            h = GetFontHeight(SIMPLE_FONT);
-            D2D1_RECT_F rect = D2D1::RectF(static_cast<FLOAT>(xL), static_cast<FLOAT>(*upper_left_corner_y), static_cast<FLOAT>(xR), static_cast<FLOAT>(*lower_left_corner_y));
-            MilkDropMenuOut_Box(rect.top, 0, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_ARE_YOU_SURE_YOU_WANT_TO_DELETE_PRESET), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
-            swprintf_s(buf, WASABI_API_LNGSTRINGW(IDS_PRESET_TO_DELETE), m_presets[m_nPresetListCurPos].szFilename.c_str());
-            MilkDropMenuOut_Box(rect.top, 1, GetFont(SIMPLE_FONT), buf, rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
-            *upper_left_corner_y = static_cast<int>(rect.top);
+            const int presetCount = std::min(m_nPresets, static_cast<int>(m_presets.size()));
+            if (presetCount <= 0 || m_nPresetListCurPos < 0 || m_nPresetListCurPos >= presetCount)
+            {
+                m_UI_mode = UI_LOAD;
+            }
+            else
+            {
+                h = GetFontHeight(SIMPLE_FONT);
+                D2D1_RECT_F rect = D2D1::RectF(static_cast<FLOAT>(xL), static_cast<FLOAT>(*upper_left_corner_y), static_cast<FLOAT>(xR), static_cast<FLOAT>(*lower_left_corner_y));
+                MilkDropMenuOut_Box(rect.top, 0, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_ARE_YOU_SURE_YOU_WANT_TO_DELETE_PRESET), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
+                swprintf_s(buf, WASABI_API_LNGSTRINGW(IDS_PRESET_TO_DELETE), m_presets[m_nPresetListCurPos].szFilename.c_str());
+                MilkDropMenuOut_Box(rect.top, 1, GetFont(SIMPLE_FONT), buf, rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
+                *upper_left_corner_y = static_cast<int>(rect.top);
+            }
         }
         else if (m_UI_mode == UI_SAVE_OVERWRITE)
         {
@@ -5422,7 +5512,9 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
         }
         else if (m_UI_mode == UI_MASHUP)
         {
-            if (m_nPresets - m_nDirs == 0)
+            UpdatePresetList(); // make sure list is completely ready
+            const int presetCount = std::min(m_nPresets, static_cast<int>(m_presets.size()));
+            if (m_nDirs < 0 || presetCount <= m_nDirs)
             {
                 // Note: This error message is repeated in "milkdropfs.cpp" in `LoadRandomPreset()`.
                 swprintf_s(buf, WASABI_API_LNGSTRINGW(IDS_ERROR_NO_PRESET_FILE_FOUND_IN_X_MILK), m_szPresetDir);
@@ -5431,16 +5523,14 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
             }
             else
             {
-                UpdatePresetList(); // make sure list is completely ready
-
                 // Quick checks.
                 for (int mash = 0; mash < MASH_SLOTS; mash++)
                 {
                     // Check validity.
                     if (m_nMashPreset[mash] < m_nDirs)
                         m_nMashPreset[mash] = m_nDirs;
-                    if (m_nMashPreset[mash] >= m_nPresets)
-                        m_nMashPreset[mash] = m_nPresets - 1;
+                    if (m_nMashPreset[mash] >= presetCount)
+                        m_nMashPreset[mash] = presetCount - 1;
 
                     // Apply changes, if it's time.
                     if (m_nLastMashChangeFrame[mash] + MASH_APPLY_DELAY_FRAMES + 1 == static_cast<int>(GetFrame()))
@@ -5499,8 +5589,8 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
                 if (m_bUserPagedDown)
                 {
                     m_nMashPreset[m_nMashSlot] += lines_available;
-                    if (m_nMashPreset[m_nMashSlot] >= m_nPresets)
-                        m_nMashPreset[m_nMashSlot] = m_nPresets - 1;
+                    if (m_nMashPreset[m_nMashSlot] >= presetCount)
+                        m_nMashPreset[m_nMashSlot] = presetCount - 1;
                     m_bUserPagedDown = false;
                 }
                 if (m_bUserPagedUp)
@@ -5514,14 +5604,15 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
                 int first_line = m_nMashPreset[m_nMashSlot] - (m_nMashPreset[m_nMashSlot] % lines_available);
                 int last_line = first_line + lines_available;
                 wchar_t str[512] = {0}, str2[512] = {0};
+                int nFontHeight = GetFontHeight(SIMPLE_FONT);
 
-                if (last_line > m_nPresets)
-                    last_line = m_nPresets;
+                if (last_line > presetCount)
+                    last_line = presetCount;
 
                 // Tooltip.
                 if (m_bShowMenuToolTips)
                 {
-                    swprintf_s(buf, WASABI_API_LNGSTRINGW(IDS_PAGE_X_OF_X), m_nMashPreset[m_nMashSlot] / lines_available + 1, (m_nPresets + lines_available - 1) / lines_available);
+                    swprintf_s(buf, WASABI_API_LNGSTRINGW(IDS_PAGE_X_OF_X), m_nMashPreset[m_nMashSlot] / lines_available + 1, (presetCount + lines_available - 1) / lines_available);
                     DrawTooltip(buf, xR, *lower_right_corner_y);
                 }
                 
@@ -5614,12 +5705,34 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
                         else if (bIsSelected)
                             color = PLAYLIST_COLOR_HILITE_TRACK;
 
+                        const int itemSlot = i - first_line;
+                        TextElement& listItem = m_loadPresetItem[itemSlot];
                         D2D1_RECT_F r2 = rect;
-                        rect.top += m_text.DrawD2DText(GetFont(SIMPLE_FONT), &m_menuText[i], str2, &r2, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX | (pass == 0 ? DT_CALCRECT : 0), color, false);
-                        if (pass == 0) // calculating dark box
+
+                        if (pass == 0)
                         {
+                            D2D1_COLOR_F fColor = D2D1::ColorF(color, GetAlpha(color));
+                            listItem.Initialize(m_lpDX->GetD2DDeviceContext());
+                            listItem.SetAlignment(AlignNear, AlignNear);
+                            listItem.SetTextColor(fColor);
+                            listItem.SetTextOpacity(fColor.a);
+                            listItem.SetContainer(r2);
+                            listItem.SetVisible(true);
+                            listItem.SetText(str2);
+                            listItem.SetTextStyle(GetFont(SIMPLE_FONT));
+                            listItem.SetTextShadow(false);
+                            int nHeight = m_text.DrawD2DText(GetFont(SIMPLE_FONT), &listItem, str2, &r2, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX | DT_CALCRECT, color, false);
+
+                            rect.top += static_cast<FLOAT>(std::max(nFontHeight, nHeight));
                             box.right = std::max(box.right, box.left + r2.right - r2.left);
-                            box.bottom += r2.bottom - r2.top;
+                            box.bottom += static_cast<FLOAT>(std::max(nFontHeight, nHeight));
+                        }
+                        else
+                        {
+                            listItem.SetContainer(r2);
+                            int nHeight = m_text.DrawD2DText(GetFont(SIMPLE_FONT), &listItem, str2, &r2, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, 0xFFFFFFFF, false);
+                            rect.top += static_cast<FLOAT>(std::max(nFontHeight, nHeight));
+                            m_text.RegisterElement(&listItem);
                         }
                     }
 
@@ -5639,12 +5752,22 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
                         rect_hold.top += box.bottom - box.top;
                 }
 
+                for (int i = last_line - first_line; i < MAX_PRESETS_PER_PAGE; i++)
+                {
+                    if (m_loadPresetItem[i].IsVisible())
+                    {
+                        m_loadPresetItem[i].SetVisible(false);
+                        m_text.UnregisterElement(&m_loadPresetItem[i]);
+                    }
+                }
+
                 rect_hold.top += PLAYLIST_INNER_MARGIN;
             }
         }
         else if (m_UI_mode == UI_LOAD)
         {
-            if (m_nPresets == 0)
+            const int presetCount = std::min(m_nPresets, static_cast<int>(m_presets.size()));
+            if (presetCount <= 0)
             {
                 // Note: This error message is repeated in "milkdropfs.cpp" in `LoadRandomPreset()`.
                 wchar_t buf2[1024] = {0};
@@ -5654,12 +5777,29 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
             }
             else
             {
+                if (m_nPresetListCurPos < 0)
+                    m_nPresetListCurPos = 0;
+                else if (m_nPresetListCurPos >= presetCount)
+                    m_nPresetListCurPos = presetCount - 1;
+
                 SelectFont(TOOLTIP_FONT);
                 MilkDropTextOut(WASABI_API_LNGSTRINGW(IDS_LOAD_WHICH_PRESET_PLUS_COMMANDS), m_loadPresetInstruction, MTO_UPPER_LEFT, true);
 
                 wchar_t buf2[MAX_PATH + 64] = {0};
                 swprintf_s(buf2, WASABI_API_LNGSTRINGW(IDS_DIRECTORY_OF_X), m_szPresetDir);
                 MilkDropTextOut(buf2, m_loadPresetDir, MTO_UPPER_LEFT, true);
+
+                std::wstring presetSearch = GetPresetSearchText();
+                if (!presetSearch.empty())
+                {
+                    swprintf_s(buf2, L"Search: %s", presetSearch.c_str());
+                    MilkDropTextOut(buf2, m_loadPresetSearch, MTO_UPPER_LEFT, true);
+                }
+                else if (m_loadPresetSearch.IsVisible())
+                {
+                    m_loadPresetSearch.SetVisible(false);
+                    m_text.UnregisterElement(&m_loadPresetSearch);
+                }
 
                 *upper_left_corner_y += h / 2;
 
@@ -5688,8 +5828,8 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
                 if (m_bUserPagedDown)
                 {
                     m_nPresetListCurPos += lines_available;
-                    if (m_nPresetListCurPos >= m_nPresets)
-                        m_nPresetListCurPos = m_nPresets - 1;
+                    if (m_nPresetListCurPos >= presetCount)
+                        m_nPresetListCurPos = presetCount - 1;
 
                     // Remember this preset's name so the next time they hit 'L' it jumps straight to it.
                     //wcscpy_s(m_szLastPresetSelected, m_presets[m_nPresetListCurPos].szFilename.c_str());
@@ -5712,13 +5852,13 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
                 int first_line = m_nPresetListCurPos - (m_nPresetListCurPos % lines_available);
                 int last_line = first_line + lines_available;
 
-                if (last_line > m_nPresets)
-                    last_line = m_nPresets;
+                if (last_line > presetCount)
+                    last_line = presetCount;
 
                 // Tooltip.
                 if (m_bShowMenuToolTips)
                 {
-                    swprintf_s(buf2, WASABI_API_LNGSTRINGW(IDS_PAGE_X_OF_X), m_nPresetListCurPos / lines_available + 1, (m_nPresets + lines_available - 1) / lines_available);
+                    swprintf_s(buf2, WASABI_API_LNGSTRINGW(IDS_PAGE_X_OF_X), m_nPresetListCurPos / lines_available + 1, (presetCount + lines_available - 1) / lines_available);
                     DrawTooltip(buf2, xR, *lower_right_corner_y);
                 }
                 else
@@ -5888,6 +6028,11 @@ void CPlugin::ClearText()
     {
         m_loadPresetDir.SetVisible(false);
         m_text.UnregisterElement(&m_loadPresetDir);
+    }
+    if (m_loadPresetSearch.IsVisible())
+    {
+        m_loadPresetSearch.SetVisible(false);
+        m_text.UnregisterElement(&m_loadPresetSearch);
     }
     for (int i = 0; i < MAX_PRESETS_PER_PAGE; ++i)
     {
@@ -6381,14 +6526,60 @@ void CPlugin::LoadRandomPreset(float fBlendTime)
             }
             else
             {
+                std::vector<int> candidatePresetIndices = allowedPresetIndices;
+                if (allowedPresetIndices.size() > 1)
+                {
+                    const size_t maxRecentToAvoid = std::min<size_t>(32, allowedPresetIndices.size() - 1);
+                    std::unordered_set<std::wstring> recentPresetNames;
+                    recentPresetNames.reserve(maxRecentToAvoid + 1);
+
+                    auto addRecentPreset = [&recentPresetNames, maxRecentToAvoid](const std::wstring& preset) {
+                        if (recentPresetNames.size() >= maxRecentToAvoid)
+                            return;
+
+                        std::wstring normalized = NormalizePresetNameForMatching(preset);
+                        if (!normalized.empty())
+                            recentPresetNames.insert(std::move(normalized));
+                    };
+
+                    if (m_szCurrentPresetFile[0])
+                        addRecentPreset(m_szCurrentPresetFile);
+
+                    if (m_presetHistoryFwdFence != m_presetHistoryBackFence)
+                    {
+                        int cursor = (m_presetHistoryFwdFence + PRESET_HIST_LEN - 1) % PRESET_HIST_LEN;
+                        while (recentPresetNames.size() < maxRecentToAvoid)
+                        {
+                            addRecentPreset(m_presetHistory[cursor]);
+                            if (cursor == m_presetHistoryBackFence)
+                                break;
+                            cursor = (cursor + PRESET_HIST_LEN - 1) % PRESET_HIST_LEN;
+                        }
+                    }
+
+                    if (!recentPresetNames.empty())
+                    {
+                        std::vector<int> nonRecentPresetIndices;
+                        nonRecentPresetIndices.reserve(allowedPresetIndices.size());
+                        for (int index : allowedPresetIndices)
+                        {
+                            if (recentPresetNames.find(NormalizePresetNameForMatching(m_presets[index].szFilename)) == recentPresetNames.end())
+                                nonRecentPresetIndices.push_back(index);
+                        }
+
+                        if (!nonRecentPresetIndices.empty())
+                            candidatePresetIndices = std::move(nonRecentPresetIndices);
+                    }
+                }
+
                 // Pick a random file.
                 float totalAllowedRating = 0.0f;
-                for (int index : allowedPresetIndices)
+                for (int index : candidatePresetIndices)
                     totalAllowedRating += m_presets[index].fRatingThis;
 
                 if (!m_bEnableRating || (totalAllowedRating < 0.1f)) //|| (m_nRatingReadProgress < m_nPresets))
                 {
-                    m_nCurrentPreset = allowedPresetIndices[warand() % allowedPresetIndices.size()];
+                    m_nCurrentPreset = candidatePresetIndices[warand() % candidatePresetIndices.size()];
                 }
                 else
                 {
@@ -6407,8 +6598,8 @@ void CPlugin::LoadRandomPreset(float fBlendTime)
                     */
 
                     float runningRating = 0.0f;
-                    m_nCurrentPreset = allowedPresetIndices.back();
-                    for (int index : allowedPresetIndices)
+                    m_nCurrentPreset = candidatePresetIndices.back();
+                    for (int index : candidatePresetIndices)
                     {
                         runningRating += m_presets[index].fRatingThis;
                         if (cdf_pos <= runningRating)
@@ -6463,7 +6654,7 @@ void CPlugin::RandomizeBlendPattern()
 
     // Note: now avoid constant uniform blend because it is half-speed for shader blending.
     //       (both old and new shaders would have to run on every pixel...)
-    int mixtype = 1 + (warand() % 3); //warand()%4;
+    int mixtype = 1 + (warand() % 7); //warand()%4;
 
     if (mixtype == 0)
     {
@@ -6569,6 +6760,115 @@ void CPlugin::RandomizeBlendPattern()
                 float t = sqrtf(dx * dx + dy * dy) * 1.41421f;
                 if (dir == -1)
                     t = 1 - t;
+
+                m_vertinfo[nVert].a = inv_band * (1 + band);
+                m_vertinfo[nVert].c = -inv_band + inv_band * t;
+                nVert++;
+            }
+        }
+    }
+    else if (mixtype == 4)
+    {
+        // Corner wipe.
+        float cornerX = (warand() % 2) ? m_fAspectX : 0.0f;
+        float cornerY = (warand() % 2) ? m_fAspectY : 0.0f;
+        float band = 0.06f + 0.22f * FRAND;
+        float inv_band = 1.0f / band;
+        float maxDist = sqrtf(m_fAspectX * m_fAspectX + m_fAspectY * m_fAspectY);
+        if (maxDist < 0.001f)
+            maxDist = 1.0f;
+
+        int nVert = 0;
+        for (int y = 0; y <= m_nGridY; y++)
+        {
+            float fy = (y / (float)m_nGridY) * m_fAspectY;
+            for (int x = 0; x <= m_nGridX; x++)
+            {
+                float fx = (x / (float)m_nGridX) * m_fAspectX;
+                float dx = fx - cornerX;
+                float dy = fy - cornerY;
+                float t = sqrtf(dx * dx + dy * dy) / maxDist;
+
+                m_vertinfo[nVert].a = inv_band * (1 + band);
+                m_vertinfo[nVert].c = -inv_band + inv_band * t;
+                nVert++;
+            }
+        }
+    }
+    else if (mixtype == 5)
+    {
+        // Checkerboard patches.
+        float band = 0.08f + 0.16f * FRAND;
+        float inv_band = 1.0f / band;
+        int cellsX = 4 + (warand() % 6);
+        int cellsY = std::max(3, (int)(cellsX * m_fAspectY / std::max(0.25f, m_fAspectX)));
+        float dir = (warand() % 2) ? 1.0f : -1.0f;
+
+        int nVert = 0;
+        for (int y = 0; y <= m_nGridY; y++)
+        {
+            float fy = y / (float)m_nGridY;
+            for (int x = 0; x <= m_nGridX; x++)
+            {
+                float fx = x / (float)m_nGridX;
+                int ix = std::min(cellsX - 1, (int)floorf(fx * cellsX));
+                int iy = std::min(cellsY - 1, (int)floorf(fy * cellsY));
+                float patchOffset = ((ix + iy) & 1) ? 0.18f : -0.18f;
+                float t = 0.5f * (fx + fy) + dir * patchOffset;
+                t = std::max(0.0f, std::min(1.0f, t));
+
+                m_vertinfo[nVert].a = inv_band * (1 + band);
+                m_vertinfo[nVert].c = -inv_band + inv_band * t;
+                nVert++;
+            }
+        }
+    }
+    else if (mixtype == 6)
+    {
+        // Spiral wipe.
+        float band = 0.05f + 0.18f * FRAND;
+        float inv_band = 1.0f / band;
+        float turns = 1.0f + 2.0f * FRAND;
+        float dir = (warand() % 2) ? 1.0f : -1.0f;
+
+        int nVert = 0;
+        for (int y = 0; y <= m_nGridY; y++)
+        {
+            float dy = (y / (float)m_nGridY - 0.5f) * m_fAspectY;
+            for (int x = 0; x <= m_nGridX; x++)
+            {
+                float dx = (x / (float)m_nGridX - 0.5f) * m_fAspectX;
+                float rad = sqrtf(dx * dx + dy * dy);
+                float ang = atan2f(dy, dx) / 6.2831853f + 0.5f;
+                float t = ang + dir * rad * turns;
+                t -= floorf(t);
+
+                m_vertinfo[nVert].a = inv_band * (1 + band);
+                m_vertinfo[nVert].c = -inv_band + inv_band * t;
+                nVert++;
+            }
+        }
+    }
+    else if (mixtype == 7)
+    {
+        // Venetian blind wipe.
+        float band = 0.06f + 0.16f * FRAND;
+        float inv_band = 1.0f / band;
+        bool vertical = (warand() % 2) != 0;
+        float stripes = 5.0f + (float)(warand() % 9);
+        float phase = FRAND * 6.2831853f;
+
+        int nVert = 0;
+        for (int y = 0; y <= m_nGridY; y++)
+        {
+            float fy = y / (float)m_nGridY;
+            for (int x = 0; x <= m_nGridX; x++)
+            {
+                float fx = x / (float)m_nGridX;
+                float axis = vertical ? fx : fy;
+                float sweep = vertical ? fy : fx;
+                float stripe = 0.5f + 0.5f * sinf(axis * stripes * 6.2831853f + phase);
+                float t = 0.65f * sweep + 0.35f * stripe;
 
                 m_vertinfo[nVert].a = inv_band * (1 + band);
                 m_vertinfo[nVert].c = -inv_band + inv_band * t;
@@ -6828,25 +7128,92 @@ void CPlugin::SetPresetListPosition(std::wstring search)
     EnterCriticalSection(&g_cs);
     auto it = std::find_if(m_presets.begin(), m_presets.end(), [&s = search](const PresetInfo& m) -> bool { return m.szFilename == s; });
     if (it != m_presets.end())
-        m_nCurrentPreset = static_cast<int>(it - m_presets.begin());
+    {
+        const int presetIndex = static_cast<int>(it - m_presets.begin());
+        m_nCurrentPreset = presetIndex;
+        m_nPresetListCurPos = presetIndex;
+    }
     LeaveCriticalSection(&g_cs);
 }
 
-void CPlugin::SeekToPreset(wchar_t cStartChar)
+void CPlugin::ClearPresetSearch()
 {
-    if (cStartChar >= L'a' && cStartChar <= L'z')
-        cStartChar -= L'a' - L'A';
+    m_presetSearchText.clear();
+    m_fPresetSearchLastInputTime = -1000.0f;
+}
 
-    for (int i = m_nDirs; i < m_nPresets; i++)
+void CPlugin::BackspacePresetSearch()
+{
+    if (m_presetSearchText.empty())
+        return;
+
+    m_presetSearchText.pop_back();
+    m_fPresetSearchLastInputTime = GetTime();
+    if (!m_presetSearchText.empty())
+        SelectPresetBySearch(m_presetSearchText, false);
+}
+
+std::wstring CPlugin::GetPresetSearchText() const
+{
+    return m_presetSearchText;
+}
+
+bool CPlugin::SelectPresetBySearch(const std::wstring& search, bool cycleFromCurrent)
+{
+    if (search.empty())
+        return false;
+
+    const int presetCount = std::min(m_nPresets, static_cast<int>(m_presets.size()));
+    if (presetCount <= 0)
+        return false;
+
+    std::wstring normalizedSearch = MakeLowercaseCopy(search);
+    for (wchar_t& ch : normalizedSearch)
     {
-        wchar_t ch = m_presets[i].szFilename.c_str()[0];
-        if (ch >= L'a' && ch <= L'z')
-            ch -= L'a' - L'A';
-        if (ch == cStartChar)
+        if (ch == L'_' || ch == L'.')
+            ch = L' ';
+    }
+    const int start = cycleFromCurrent ? std::min(std::max(0, m_nPresetListCurPos + 1), presetCount) : 0;
+
+    for (int pass = 0; pass < 2; pass++)
+    {
+        const int begin = (pass == 0) ? start : 0;
+        const int end = (pass == 0) ? presetCount : start;
+        for (int i = begin; i < end; i++)
         {
-            m_nPresetListCurPos = i;
-            return;
+            const std::wstring filename = NormalizePresetNameForSearch(m_presets[i].szFilename);
+            if (filename.find(normalizedSearch) != std::wstring::npos)
+            {
+                m_nPresetListCurPos = i;
+                return true;
+            }
         }
+    }
+
+    return false;
+}
+
+void CPlugin::SeekToPreset(wchar_t cSearchChar)
+{
+    if (!IsPresetSearchChar(cSearchChar))
+        return;
+
+    const float now = GetTime();
+    if (now - m_fPresetSearchLastInputTime > 1.5f)
+        m_presetSearchText.clear();
+
+    if (m_presetSearchText.size() < 64)
+        m_presetSearchText.push_back(cSearchChar);
+    m_fPresetSearchLastInputTime = now;
+
+    if (SelectPresetBySearch(m_presetSearchText, false))
+        return;
+
+    if (m_presetSearchText.size() == 2 &&
+        towlower(m_presetSearchText[0]) == towlower(m_presetSearchText[1]))
+    {
+        m_presetSearchText.assign(1, cSearchChar);
+        SelectPresetBySearch(m_presetSearchText, true);
     }
 }
 
@@ -7032,7 +7399,8 @@ std::wstring CPlugin::NormalizePresetBlacklistEntry(const std::wstring& presetFi
 
 std::wstring CPlugin::GetCurrentPresetFilename() const
 {
-    if (m_nCurrentPreset >= m_nDirs && m_nCurrentPreset < m_nPresets)
+    const int presetCount = std::min(m_nPresets, static_cast<int>(m_presets.size()));
+    if (m_nCurrentPreset >= m_nDirs && m_nCurrentPreset < presetCount)
         return m_presets[m_nCurrentPreset].szFilename;
 
     if (!m_szCurrentPresetFile[0])
@@ -7958,6 +8326,13 @@ void CPlugin::SavePresetAs(wchar_t* szNewFile)
 //       the slot that the to-be-deleted preset occupies!
 void CPlugin::DeletePresetFile(wchar_t* szDelFile)
 {
+    const int presetCount = std::min(m_nPresets, static_cast<int>(m_presets.size()));
+    if (m_nPresetListCurPos < 0 || m_nPresetListCurPos >= presetCount)
+    {
+        AddError(WASABI_API_LNGSTRINGW(IDS_ERROR_UNABLE_TO_DELETE_THE_FILE), 6.0f, ERR_MISC, true);
+        return;
+    }
+
     // Delete file.
     if (!DeleteFile(szDelFile))
     {
@@ -7974,7 +8349,8 @@ void CPlugin::DeletePresetFile(wchar_t* szDelFile)
         // Refresh file listing & re-select the next file after the one deleted.
         int newPos = m_nPresetListCurPos;
         UpdatePresetList(false, true);
-        m_nPresetListCurPos = std::max(0, std::min(m_nPresets - 1, newPos));
+        const int updatedPresetCount = std::min(m_nPresets, static_cast<int>(m_presets.size()));
+        m_nPresetListCurPos = (updatedPresetCount > 0) ? std::max(0, std::min(updatedPresetCount - 1, newPos)) : 0;
     }
 }
 
@@ -7982,6 +8358,15 @@ void CPlugin::DeletePresetFile(wchar_t* szDelFile)
 //       the slot that the to-be-renamed preset occupies!
 void CPlugin::RenamePresetFile(wchar_t* szOldFile, wchar_t* szNewFile)
 {
+    const int presetCount = std::min(m_nPresets, static_cast<int>(m_presets.size()));
+    if (m_nPresetListCurPos < 0 || m_nPresetListCurPos >= presetCount)
+    {
+        AddError(WASABI_API_LNGSTRINGW(IDS_ERROR_UNABLE_TO_RENAME_FILE), 6.0f, ERR_MISC, true);
+        m_UI_mode = UI_LOAD;
+        m_waitstring.bActive = false;
+        return;
+    }
+
     if (GetFileAttributes(szNewFile) != INVALID_FILE_ATTRIBUTES) // check if file already exists
     {
         // Error.
@@ -8023,7 +8408,8 @@ void CPlugin::RenamePresetFile(wchar_t* szOldFile, wchar_t* szNewFile)
             if (p)
             {
                 p++;
-                for (int i = m_nDirs; i < m_nPresets; i++)
+                const int updatedPresetCount = std::min(m_nPresets, static_cast<int>(m_presets.size()));
+                for (int i = m_nDirs; i < updatedPresetCount; i++)
                 {
                     if (wcscmp(p, m_presets[i].szFilename.c_str()) == 0)
                     {
@@ -8064,10 +8450,11 @@ void CPlugin::SetCurrentPresetRating(float fNewRating)
     m_pState->m_fRating = fNewRating;
 
     // Update the cumulative internal listing.
-    if (m_nCurrentPreset >= 0 && m_nCurrentPreset < m_nPresets) //&& m_nRatingReadProgress >= m_nCurrentPreset) // (can be -1 if dir. changed but no new preset was loaded yet)
+    const int presetCount = std::min(m_nPresets, static_cast<int>(m_presets.size()));
+    if (m_nCurrentPreset >= 0 && m_nCurrentPreset < presetCount) //&& m_nRatingReadProgress >= m_nCurrentPreset) // (can be -1 if dir. changed but no new preset was loaded yet)
     {
         m_presets[m_nCurrentPreset].fRatingThis += change;
-        for (int i = m_nCurrentPreset; i < m_nPresets; i++)
+        for (int i = m_nCurrentPreset; i < presetCount; i++)
             m_presets[i].fRatingCum += change;
     }
 

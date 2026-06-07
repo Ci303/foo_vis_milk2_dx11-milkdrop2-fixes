@@ -23,8 +23,9 @@ struct ShaderVariable
     D3D11_SHADER_TYPE_DESC Type;
     bool IsDirty;
     void* Value;
+    size_t ValueSize;
 
-    ShaderVariable() : Value(nullptr), IsDirty(false), Description{}, Type{} {}
+    ShaderVariable() : Value(nullptr), ValueSize(0), IsDirty(false), Description{}, Type{} {}
 };
 
 struct ShaderBinding

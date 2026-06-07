@@ -89,6 +89,14 @@ float supertext_status_target_height_px(int width, int height, float configured_
     const float height_limit = (std::min)(safe_height * 0.20f, 180.0f);
     return std::clamp(base_height * size_scale, min_height, (std::max)(min_height, height_limit));
 }
+
+float song_title_out_progress(float progress) noexcept
+{
+    const float fadeStart = 0.78f;
+    const float fadeLength = 1.0f - fadeStart;
+    float t = std::clamp((progress - fadeStart) / fadeLength, 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
 }
 
 // This function evaluates whether the floating-point
@@ -985,11 +993,19 @@ void CPlugin::RenderFrame(int bRedraw)
             m_fHardCutThresh = m_fHardCutLoudnessThresh * 2.0f;
         if (GetFps() > 1.0f && !m_bHardCutsDisabled && !m_bPresetLockedByUser && !m_bPresetLockedByCode && allowPresetChange)
         {
-            if (mdsound.imm_rel[0] + mdsound.imm_rel[1] + mdsound.imm_rel[2] > m_fHardCutThresh * 3.0f)
+            const float now = GetTime();
+            const float loudness = (mdsound.imm_rel[0] + mdsound.imm_rel[1] + mdsound.imm_rel[2]) * 0.33333334f;
+            const bool cooldownElapsed = (now - m_fLastHardCutTime) >= 1.0f;
+            const bool presetSettled = (now - m_fPresetStartTime) >= 0.75f;
+            const bool broadSpike = loudness > m_fHardCutThresh;
+            const bool bassBeat = mdsound.imm_rel[0] > 1.5f && loudness > 1.05f;
+            const bool trebleBeat = mdsound.imm_rel[2] > 2.9f;
+
+            if (m_nLoadingPreset == 0 && cooldownElapsed && presetSettled && (broadSpike || bassBeat || trebleBeat))
             {
-                if (m_nLoadingPreset == 0) // don't start a load if one is already underway!
-                    LoadRandomPreset(0.0f);
-                m_fHardCutThresh *= 2.0f;
+                LoadRandomPreset(0.0f);
+                m_fHardCutThresh = std::max(m_fHardCutThresh * 2.0f, loudness * 1.15f);
+                m_fLastHardCutTime = now;
             }
             else
             {
@@ -3491,7 +3507,7 @@ void CPlugin::DrawUserSprites()
             float repeatx = std::min(100.0f, std::max(0.01f, (float)(*m_texmgr.m_tex[iSlot].var_repeatx)));
             float repeaty = std::min(100.0f, std::max(0.01f, (float)(*m_texmgr.m_tex[iSlot].var_repeaty)));
 
-            int blendmode = std::min(4, std::max(0, ((int)(*m_texmgr.m_tex[iSlot].var_blendmode))));
+            int blendmode = std::min(6, std::max(0, ((int)(*m_texmgr.m_tex[iSlot].var_blendmode))));
             float r = std::min(1.0f, std::max(0.0f, ((float)(*m_texmgr.m_tex[iSlot].var_r))));
             float g = std::min(1.0f, std::max(0.0f, ((float)(*m_texmgr.m_tex[iSlot].var_g))));
             float b = std::min(1.0f, std::max(0.0f, ((float)(*m_texmgr.m_tex[iSlot].var_b))));
@@ -3594,6 +3610,8 @@ void CPlugin::DrawUserSprites()
             // 2   additive   r,g,b=modulate     a=modulate    D3DBLEND_ONE      D3DBLEND_ONE
             // 3   srccolor   r,g,b=no effect    a=no effect   SRCCOLOR          INVSRCCOLOR
             // 4   colorkey   r,g,b=modulate     a=no effect
+            // 5   multiply   r,g,b=modulate     a=modulate    ZERO              SRCCOLOR
+            // 6   screen     r,g,b=modulate     a=modulate    ONE               INVSRCCOLOR
             switch (blendmode)
             {
                 case 0:
@@ -3686,6 +3704,28 @@ void CPlugin::DrawUserSprites()
                         v3[k].r = COLOR_NORM(r);
                         v3[k].g = COLOR_NORM(g);
                         v3[k].b = COLOR_NORM(b);
+                    }
+                    break;
+                case 5:
+                    // Multiply.
+                    lpDevice->SetBlendState(true, D3D11_BLEND_ZERO, D3D11_BLEND_SRC_COLOR);
+                    for (int k = 0; k < 4; k++)
+                    {
+                        v3[k].a = 1.0f;
+                        v3[k].r = COLOR_NORM(r * a);
+                        v3[k].g = COLOR_NORM(g * a);
+                        v3[k].b = COLOR_NORM(b * a);
+                    }
+                    break;
+                case 6:
+                    // Screen.
+                    lpDevice->SetBlendState(true, D3D11_BLEND_ONE, D3D11_BLEND_INV_SRC_COLOR);
+                    for (int k = 0; k < 4; k++)
+                    {
+                        v3[k].a = 1.0f;
+                        v3[k].r = COLOR_NORM(r * a);
+                        v3[k].g = COLOR_NORM(g * a);
+                        v3[k].b = COLOR_NORM(b * a);
                     }
                     break;
             }
@@ -4536,10 +4576,13 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
 
         // Scale down over time.
         float scale = 1.01f / (std::pow(fProgress, 0.21f) + 0.01f);
+        const float outProgress = song_title_out_progress(fProgress);
+        scale *= 1.0f - 0.08f * outProgress;
         for (i = 0; i < 128; i++)
         {
             v3[i].x *= scale;
             v3[i].y *= scale;
+            v3[i].y += 0.035f * outProgress;
         }
     }
     else
@@ -4700,7 +4743,10 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
             float t;
 
             if (m_supertext.bIsSongTitle)
-                t = powf(fProgress, 0.3f) * 1.0f;
+            {
+                const float fadeOut = 1.0f - song_title_out_progress(fProgress);
+                t = powf(fProgress, 0.3f) * fadeOut;
+            }
             else
                 t = CosineInterp(std::min(1.0f, (fProgress / m_supertext.fFadeTime)));
 

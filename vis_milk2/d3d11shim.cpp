@@ -64,6 +64,9 @@ D3D11Shim::~D3D11Shim()
 
 void D3D11Shim::Initialize()
 {
+    if (!m_pDevice)
+        return;
+
     m_states = std::make_unique<CommonStates>(m_pDevice);
 
     // Note: These must match layouts in "support.h"!
@@ -134,6 +137,11 @@ void D3D11Shim::Initialize()
 bool D3D11Shim::CreateTexture(unsigned int uWidth, unsigned int uHeight, unsigned int mipLevels, UINT bindFlags, DXGI_FORMAT format,
                               ID3D11Texture2D** ppTexture, unsigned int miscFlags, D3D11_USAGE usage)
 {
+    if (!m_pDevice || !ppTexture || uWidth == 0 || uHeight == 0 || mipLevels == 0)
+        return false;
+
+    *ppTexture = nullptr;
+
     CD3D11_TEXTURE2D_DESC texDesc(format, uWidth, uHeight, 1, mipLevels, bindFlags, usage);
     texDesc.MiscFlags = miscFlags;
     if (usage == D3D11_USAGE_DYNAMIC)
@@ -147,6 +155,11 @@ bool D3D11Shim::CreateTexture(unsigned int uWidth, unsigned int uHeight, unsigne
 bool D3D11Shim::CreateVolumeTexture(unsigned int uWidth, unsigned int uHeight, unsigned int uDepth, unsigned int mipLevels, UINT bindFlags,
                                     DXGI_FORMAT format, ID3D11Texture3D** ppTexture, unsigned int miscFlags, D3D11_USAGE usage)
 {
+    if (!m_pDevice || !ppTexture || uWidth == 0 || uHeight == 0 || uDepth == 0 || mipLevels == 0)
+        return false;
+
+    *ppTexture = nullptr;
+
     CD3D11_TEXTURE3D_DESC texDesc(format, uWidth, uHeight, uDepth, mipLevels, bindFlags, usage);
     texDesc.MiscFlags = miscFlags;
     if (usage == D3D11_USAGE_DYNAMIC)
@@ -159,10 +172,19 @@ bool D3D11Shim::CreateVolumeTexture(unsigned int uWidth, unsigned int uHeight, u
 
 void D3D11Shim::DrawPrimitive(unsigned int primType, unsigned int iPrimCount, const void* pVData, unsigned int vertexStride)
 {
+    if (!m_pContext || !m_pVBuffer || !m_pInputLayout || !pVData || vertexStride == 0)
+        return;
+
+    int numVerts = NumVertsFromType(primType, iPrimCount);
+    if (numVerts <= 0)
+        return;
+
+    const unsigned int drawVerts = std::min(static_cast<unsigned int>(numVerts), MAX_VERTICES_COUNT);
+
     if (m_bCBufferIsDirty)
     {
         D3D11_MAPPED_SUBRESOURCE res{};
-        if (S_OK == m_pContext->Map(m_pCBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res))
+        if (m_pCBuffer && S_OK == m_pContext->Map(m_pCBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res))
         {
             memcpy(res.pData, &m_transforms, sizeof(cbTransforms));
             m_pContext->Unmap(m_pCBuffer, 0);
@@ -170,32 +192,49 @@ void D3D11Shim::DrawPrimitive(unsigned int primType, unsigned int iPrimCount, co
         m_bCBufferIsDirty = false;
     }
 
-    int numVerts = NumVertsFromType(primType, iPrimCount);
-    UpdateVBuffer(numVerts, pVData, vertexStride);
+    UpdateVBuffer(drawVerts, pVData, vertexStride);
 
     unsigned int offsets = 0;
     m_pContext->IASetVertexBuffers(0, 1, &m_pVBuffer, &vertexStride, &offsets);
     m_pContext->IASetInputLayout(m_pInputLayout);
     if (primType == D3D_PRIMITIVE_TOPOLOGY_TRIANGLEFAN)
     {
+        if (!m_pIFanBuffer)
+            return;
+
+        const unsigned int maxFanPrims = (MAX_VERTICES_COUNT / 6U) - 3U;
+        const unsigned int fanPrims = std::min(iPrimCount, maxFanPrims);
+        if (fanPrims == 0)
+            return;
+
         m_pContext->IASetIndexBuffer(m_pIFanBuffer, DXGI_FORMAT_R16_UINT, 0);
         m_pContext->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        m_pContext->DrawIndexed(iPrimCount * 3, 0, 0);
+        m_pContext->DrawIndexed(fanPrims * 3, 0, 0);
     }
     else
     {
         m_pContext->IASetPrimitiveTopology(static_cast<D3D_PRIMITIVE_TOPOLOGY>(primType));
-        m_pContext->Draw(numVerts, 0);
+        m_pContext->Draw(drawVerts, 0);
     }
 }
 
 void D3D11Shim::DrawIndexedPrimitive(unsigned int primType, unsigned int uStartVertex, unsigned int iNumVertices, unsigned int iPrimCount,
                                      const void* pIData, const void* pVData, unsigned int vertexStride)
 {
+    if (!m_pContext || !m_pVBuffer || !m_pIBuffer || !m_pInputLayout || !pIData || !pVData || vertexStride == 0)
+        return;
+
+    int numIndices = NumVertsFromType(primType, iPrimCount);
+    if (numIndices <= 0 || iNumVertices == 0)
+        return;
+
+    const unsigned int drawVertices = std::min(iNumVertices, MAX_VERTICES_COUNT);
+    const unsigned int drawIndices = std::min(static_cast<unsigned int>(numIndices), MAX_INDICES_COUNT);
+
     if (m_bCBufferIsDirty)
     {
         D3D11_MAPPED_SUBRESOURCE res;
-        if (SUCCEEDED(m_pContext->Map(m_pCBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res)))
+        if (m_pCBuffer && SUCCEEDED(m_pContext->Map(m_pCBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res)))
         {
             memcpy(res.pData, &m_transforms, sizeof(cbTransforms));
             m_pContext->Unmap(m_pCBuffer, 0);
@@ -203,20 +242,24 @@ void D3D11Shim::DrawIndexedPrimitive(unsigned int primType, unsigned int uStartV
         m_bCBufferIsDirty = false;
     }
 
-    int numIndices = NumVertsFromType(primType, iPrimCount);
-    UpdateVBuffer(iNumVertices, pVData, vertexStride);
-    UpdateIBuffer(numIndices, pIData);
+    UpdateVBuffer(drawVertices, pVData, vertexStride);
+    UpdateIBuffer(drawIndices, pIData);
 
     unsigned int offsets = 0;
     m_pContext->IASetVertexBuffers(0, 1, &m_pVBuffer, &vertexStride, &offsets);
     m_pContext->IASetIndexBuffer(m_pIBuffer, DXGI_FORMAT_R16_UINT, 0);
     m_pContext->IASetInputLayout(m_pInputLayout);
     m_pContext->IASetPrimitiveTopology((D3D_PRIMITIVE_TOPOLOGY)primType);
-    m_pContext->DrawIndexed(numIndices, 0, uStartVertex);
+    m_pContext->DrawIndexed(drawIndices, 0, uStartVertex);
 }
 
 void D3D11Shim::GetRenderTarget(ID3D11Texture2D** ppTexture)
 {
+    if (!m_pContext || !ppTexture)
+        return;
+
+    *ppTexture = nullptr;
+
     ID3D11RenderTargetView* pRTView = NULL;
     ID3D11Resource* pResource = NULL;
 
@@ -232,17 +275,26 @@ void D3D11Shim::GetRenderTarget(ID3D11Texture2D** ppTexture)
 
 void D3D11Shim::GetDepthView(ID3D11DepthStencilView** ppView)
 {
+    if (!m_pContext || !ppView)
+        return;
+
     m_pContext->OMGetRenderTargets(0, nullptr, ppView);
 }
 
 void D3D11Shim::GetViewport(D3D11_VIEWPORT* vp)
 {
+    if (!m_pContext || !vp)
+        return;
+
     unsigned int numVP = 1;
     m_pContext->RSGetViewports(&numVP, vp);
 }
 
 void D3D11Shim::SetBlendState(bool bEnable, D3D11_BLEND srcBlend, D3D11_BLEND destBlend)
 {
+    if (!m_pDevice || !m_pContext)
+        return;
+
     if (m_pState)
     {
         m_pState->Release();
@@ -279,6 +331,9 @@ void D3D11Shim::SetBlendState(bool bEnable, D3D11_BLEND srcBlend, D3D11_BLEND de
 
 void D3D11Shim::SetDepth(bool bEnabled)
 {
+    if (!m_pContext || !m_states)
+        return;
+
     ID3D11DepthStencilState* pState = bEnabled ? m_states->DepthDefault() : m_states->DepthNone();
     if (pState)
         m_pContext->OMSetDepthStencilState(pState, 0);
@@ -286,6 +341,9 @@ void D3D11Shim::SetDepth(bool bEnabled)
 
 void D3D11Shim::SetRasterizerState(D3D11_CULL_MODE cullMode, D3D11_FILL_MODE fillMode)
 {
+    if (!m_pContext || !m_states)
+        return;
+
     ID3D11RasterizerState* pState = nullptr;
 
     if (fillMode == D3D11_FILL_SOLID)
@@ -309,6 +367,9 @@ void D3D11Shim::SetRasterizerState(D3D11_CULL_MODE cullMode, D3D11_FILL_MODE fil
 
 void D3D11Shim::SetRenderTarget(ID3D11Texture2D* pTexture, ID3D11DepthStencilView** ppView)
 {
+    if (!m_pDevice || !m_pContext)
+        return;
+
     ID3D11RenderTargetView* pRTView = nullptr;
     ID3D11DepthStencilView* pDSView = nullptr;
 
@@ -324,7 +385,11 @@ void D3D11Shim::SetRenderTarget(ID3D11Texture2D* pTexture, ID3D11DepthStencilVie
         CD3D11_RENDER_TARGET_VIEW_DESC rtvDesc(pTexture, D3D11_RTV_DIMENSION_TEXTURE2D);
         m_pDevice->CreateRenderTargetView(pTexture, &rtvDesc, &pRTView);
         if (!pRTView)
+        {
+            if (!ppView)
+                SafeRelease(pDSView);
             return;
+        }
         CD3D11_VIEWPORT vp(pTexture, pRTView);
         m_pContext->RSSetViewports(1, &vp);
     }
@@ -338,6 +403,9 @@ void D3D11Shim::SetRenderTarget(ID3D11Texture2D* pTexture, ID3D11DepthStencilVie
 
 void D3D11Shim::SetSamplerState(UINT uSlot, D3D11_FILTER filter, D3D11_TEXTURE_ADDRESS_MODE addressMode)
 {
+    if (!m_pContext || !m_states)
+        return;
+
     ID3D11SamplerState* pState = nullptr;
     if (addressMode == D3D11_TEXTURE_ADDRESS_WRAP)
     {
@@ -364,6 +432,9 @@ void D3D11Shim::SetSamplerState(UINT uSlot, D3D11_FILTER filter, D3D11_TEXTURE_A
 
 void D3D11Shim::SetShader(unsigned int iIndex)
 {
+    if (!m_pContext)
+        return;
+
     m_pContext->VSSetShader(m_pVShader, NULL, 0);
     m_pContext->VSSetConstantBuffers(0, 1, &m_pCBuffer);
 
@@ -376,8 +447,11 @@ void D3D11Shim::SetShader(unsigned int iIndex)
 
 void D3D11Shim::SetTexture(unsigned int iSlot, ID3D11Resource* pResource)
 {
+    if (!m_pContext)
+        return;
+
     ID3D11ShaderResourceView* views[1] = {NULL};
-    if (pResource)
+    if (m_pDevice && pResource)
     {
         D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
         D3D11_RESOURCE_DIMENSION dim{};
@@ -393,7 +467,8 @@ void D3D11Shim::SetTexture(unsigned int iSlot, ID3D11Resource* pResource)
             CD3D11_SHADER_RESOURCE_VIEW_DESC srvDesc1(reinterpret_cast<ID3D11Texture3D*>(pResource));
             srvDesc = srvDesc1;
         }
-        m_pDevice->CreateShaderResourceView(pResource, &srvDesc, &views[0]);
+        if (dim == D3D11_RESOURCE_DIMENSION_TEXTURE2D || dim == D3D11_RESOURCE_DIMENSION_TEXTURE3D)
+            m_pDevice->CreateShaderResourceView(pResource, &srvDesc, &views[0]);
     }
 
     m_pContext->PSSetShaderResources(iSlot, 1, views);
@@ -404,6 +479,9 @@ void D3D11Shim::SetTexture(unsigned int iSlot, ID3D11Resource* pResource)
 
 void D3D11Shim::SetTransform(unsigned int transType, DirectX::XMMATRIX* pMatrix)
 {
+    if (!pMatrix)
+        return;
+
     if (transType == 2) // view
         XMStoreFloat4x4(&m_transforms.view, XMMatrixTranspose(*pMatrix));
     else if (transType == 3) // projection
@@ -416,6 +494,9 @@ void D3D11Shim::SetTransform(unsigned int transType, DirectX::XMMATRIX* pMatrix)
 
 void D3D11Shim::SetVertexColor(bool bUseColor)
 {
+    if (!m_pContext)
+        return;
+
     if (!bUseColor)
         m_pContext->PSSetShader(m_pPShader[m_uCurrShader], NULL, 0);
     else
@@ -425,6 +506,9 @@ void D3D11Shim::SetVertexColor(bool bUseColor)
 HRESULT D3D11Shim::CreateVertexShader(const void* pByteCode, SIZE_T codeLength, ID3D11VertexShader** ppShader,
                                       CConstantTable* p_constant_table)
 {
+    if (!m_pDevice || !pByteCode || codeLength == 0 || !ppShader || !p_constant_table)
+        return E_INVALIDARG;
+
     if (!p_constant_table->GrabShaderData(m_pDevice))
         return S_FALSE;
     return m_pDevice->CreateVertexShader(pByteCode, codeLength, NULL, ppShader);
@@ -433,6 +517,9 @@ HRESULT D3D11Shim::CreateVertexShader(const void* pByteCode, SIZE_T codeLength, 
 HRESULT D3D11Shim::CreatePixelShader(const void* pByteCode, SIZE_T codeLength, ID3D11PixelShader** ppShader,
                                      CConstantTable* p_constant_table)
 {
+    if (!m_pDevice || !pByteCode || codeLength == 0 || !ppShader || !p_constant_table)
+        return E_INVALIDARG;
+
     if (!p_constant_table->GrabShaderData(m_pDevice))
         return S_FALSE;
     return m_pDevice->CreatePixelShader(pByteCode, codeLength, NULL, ppShader);
@@ -440,6 +527,9 @@ HRESULT D3D11Shim::CreatePixelShader(const void* pByteCode, SIZE_T codeLength, I
 
 void D3D11Shim::SetVertexShader(ID3D11VertexShader* pVShader, CConstantTable* pTable)
 {
+    if (!m_pContext)
+        return;
+
     if (pTable)
     {
         pTable->ApplyChanges(m_pContext);
@@ -453,6 +543,9 @@ void D3D11Shim::SetVertexShader(ID3D11VertexShader* pVShader, CConstantTable* pT
 
 void D3D11Shim::SetPixelShader(ID3D11PixelShader* pPShader, CConstantTable* pTable)
 {
+    if (!m_pContext)
+        return;
+
     if (pTable)
     {
         pTable->ApplyChanges(m_pContext);
@@ -466,26 +559,34 @@ void D3D11Shim::SetPixelShader(ID3D11PixelShader* pPShader, CConstantTable* pTab
 
 void D3D11Shim::ClearRenderTarget(ID3D11Texture2D* pRTTexture, const float color[4])
 {
+    if (!m_pDevice || !m_pContext || !pRTTexture || !color)
+        return;
+
     ID3D11RenderTargetView* pRTView = nullptr;
-    if (pRTTexture)
-    {
-        CD3D11_RENDER_TARGET_VIEW_DESC rtvDesc(pRTTexture, D3D11_RTV_DIMENSION_TEXTURE2D);
-        m_pDevice->CreateRenderTargetView(pRTTexture, &rtvDesc, &pRTView);
-        if (!pRTView)
-            return;
-        m_pContext->ClearRenderTargetView(pRTView, color);
-    }
+    CD3D11_RENDER_TARGET_VIEW_DESC rtvDesc(pRTTexture, D3D11_RTV_DIMENSION_TEXTURE2D);
+    m_pDevice->CreateRenderTargetView(pRTTexture, &rtvDesc, &pRTView);
+    if (!pRTView)
+        return;
+    m_pContext->ClearRenderTargetView(pRTView, color);
     if (pRTView)
         pRTView->Release();
 }
 
 void D3D11Shim::CopyResource(ID3D11Resource* pDstResource, ID3D11Resource* pSrcResource)
 {
+    if (!m_pImmContext || !pDstResource || !pSrcResource)
+        return;
+
     m_pImmContext->CopyResource(pDstResource, pSrcResource);
 }
 
 HRESULT D3D11Shim::CreateTextureFromFile(LPCWSTR szFileName, ID3D11Resource** texture)
 {
+    if (!m_pDevice || !szFileName || !texture)
+        return E_INVALIDARG;
+
+    *texture = nullptr;
+
     //char* u8FileName = _WideToUTF8(szFileName);
     std::wstring strFileName(szFileName);
     //delete[] u8FileName;
@@ -497,6 +598,11 @@ HRESULT D3D11Shim::CreateTextureFromFile(LPCWSTR szFileName, ID3D11Resource** te
 
 HRESULT D3D11Shim::CreateTextureFromMemory(const uint8_t* data, size_t dataSize, ID3D11Resource** texture, UINT type)
 {
+    if (!m_pDevice || !data || dataSize == 0 || !texture)
+        return E_INVALIDARG;
+
+    *texture = nullptr;
+
     if (type == 0)
         return CreateDDSTextureFromMemory(m_pDevice, data, dataSize, texture, reinterpret_cast<ID3D11ShaderResourceView**>(NULL)); // or `ThrowIfFailed()`
     else
@@ -505,12 +611,18 @@ HRESULT D3D11Shim::CreateTextureFromMemory(const uint8_t* data, size_t dataSize,
 
 bool D3D11Shim::LockRect(ID3D11Resource* pResource, UINT uSubRes, D3D11_MAP mapType, D3D11_MAPPED_SUBRESOURCE* res)
 {
+    if (!m_pImmContext || !pResource || !res)
+        return false;
+
     HRESULT hr = m_pImmContext->Map(pResource, uSubRes, mapType, 0, res);
     return (S_OK == hr);
 }
 
 void D3D11Shim::UnlockRect(ID3D11Resource* pResource, UINT uSubRes)
 {
+    if (!m_pImmContext || !pResource)
+        return;
+
     m_pImmContext->Unmap(pResource, uSubRes);
 }
 
@@ -536,6 +648,9 @@ int D3D11Shim::NumVertsFromType(unsigned int primType, int iPrimCount)
 
 void D3D11Shim::UpdateVBuffer(unsigned int iNumVerts, const void* pVData, unsigned int vertexStride)
 {
+    if (!m_pContext || !m_pVBuffer || !pVData || iNumVerts == 0 || vertexStride == 0 || vertexStride > sizeof(MDVERTEX))
+        return;
+
     D3D11_MAPPED_SUBRESOURCE res;
     if (S_OK == m_pContext->Map(m_pVBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res))
     {
@@ -546,6 +661,9 @@ void D3D11Shim::UpdateVBuffer(unsigned int iNumVerts, const void* pVData, unsign
 
 void D3D11Shim::UpdateIBuffer(unsigned int iNumIndices, const void* pIData)
 {
+    if (!m_pContext || !m_pIBuffer || !pIData || iNumIndices == 0)
+        return;
+
     D3D11_MAPPED_SUBRESOURCE res;
     if (S_OK == m_pContext->Map(m_pIBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res))
     {

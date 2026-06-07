@@ -41,6 +41,10 @@ This branch already includes the upstream DirectX 11 foobar2000 port. Recent mai
 - Safer startup preset handling so the component remembers the last working preset instead of repeatedly restoring a broken one.
 - Improved startup handling for presets that require shader fallback.
 - Safer text-editor handling for preset, wave, and shape code editing.
+- Random automatic preset selection avoids recently played presets when the current folder has enough alternatives.
+- The in-visualisation load menu supports substring searching; type several characters from anywhere in a preset or folder name to jump to it, and use Backspace to edit the search.
+- Enabled hard cuts use bass/treble beat checks with a short cooldown to reduce repeated triggering on one spike.
+- Soft preset blends include additional wipe patterns inspired by newer MilkDrop variants while keeping the original blend pipeline.
 - Render-lock hardening around album-art updates, blacklist preset replacement, and play/pause overlay launching.
 - Persistent preset blacklist support, including `Never Show Again`, blacklist manager editing, and import/export.
 - Persistent shader bytecode and preset scan caches reduce repeat preset load and large preset folder scan cost.
@@ -71,7 +75,7 @@ This branch already includes the upstream DirectX 11 foobar2000 port. Recent mai
 - The easiest install path is the GitHub Releases page for this repository.
 - Current public packages are x64 builds intended for foobar2000 v2 x64.
 - Download [foobar2000](https://www.foobar2000.org/download) and install it.
-- Close foobar2000, then run the release installer named like `foo_vis_milk2-0.2.1.35-installer.exe`. It installs the x64 component, shader data, recommended preset packs, textures, repaired preset additions, and an optional starter layout template into the foobar2000 v2 profile.
+- Close foobar2000, then run the release installer named like `foo_vis_milk2-0.2.1.36-installer.exe`. It installs the x64 component, shader data, recommended preset packs, textures, repaired preset additions, and an optional starter layout template into the foobar2000 v2 profile.
 - If foobar2000 x64 is not installed, the installer explains that foobar2000 is required, opens the official foobar2000 download page, and exits. Install foobar2000 v2 x64 first, close it, then run the MilkDrop installer again.
 - Restart foobar2000 after the component is installed.
 
@@ -141,6 +145,16 @@ FPS behaviour is host-paced:
 
 If those files are blank or missing, normal playback still works. They are only used for the optional custom message and sprite features.
 
+Sprite `blendmode` values in `milk2_img.ini` are:
+
+- `0`: alpha blend
+- `1`: decal
+- `2`: additive
+- `3`: source-colour blend
+- `4`: colour-keyed alpha
+- `5`: multiply
+- `6`: screen
+
 ### 6. Useful runtime shortcuts
 
 - `F1`: show help
@@ -149,8 +163,10 @@ If those files are blank or missing, normal playback still works. They are only 
 - `F4`: preset name
 - `F5`: frames per second
 - `F6`: preset rating
-- `Space` / `H`: soft cut or hard cut to the next preset
+- `H`: hard cut to the next preset
+- `Space`: play/pause in normal visualisation mode
 - `Backspace`: previous preset
+- In the preset load menu, type part of a preset or folder name to search; Backspace edits the search and Enter loads the highlighted item.
 - `Alt+Enter`: toggle fullscreen
 - Right click: show MilkDrop context menu, including pop-out window and blacklist commands
 

@@ -17,7 +17,8 @@
 //
 // PRESET LOADING
 //   BACKSPACE: return to previous preset
-//   SPACE / H: instant hard cut (to next preset)
+//   H: instant hard cut (to next preset)
+//   SPACE: play/pause in normal visualisation mode; select in the preset load menu
 //   R: toggle random (vs. sequential) preset traversal
 //   L: load a specific preset (invokes the 'Load' menu)
 //   + / -: rate current preset (better / worse)
@@ -144,6 +145,57 @@
 #else
 #define RemoveText g_plugin.ClearText
 #endif
+
+namespace
+{
+int GetPresetListCount()
+{
+    return std::min(g_plugin.m_nPresets, static_cast<int>(g_plugin.m_presets.size()));
+}
+
+bool ClampLoadPresetSelection()
+{
+    const int presetCount = GetPresetListCount();
+    if (presetCount <= 0)
+        return false;
+
+    if (g_plugin.m_nPresetListCurPos < 0)
+        g_plugin.m_nPresetListCurPos = 0;
+    else if (g_plugin.m_nPresetListCurPos >= presetCount)
+        g_plugin.m_nPresetListCurPos = presetCount - 1;
+
+    return true;
+}
+
+bool ClampMashupPresetSelection()
+{
+    const int presetCount = GetPresetListCount();
+    if (g_plugin.m_nDirs < 0 || presetCount <= g_plugin.m_nDirs || g_plugin.m_nMashSlot >= MASH_SLOTS)
+        return false;
+
+    for (int mash = 0; mash < MASH_SLOTS; mash++)
+    {
+        if (g_plugin.m_nMashPreset[mash] < g_plugin.m_nDirs)
+            g_plugin.m_nMashPreset[mash] = g_plugin.m_nDirs;
+        else if (g_plugin.m_nMashPreset[mash] >= presetCount)
+            g_plugin.m_nMashPreset[mash] = presetCount - 1;
+    }
+
+    return true;
+}
+
+int PickRandomMashupPreset()
+{
+    if (!ClampMashupPresetSelection())
+        return -1;
+
+    const int availablePresets = GetPresetListCount() - g_plugin.m_nDirs;
+    if (availablePresets <= 0)
+        return -1;
+
+    return g_plugin.m_nDirs + (warand() % availablePresets);
+}
+}
 
 void milk2_ui_element::OnChar(TCHAR chChar, UINT nRepCnt, UINT nFlags)
 {
@@ -341,7 +393,7 @@ void milk2_ui_element::OnChar(TCHAR chChar, UINT nRepCnt, UINT nFlags)
     }
     else if (UI_mode == UI_LOAD_DEL) // waiting to confirm file delete
     {
-        if (chChar == 'y' || chChar == 'Y')
+        if ((chChar == 'y' || chChar == 'Y') && ClampLoadPresetSelection())
         {
             // First add pathname to filename.
             wchar_t szDelFile[512] = {0};
@@ -468,7 +520,9 @@ void milk2_ui_element::OnChar(TCHAR chChar, UINT nRepCnt, UINT nFlags)
         }
         return;
     }
-    else if (UI_mode == UI_LOAD && ((chChar >= 'A' && chChar <= 'Z') || (chChar >= 'a' && chChar <= 'z')))
+    else if (UI_mode == UI_LOAD && ((chChar >= 'A' && chChar <= 'Z') || (chChar >= 'a' && chChar <= 'z') ||
+                                    (chChar >= '0' && chChar <= '9') || chChar == '-' || chChar == '_' ||
+                                    chChar == '.' || chChar == '(' || chChar == ')' || chChar == '[' || chChar == ']'))
     {
         g_plugin.SeekToPreset(chChar);
         return;
@@ -759,11 +813,13 @@ void milk2_ui_element::OnChar(TCHAR chChar, UINT nRepCnt, UINT nFlags)
                 // Load preset.
                 if (UI_mode == UI_LOAD)
                 {
+                    g_plugin.ClearPresetSearch();
                     UI_mode = UI_REGULAR;
                 }
                 else if (UI_mode == UI_REGULAR || UI_mode == UI_MENU)
                 {
                     g_plugin.UpdatePresetList(); // make sure list is completely ready
+                    g_plugin.ClearPresetSearch();
                     UI_mode = UI_LOAD;
                     g_plugin.m_bUserPagedUp = false;
                     g_plugin.m_bUserPagedDown = false;
@@ -835,16 +891,23 @@ void milk2_ui_element::OnChar(TCHAR chChar, UINT nRepCnt, UINT nFlags)
                 {
                     if (chChar == 'h')
                     {
-                        g_plugin.m_nMashPreset[g_plugin.m_nMashSlot] =
-                            g_plugin.m_nDirs + (warand() % (g_plugin.m_nPresets - g_plugin.m_nDirs));
-                        g_plugin.m_nLastMashChangeFrame[g_plugin.m_nMashSlot] = static_cast<int>(g_plugin.GetFrame()) + MASH_APPLY_DELAY_FRAMES; // causes instant apply
+                        const int randomPreset = PickRandomMashupPreset();
+                        if (randomPreset >= 0)
+                        {
+                            g_plugin.m_nMashPreset[g_plugin.m_nMashSlot] = randomPreset;
+                            g_plugin.m_nLastMashChangeFrame[g_plugin.m_nMashSlot] = static_cast<int>(g_plugin.GetFrame()) + MASH_APPLY_DELAY_FRAMES; // causes instant apply
+                        }
                     }
                     else
                     {
                         for (int mash = 0; mash < MASH_SLOTS; mash++)
                         {
-                            g_plugin.m_nMashPreset[mash] = g_plugin.m_nDirs + (warand() % (g_plugin.m_nPresets - g_plugin.m_nDirs));
-                            g_plugin.m_nLastMashChangeFrame[mash] = static_cast<int>(g_plugin.GetFrame()) + MASH_APPLY_DELAY_FRAMES; // causes instant apply
+                            const int randomPreset = PickRandomMashupPreset();
+                            if (randomPreset >= 0)
+                            {
+                                g_plugin.m_nMashPreset[mash] = randomPreset;
+                                g_plugin.m_nLastMashChangeFrame[mash] = static_cast<int>(g_plugin.GetFrame()) + MASH_APPLY_DELAY_FRAMES; // causes instant apply
+                            }
                         }
                     }
                 }
@@ -869,6 +932,19 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
     bool bShiftHeldDown = (GetKeyState(VK_SHIFT) & mask) != 0; // or "< 0" without masking
     bool bCtrlHeldDown = (GetKeyState(VK_CONTROL) & mask) != 0; // or "< 0" without masking
     //bool bAltHeldDown: most keys come in under WM_SYSKEYDOWN when ALT is depressed.
+
+    if (UI_mode == UI_LOAD && !ClampLoadPresetSelection())
+    {
+        UI_mode = UI_REGULAR;
+        RemoveText();
+        return;
+    }
+    if (UI_mode == UI_MASHUP && !ClampMashupPresetSelection())
+    {
+        UI_mode = UI_REGULAR;
+        RemoveText();
+        return;
+    }
 
     if (g_plugin.m_show_playlist) // in playlist mode
     {
@@ -1176,6 +1252,14 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                 case VK_RETURN:
                     if (UI_mode == UI_LOAD_RENAME) // rename (move) the file
                     {
+                        if (!ClampLoadPresetSelection())
+                        {
+                            UI_mode = UI_LOAD;
+                            waitstring.bActive = false;
+                            RemoveText();
+                            return;
+                        }
+
                         // First add pathnames to filenames.
                         wchar_t szOldFile[512];
                         wchar_t szNewFile[512];
@@ -1399,6 +1483,7 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                     // from the Load menu, so instead, exit the menu.
                     if (nChar == VK_LEFT)
                     {
+                        g_plugin.ClearPresetSearch();
                         UI_mode = UI_REGULAR;
                         RemoveText();
                     }
@@ -1423,6 +1508,8 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
             case VK_ESCAPE:
                 if (UI_mode == UI_LOAD || UI_mode == UI_MENU || UI_mode == UI_MASHUP)
                 {
+                    if (UI_mode == UI_LOAD)
+                        g_plugin.ClearPresetSearch();
                     UI_mode = UI_REGULAR;
                     RemoveText();
                 }
@@ -1490,8 +1577,9 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                 }
                 else if (UI_mode == UI_LOAD)
                 {
+                    const int presetCount = GetPresetListCount();
                     for (UINT rep = 0; rep < nRepCnt; rep++)
-                        if (g_plugin.m_nPresetListCurPos < g_plugin.m_nPresets - 1)
+                        if (g_plugin.m_nPresetListCurPos < presetCount - 1)
                             g_plugin.m_nPresetListCurPos++;
 
                     // Remember this preset's name so the next time they hit 'L' it jumps straight to it.
@@ -1537,7 +1625,7 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
             case VK_END:
                 if (UI_mode == UI_LOAD)
                 {
-                    g_plugin.m_nPresetListCurPos = g_plugin.m_nPresets - 1;
+                    g_plugin.m_nPresetListCurPos = GetPresetListCount() - 1;
                 }
                 else if (UI_mode == UI_MASHUP)
                 {
@@ -1669,6 +1757,7 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                         //wcscpy_s(s_config.settings.m_szPresetDir, g_plugin.GetPresetDir());
 
                         g_plugin.UpdatePresetList(false, true, false);
+                        g_plugin.ClearPresetSearch();
 
                         // Set current preset index to -1 because current preset is no longer in the list.
                         g_plugin.m_nCurrentPreset = -1;
@@ -1689,6 +1778,11 @@ void milk2_ui_element::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
                 }
                 return;
             case VK_BACK:
+                if (UI_mode == UI_LOAD)
+                {
+                    g_plugin.BackspacePresetSearch();
+                    return;
+                }
                 PrevPreset(0.0f);
                 g_plugin.m_fHardCutThresh *= 2.0f; // make it a little less likely that a random hard cut follows soon.
                 return;

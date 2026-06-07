@@ -12,6 +12,9 @@ using namespace DirectX;
 
 bool ShaderConstantBuffer::Create(ID3D11Device* pDevice)
 {
+    if (!pDevice || Description.Size == 0)
+        return false;
+
     CD3D11_BUFFER_DESC desc(Description.Size, D3D11_BIND_CONSTANT_BUFFER, D3D11_USAGE_DYNAMIC, D3D11_CPU_ACCESS_WRITE);
     if (FAILED(pDevice->CreateBuffer(&desc, nullptr, &Data)))
         return false;
@@ -49,14 +52,14 @@ CConstantTable::~CConstantTable()
     {
         SafeRelease(m_ConstantBuffers[i].Data);
         for (size_t j = 0; j < m_ConstantBuffers[i].Variables.size(); j++)
-            delete[] m_ConstantBuffers[i].Variables[j].Value;
+            delete[] static_cast<unsigned char*>(m_ConstantBuffers[i].Variables[j].Value);
     }
     m_ConstantBuffers.clear();
 }
 
 bool CConstantTable::GrabShaderData(ID3D11Device* pDevice)
 {
-    if (m_pReflection == nullptr)
+    if (m_pReflection == nullptr || !pDevice)
         return false;
 
     m_pReflection->GetDesc(&ShaderDesc);
@@ -66,6 +69,8 @@ bool CConstantTable::GrabShaderData(ID3D11Device* pDevice)
     {
         ShaderConstantBuffer constantBuffer;
         ID3D11ShaderReflectionConstantBuffer* buffer = m_pReflection->GetConstantBufferByIndex(i);
+        if (!buffer)
+            return false;
 
         if (FAILED(buffer->GetDesc(&constantBuffer.Description)))
             return false;
@@ -75,10 +80,16 @@ bool CConstantTable::GrabShaderData(ID3D11Device* pDevice)
             ShaderVariable shaderVariable;
 
             ID3D11ShaderReflectionVariable* variable = buffer->GetVariableByIndex(v);
+            if (!variable)
+                return false;
+
             if (FAILED(variable->GetDesc(&shaderVariable.Description)))
                 return false;
 
             ID3D11ShaderReflectionType* type = variable->GetType();
+            if (!type)
+                return false;
+
             if (FAILED(type->GetDesc(&shaderVariable.Type)))
                 return false;
 
@@ -112,6 +123,9 @@ size_t CConstantTable::GetVariablesCount()
 
 void CConstantTable::GetBuffers(ID3D11Buffer** ppBuffers)
 {
+    if (!ppBuffers)
+        return;
+
     for (size_t i = 0; i < m_ConstantBuffers.size(); ++i)
     {
         ppBuffers[i] = m_ConstantBuffers[i].Data;
@@ -122,7 +136,7 @@ int CConstantTable::GetTextureSlot(std::string& strName)
 {
     for (auto binding : m_Bindings)
     {
-        if (binding.Description.Type == D3D_SIT_TEXTURE && binding.Description.Name == strName)
+        if (binding.Description.Type == D3D_SIT_TEXTURE && binding.Description.Name && binding.Description.Name == strName)
             return binding.Description.BindPoint;
     }
 
@@ -135,32 +149,53 @@ ShaderVariable* CConstantTable::GetVariableByName(std::string& strName)
     {
         for (size_t j = 0; j < m_ConstantBuffers[i].Variables.size(); j++)
         {
-            if (m_ConstantBuffers[i].Variables[j].Description.Name == strName)
+            if (m_ConstantBuffers[i].Variables[j].Description.Name && m_ConstantBuffers[i].Variables[j].Description.Name == strName)
                 return &m_ConstantBuffers[i].Variables[j];
         }
     }
     return nullptr;
 }
 
+static bool StoreVariableValue(ShaderVariable* variable, const void* source, size_t sourceSize)
+{
+    if (!variable || !source || variable->Description.Size == 0)
+        return false;
+
+    const size_t destinationSize = variable->Description.Size;
+    if (!variable->Value || variable->ValueSize != destinationSize)
+    {
+        delete[] static_cast<unsigned char*>(variable->Value);
+        variable->Value = new (std::nothrow) unsigned char[destinationSize];
+        variable->ValueSize = variable->Value ? destinationSize : 0;
+    }
+
+    if (!variable->Value)
+        return false;
+
+    memset(variable->Value, 0, destinationSize);
+    memcpy(variable->Value, source, std::min(destinationSize, sourceSize));
+    variable->IsDirty = true;
+    return true;
+}
+
 bool CConstantTable::SetVector(LPCSTR handle, XMFLOAT4* vector)
 {
+    if (!handle || !vector)
+        return false;
+
     std::string strName(handle);
     ShaderVariable* variable = GetVariableByName(strName);
     if (variable && variable->Type.Class == D3D_SVC_VECTOR)
-    {
-        if (!variable->Value)
-            variable->Value = new float[4];
-        memcpy(variable->Value, vector, variable->Description.Size);
-        variable->IsDirty = true;
-
-        return true;
-    }
+        return StoreVariableValue(variable, vector, sizeof(*vector));
 
     return false;
 }
 
 bool CConstantTable::SetMatrix(LPCSTR handle, XMMATRIX* matrix)
 {
+    if (!handle || !matrix)
+        return false;
+
     std::string strName(handle);
     ShaderVariable* variable = GetVariableByName(strName);
     if (variable && variable->Type.Class == D3D_SVC_MATRIX_COLUMNS)
@@ -169,12 +204,7 @@ bool CConstantTable::SetMatrix(LPCSTR handle, XMMATRIX* matrix)
         XMFLOAT4X3 floats;
         XMStoreFloat4x3(&floats, colums);
 
-        if (!variable->Value)
-            variable->Value = new float[4][3];
-        memcpy(variable->Value, floats.m, variable->Description.Size);
-        variable->IsDirty = true;
-
-        return true;
+        return StoreVariableValue(variable, floats.m, sizeof(floats.m));
     }
 
     return false;
@@ -182,6 +212,9 @@ bool CConstantTable::SetMatrix(LPCSTR handle, XMMATRIX* matrix)
 
 bool CConstantTable::ApplyChanges(ID3D11DeviceContext* pContext)
 {
+    if (!pContext)
+        return false;
+
     bool applied = false;
     for (size_t i = 0; i < m_ConstantBuffers.size(); i++)
     {
@@ -197,9 +230,15 @@ bool CConstantTable::ApplyChanges(ID3D11DeviceContext* pContext)
             ShaderVariable* var = &m_ConstantBuffers[i].Variables[j];
             if (var->IsDirty && var->Value)
             {
-                memcpy(static_cast<unsigned char*>(res.pData) + var->Description.StartOffset, var->Value, var->Description.Size);
+                const size_t startOffset = var->Description.StartOffset;
+                const size_t dataSize = var->Description.Size;
+                const size_t bufferSize = m_ConstantBuffers[i].Description.Size;
+                if (dataSize <= var->ValueSize && startOffset <= bufferSize && dataSize <= bufferSize - startOffset)
+                {
+                    memcpy(static_cast<unsigned char*>(res.pData) + startOffset, var->Value, dataSize);
+                    applied = true;
+                }
                 var->IsDirty = false;
-                applied = true;
             }
         }
 
