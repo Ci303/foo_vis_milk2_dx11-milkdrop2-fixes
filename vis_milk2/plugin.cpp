@@ -8967,31 +8967,8 @@ void CPlugin::LaunchCustomMessage(int nMsgNum)
     m_supertext.fStartTime = GetTime();
 }
 
-void CPlugin::LaunchSongTitleAnim(bool refreshCurrentTitle)
+void CPlugin::ChooseSupertextTransitionStyles()
 {
-    if (refreshCurrentTitle)
-    {
-        GetWinampSongTitle(GetWinampWindow(), m_szSongTitle, ARRAYSIZE(m_szSongTitle));
-        wcscpy_s(m_szSongTitlePrev, m_szSongTitle);
-    }
-
-    wcscpy_s(m_supertext.szText, m_szSongTitle);
-    if (wcscmp(m_supertext.szText, L"Stopped.") == 0 || wcscmp(m_supertext.szText, L"Opening...") == 0 || wcscmp(m_supertext.szText, L"") == 0)
-        return;
-
-    m_supertext.bRedrawSuperText = true;
-    m_supertext.bIsSongTitle = true;
-    m_supertext.nFontSizeUsed = 0;
-    m_supertext.nTextWidthUsed = 0;
-    m_supertext.nFontIndex = SONGTITLE_FONT;
-    wcscpy_s(m_supertext.nFontFace, m_fontinfo[SONGTITLE_FONT].szFace);
-    m_supertext.fFontSize = static_cast<float>(m_fontinfo[SONGTITLE_FONT].nSize);
-    m_supertext.bBold = m_fontinfo[SONGTITLE_FONT].bBold;
-    m_supertext.bItal = m_fontinfo[SONGTITLE_FONT].bItalic;
-    m_supertext.fX = 0.5f;
-    m_supertext.fY = 0.5f;
-    m_supertext.fGrowth = 1.0f;
-    m_supertext.fDuration = ClampSupertextDuration(m_fSongTitleAnimDuration);
     auto chooseStyle = [](int avoid1, int avoid2, int avoid3) -> int
     {
         for (int attempts = 0; attempts < SUPER_TEXT_ANIM_STYLE_COUNT * 2; attempts++)
@@ -9009,11 +8986,15 @@ void CPlugin::LaunchSongTitleAnim(bool refreshCurrentTitle)
 
         return warand() % SUPER_TEXT_ANIM_STYLE_COUNT;
     };
+
     m_supertext.nIntroStyle = chooseStyle(m_nLastSongTitleIntroStyle, m_nLastSongTitleOutroStyle, -1);
     m_supertext.nOutroStyle = chooseStyle(m_supertext.nIntroStyle, m_nLastSongTitleIntroStyle, m_nLastSongTitleOutroStyle);
     m_nLastSongTitleIntroStyle = m_supertext.nIntroStyle;
     m_nLastSongTitleOutroStyle = m_supertext.nOutroStyle;
+}
 
+void CPlugin::ApplySupertextTitleColourRules()
+{
     const int previousColorR = m_supertext.nColorR;
     const int previousColorG = m_supertext.nColorG;
     const int previousColorB = m_supertext.nColorB;
@@ -9060,6 +9041,35 @@ void CPlugin::LaunchSongTitleAnim(bool refreshCurrentTitle)
         m_supertext.nColorG = color.g;
         m_supertext.nColorB = color.b;
     }
+}
+
+void CPlugin::LaunchSongTitleAnim(bool refreshCurrentTitle)
+{
+    if (refreshCurrentTitle)
+    {
+        GetWinampSongTitle(GetWinampWindow(), m_szSongTitle, ARRAYSIZE(m_szSongTitle));
+        wcscpy_s(m_szSongTitlePrev, m_szSongTitle);
+    }
+
+    wcscpy_s(m_supertext.szText, m_szSongTitle);
+    if (wcscmp(m_supertext.szText, L"Stopped.") == 0 || wcscmp(m_supertext.szText, L"Opening...") == 0 || wcscmp(m_supertext.szText, L"") == 0)
+        return;
+
+    m_supertext.bRedrawSuperText = true;
+    m_supertext.bIsSongTitle = true;
+    m_supertext.nFontSizeUsed = 0;
+    m_supertext.nTextWidthUsed = 0;
+    m_supertext.nFontIndex = SONGTITLE_FONT;
+    wcscpy_s(m_supertext.nFontFace, m_fontinfo[SONGTITLE_FONT].szFace);
+    m_supertext.fFontSize = static_cast<float>(m_fontinfo[SONGTITLE_FONT].nSize);
+    m_supertext.bBold = m_fontinfo[SONGTITLE_FONT].bBold;
+    m_supertext.bItal = m_fontinfo[SONGTITLE_FONT].bItalic;
+    m_supertext.fX = 0.5f;
+    m_supertext.fY = 0.5f;
+    m_supertext.fGrowth = 1.0f;
+    m_supertext.fDuration = ClampSupertextDuration(m_fSongTitleAnimDuration);
+    ChooseSupertextTransitionStyles();
+    ApplySupertextTitleColourRules();
 
     m_supertext.fStartTime = GetTime();
 }
@@ -9073,7 +9083,7 @@ void CPlugin::LaunchStatusText(const wchar_t* text, float duration, float fadeTi
         fontIndex = SONGTITLE_FONT;
 
     m_supertext.bRedrawSuperText = true;
-    m_supertext.bIsSongTitle = false;
+    m_supertext.bIsSongTitle = true;
     m_supertext.nFontSizeUsed = 0;
     m_supertext.nTextWidthUsed = 0;
     m_supertext.nFontIndex = fontIndex;
@@ -9087,11 +9097,8 @@ void CPlugin::LaunchStatusText(const wchar_t* text, float duration, float fadeTi
     m_supertext.fGrowth = 1.0f;
     m_supertext.fDuration = ClampSupertextDuration(duration);
     m_supertext.fFadeTime = ClampSupertextDuration(fadeTime);
-    m_supertext.nIntroStyle = SUPER_TEXT_ANIM_ZOOM;
-    m_supertext.nOutroStyle = SUPER_TEXT_ANIM_ZOOM;
-    m_supertext.nColorR = 255;
-    m_supertext.nColorG = 255;
-    m_supertext.nColorB = 255;
+    ChooseSupertextTransitionStyles();
+    ApplySupertextTitleColourRules();
     m_supertext.fStartTime = GetTime();
     m_fSuppressSongTitleAnimUntilThisTime = m_supertext.fStartTime + std::max(0.1f, duration);
 }

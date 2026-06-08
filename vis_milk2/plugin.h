@@ -191,7 +191,7 @@ enum
 typedef struct
 {
     int bRedrawSuperText; // true if it needs redraw
-    int bIsSongTitle;     // false for custom message, true for song title
+    int bIsSongTitle;     // false for custom message, true for title-style animated overlay
     wchar_t szText[256];
     wchar_t nFontFace[128];
     int nFontIndex;
@@ -209,8 +209,8 @@ typedef struct
     int nColorR;
     int nColorG;
     int nColorB;
-    int nIntroStyle; // song-title entrance style; ignored by custom messages
-    int nOutroStyle; // song-title exit style; ignored by custom messages
+    int nIntroStyle; // title-style entrance style; ignored by custom messages
+    int nOutroStyle; // title-style exit style; ignored by custom messages
 } td_supertext;
 
 typedef struct
@@ -673,6 +673,8 @@ class CPlugin : public CPluginShell
     void ClearGraphicsWindow(); // for windowed mode only
     void LaunchCustomMessage(int nMsgNum);
     void ReadCustomMessages();
+    void ChooseSupertextTransitionStyles();
+    void ApplySupertextTitleColourRules();
     void LaunchSongTitleAnim(bool refreshCurrentTitle = false);
     void LaunchStatusText(const wchar_t* text, float duration = 0.9f, float fadeTime = 0.25f, eFontIndex fontIndex = SONGTITLE_FONT);
 

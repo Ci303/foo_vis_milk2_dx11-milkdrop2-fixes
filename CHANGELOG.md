@@ -2,6 +2,15 @@
 
 ## Release History
 
+### 0.2.1.39 - 2026-06-08
+
+Click play/pause overlay animation update.
+
+- Changed click-to-play, click-to-resume, click-to-pause, and `Paused` overlays to use the same title-style animation rules as track titles.
+- Reused the existing non-repeating intro/outro transition selection so click overlays do not keep reusing the same effect.
+- Applied the same readable pastel colour and preset-aware title blending rules to click playback overlays.
+- Kept legacy custom messages on their existing custom-message render path.
+
 ### 0.2.1.38 - 2026-06-08
 
 Render stability hotfix.
