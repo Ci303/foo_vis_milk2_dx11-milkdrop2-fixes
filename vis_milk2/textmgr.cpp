@@ -479,7 +479,7 @@ void TextElement::SetText(std::wstring text)
 
 void TextElement::FadeOut(float fadeOutTime)
 {
-    if (m_textColorBrush == nullptr || fadeOutTime <= 0.0f)
+    if (m_textColorBrush == nullptr || !std::isfinite(fadeOutTime) || fadeOutTime <= 0.0f)
     {
         m_isFadingOut = false;
         SetVisible(false);
@@ -494,7 +494,7 @@ void TextElement::FadeOut(float fadeOutTime)
 
 void TextElement::FadeIn(float fadeOutTime)
 {
-    if (m_textColorBrush == nullptr || fadeOutTime <= 0.0f)
+    if (m_textColorBrush == nullptr || !std::isfinite(fadeOutTime) || fadeOutTime <= 0.0f)
     {
         m_isFadingIn = false;
         return;

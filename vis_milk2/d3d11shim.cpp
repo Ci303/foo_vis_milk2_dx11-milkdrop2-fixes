@@ -230,8 +230,10 @@ void D3D11Shim::DrawPrimitive(unsigned int primType, unsigned int iPrimCount, co
         m_bCBufferIsDirty = false;
     }
 
-    const unsigned int gpuVertexStride = UpdateVBuffer(drawVerts, pVData, vertexStride);
+    if (!UpdateVBuffer(drawVerts, pVData, vertexStride))
+        return;
 
+    const unsigned int gpuVertexStride = sizeof(MDVERTEX);
     unsigned int offsets = 0;
     m_pContext->IASetVertexBuffers(0, 1, &m_pVBuffer, &gpuVertexStride, &offsets);
     m_pContext->IASetInputLayout(m_pInputLayout);
@@ -240,7 +242,7 @@ void D3D11Shim::DrawPrimitive(unsigned int primType, unsigned int iPrimCount, co
         if (!m_pIFanBuffer)
             return;
 
-        const unsigned int maxFanPrims = (MAX_VERTICES_COUNT / 6U) - 3U;
+        const unsigned int maxFanPrims = (drawVerts >= 2U) ? (drawVerts - 2U) : 0U;
         const unsigned int fanPrims = std::min(iPrimCount, maxFanPrims);
         if (fanPrims == 0)
             return;
@@ -280,9 +282,10 @@ void D3D11Shim::DrawIndexedPrimitive(unsigned int primType, unsigned int uStartV
         m_bCBufferIsDirty = false;
     }
 
-    const unsigned int gpuVertexStride = UpdateVBuffer(drawVertices, pVData, vertexStride);
-    UpdateIBuffer(drawIndices, pIData);
+    if (!UpdateVBuffer(drawVertices, pVData, vertexStride) || !UpdateIBuffer(drawIndices, pIData))
+        return;
 
+    const unsigned int gpuVertexStride = sizeof(MDVERTEX);
     unsigned int offsets = 0;
     m_pContext->IASetVertexBuffers(0, 1, &m_pVBuffer, &gpuVertexStride, &offsets);
     m_pContext->IASetIndexBuffer(m_pIBuffer, DXGI_FORMAT_R16_UINT, 0);
@@ -611,10 +614,10 @@ void D3D11Shim::SetPixelShader(ID3D11PixelShader* pPShader, CConstantTable* pTab
 
 void D3D11Shim::ApplyFixedFunctionPixelShader()
 {
-    if (m_bCustomPixelShaderActive)
+    if (!m_pContext || m_bCustomPixelShaderActive)
         return;
 
-    ID3D11PixelShader* shader = m_pPShader[m_uCurrShader];
+    ID3D11PixelShader* shader = (m_uCurrShader < MAX_NUM_SHADERS) ? m_pPShader[m_uCurrShader] : nullptr;
 
     if (m_bVertexColorOnly || !m_bTexture0Bound)
         shader = m_pPShader[2];
@@ -711,19 +714,19 @@ int D3D11Shim::NumVertsFromType(unsigned int primType, int iPrimCount)
     }
 }
 
-unsigned int D3D11Shim::UpdateVBuffer(unsigned int iNumVerts, const void* pVData, unsigned int vertexStride)
+bool D3D11Shim::UpdateVBuffer(unsigned int iNumVerts, const void* pVData, unsigned int vertexStride)
 {
     if (!m_pContext || !m_pVBuffer || !pVData || iNumVerts == 0 || vertexStride == 0 || vertexStride > sizeof(MDVERTEX))
-        return sizeof(MDVERTEX);
+        return false;
 
     D3D11_MAPPED_SUBRESOURCE res;
     if (!pVData || iNumVerts == 0)
-        return sizeof(MDVERTEX);
+        return false;
 
     const unsigned int numVerts = std::min(iNumVerts, MAX_VERTICES_COUNT);
 
     if (S_OK != m_pContext->Map(m_pVBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res))
-        return sizeof(MDVERTEX);
+        return false;
 
     if (vertexStride == sizeof(MDVERTEX))
     {
@@ -753,22 +756,26 @@ unsigned int D3D11Shim::UpdateVBuffer(unsigned int iNumVerts, const void* pVData
     }
     else
     {
-        memset(res.pData, 0, numVerts * sizeof(MDVERTEX));
+        m_pContext->Unmap(m_pVBuffer, 0);
+        return false;
     }
 
     m_pContext->Unmap(m_pVBuffer, 0);
-    return sizeof(MDVERTEX);
+    return true;
 }
 
-void D3D11Shim::UpdateIBuffer(unsigned int iNumIndices, const void* pIData)
+bool D3D11Shim::UpdateIBuffer(unsigned int iNumIndices, const void* pIData)
 {
     if (!m_pContext || !m_pIBuffer || !pIData || iNumIndices == 0)
-        return;
+        return false;
 
     D3D11_MAPPED_SUBRESOURCE res;
     if (S_OK == m_pContext->Map(m_pIBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res))
     {
         memcpy(res.pData, pIData, std::min(iNumIndices, MAX_INDICES_COUNT) * sizeof(uint16_t));
         m_pContext->Unmap(m_pIBuffer, 0);
+        return true;
     }
+
+    return false;
 }

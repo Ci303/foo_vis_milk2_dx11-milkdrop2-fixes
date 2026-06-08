@@ -146,6 +146,14 @@ static wchar_t g_presetScanCacheFile[MAX_PATH] = {};
 static bool g_presetScanCacheLoaded = false;
 static bool g_presetScanCacheDirty = false;
 
+static float ClampSupertextDuration(float duration, float fallback = 0.1f)
+{
+    if (!std::isfinite(duration))
+        return fallback;
+
+    return std::max(duration, fallback);
+}
+
 static bool EnsureDirectoryExists(const wchar_t* path)
 {
     if (!path || !path[0])
@@ -8912,8 +8920,8 @@ void CPlugin::LaunchCustomMessage(int nMsgNum)
     m_supertext.fX = m_customMessage[nMsgNum].x + m_customMessage[nMsgNum].randx * ((warand() % 1037) / 1037.0f * 2.0f - 1.0f);
     m_supertext.fY = m_customMessage[nMsgNum].y + m_customMessage[nMsgNum].randy * ((warand() % 1037) / 1037.0f * 2.0f - 1.0f);
     m_supertext.fGrowth = m_customMessage[nMsgNum].growth;
-    m_supertext.fDuration = m_customMessage[nMsgNum].fTime;
-    m_supertext.fFadeTime = m_customMessage[nMsgNum].fFade;
+    m_supertext.fDuration = ClampSupertextDuration(m_customMessage[nMsgNum].fTime);
+    m_supertext.fFadeTime = ClampSupertextDuration(m_customMessage[nMsgNum].fFade);
     m_supertext.nIntroStyle = SUPER_TEXT_ANIM_ZOOM;
     m_supertext.nOutroStyle = SUPER_TEXT_ANIM_ZOOM;
 
@@ -8983,7 +8991,7 @@ void CPlugin::LaunchSongTitleAnim(bool refreshCurrentTitle)
     m_supertext.fX = 0.5f;
     m_supertext.fY = 0.5f;
     m_supertext.fGrowth = 1.0f;
-    m_supertext.fDuration = m_fSongTitleAnimDuration;
+    m_supertext.fDuration = ClampSupertextDuration(m_fSongTitleAnimDuration);
     auto chooseStyle = [](int avoid1, int avoid2, int avoid3) -> int
     {
         for (int attempts = 0; attempts < SUPER_TEXT_ANIM_STYLE_COUNT * 2; attempts++)
@@ -9077,8 +9085,8 @@ void CPlugin::LaunchStatusText(const wchar_t* text, float duration, float fadeTi
     m_supertext.fX = 0.5f;
     m_supertext.fY = 0.5f;
     m_supertext.fGrowth = 1.0f;
-    m_supertext.fDuration = duration;
-    m_supertext.fFadeTime = fadeTime;
+    m_supertext.fDuration = ClampSupertextDuration(duration);
+    m_supertext.fFadeTime = ClampSupertextDuration(fadeTime);
     m_supertext.nIntroStyle = SUPER_TEXT_ANIM_ZOOM;
     m_supertext.nOutroStyle = SUPER_TEXT_ANIM_ZOOM;
     m_supertext.nColorR = 255;

@@ -1206,7 +1206,8 @@ void CPlugin::RenderFrame(int bRedraw)
     DrawWave(mdsound.fWave[0].data(), mdsound.fWave[1].data());
     DrawSprites();
 
-    float fProgress = (GetTime() - m_supertext.fStartTime) / m_supertext.fDuration;
+    const float supertextDuration = std::max(0.1f, std::isfinite(m_supertext.fDuration) ? m_supertext.fDuration : 0.1f);
+    float fProgress = (GetTime() - m_supertext.fStartTime) / supertextDuration;
 
     // If song title animation just ended, burn it into the VS.
     if (m_supertext.fStartTime >= 0.0f && fProgress >= 1.0f && !m_supertext.bRedrawSuperText)
@@ -1734,7 +1735,11 @@ void CPlugin::ComputeGridAlphaValues()
 
     // Warp.
     float fWarpTime = GetTime() * m_pState->m_fWarpAnimSpeed;
-    float fWarpScaleInv = 1.0f / m_pState->m_fWarpScale.eval(GetTime());
+    const float fWarpScale = m_pState->m_fWarpScale.eval(GetTime());
+    const float fSafeWarpScale = (std::isfinite(fWarpScale) && std::abs(fWarpScale) >= 0.0001f)
+                                     ? fWarpScale
+                                     : std::copysign(0.0001f, std::isfinite(fWarpScale) ? fWarpScale : 1.0f);
+    float fWarpScaleInv = 1.0f / fSafeWarpScale;
     float f[4];
     f[0] = 11.68f + 4.0f * cosf(fWarpTime * 1.413f + 10);
     f[1] =  8.77f + 3.0f * cosf(fWarpTime * 1.113f + 7);
@@ -5220,7 +5225,10 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
                 t = fade_in * fade_out;
             }
             else
-                t = CosineInterp(std::min(1.0f, (fProgress / m_supertext.fFadeTime)));
+            {
+                const float fadeTime = std::max(0.1f, std::isfinite(m_supertext.fFadeTime) ? m_supertext.fFadeTime : 0.1f);
+                t = CosineInterp(std::min(1.0f, (fProgress / fadeTime)));
+            }
 
             if (!isTextPass)
                 v3[0].r = v3[0].g = v3[0].b = v3[0].a = t;

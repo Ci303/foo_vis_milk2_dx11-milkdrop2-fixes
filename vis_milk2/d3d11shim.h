@@ -72,8 +72,8 @@ class D3D11Shim
     };
 
     int NumVertsFromType(unsigned int primType, int iPrimCount);
-    unsigned int UpdateVBuffer(unsigned int iNumVerts, const void* pVData, unsigned int vertexStride);
-    void UpdateIBuffer(unsigned int iNumIndices, const void* pIData);
+    bool UpdateVBuffer(unsigned int iNumVerts, const void* pVData, unsigned int vertexStride);
+    bool UpdateIBuffer(unsigned int iNumIndices, const void* pIData);
     void ApplyFixedFunctionPixelShader();
 
     cbTransforms m_transforms;
