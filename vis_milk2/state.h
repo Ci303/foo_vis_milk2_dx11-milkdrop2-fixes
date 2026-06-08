@@ -268,8 +268,8 @@ class CState
 
     int m_nMinPSVersion;  // the min of the warp & comp values...
     int m_nMaxPSVersion;  // the max of the warp & comp values...
-    int m_nWarpPSVersion; // 0 = milkdrop 1 era (no PS), 2 = ps_2_0, 3 = ps_3_0
-    int m_nCompPSVersion; // 0 = milkdrop 1 era (no PS), 2 = ps_2_0, 3 = ps_3_0
+    int m_nWarpPSVersion; // 0 = milkdrop 1 era (no PS), 2 = ps_2_0, 3 = ps_2_x, 4 = ps_3_0
+    int m_nCompPSVersion; // 0 = milkdrop 1 era (no PS), 2 = ps_2_0, 3 = ps_2_x, 4 = ps_3_0
     float m_fRating;      // 0..5
     // Post-processing.
     CBlendableFloat m_fGammaAdj; // +0 -> +1.0 (double), +2.0 (triple)...

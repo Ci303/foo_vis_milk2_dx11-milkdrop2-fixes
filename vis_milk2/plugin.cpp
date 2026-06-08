@@ -75,6 +75,7 @@
 #include "pch.h"
 #include "plugin.h"
 
+#include <climits>
 #include <cwctype>
 #include <unordered_map>
 #include <unordered_set>
@@ -152,6 +153,96 @@ static float ClampSupertextDuration(float duration, float fallback = 0.1f)
         return fallback;
 
     return std::max(duration, fallback);
+}
+
+namespace
+{
+constexpr int kDefaultCanvasStretch = 0;
+constexpr int kDefaultTexSizeX = -1;
+constexpr int kMinCanvasStretch = 1;
+constexpr int kMaxCanvasStretch = 400;
+constexpr int kMinGridX = 8;
+constexpr int kMinTexSize = 16;
+constexpr int kMaxTexSize = 8192;
+constexpr int kMaxPSVersion = MD2_PS_5_0;
+constexpr int kMinPSVersion = MD2_PS_NONE;
+}
+
+static int NormalizeCanvasStretch(int canvasStretch)
+{
+    if (canvasStretch == 0)
+        return kDefaultCanvasStretch;
+    if (canvasStretch < kMinCanvasStretch)
+        return 100;
+
+    const int normalizedStretch = std::min(canvasStretch, kMaxCanvasStretch);
+    constexpr int validStretches[] = {100, 125, 133, 150, 167, 200, 300, 400};
+
+    int best = validStretches[0];
+    int bestDelta = INT_MAX;
+    for (const int allowed : validStretches)
+    {
+        const int delta = std::abs(normalizedStretch - allowed);
+        if (delta < bestDelta)
+        {
+            best = allowed;
+            bestDelta = delta;
+            if (delta == 0)
+                break;
+        }
+    }
+
+    return best;
+}
+
+static int NormalizeTexSizeX(int texSizeX)
+{
+    if (texSizeX == -2 || texSizeX == -1)
+        return texSizeX;
+    if (texSizeX <= 0)
+        return kDefaultTexSizeX;
+
+    return std::clamp(texSizeX, kMinTexSize, kMaxTexSize);
+}
+
+static int NormalizeGridX(int gridX)
+{
+    return std::clamp(gridX, kMinGridX, MAX_GRID_X);
+}
+
+static int NormalizeMaxPSVersion(int maxPSVersion)
+{
+    if (maxPSVersion == -1)
+        return -1;
+    if (maxPSVersion < kMinPSVersion || maxPSVersion > kMaxPSVersion)
+        return -1;
+
+    return maxPSVersion;
+}
+
+static int NormalizeTextureCacheLimit(int cacheLimit)
+{
+    if (cacheLimit == -1)
+        return INT_MAX;
+    if (cacheLimit < 0)
+        return 0;
+
+    return cacheLimit;
+}
+
+static void NormalizeMilkDropConfig(int& nCanvasStretch, int& nTexSizeX, int& nGridX, int& nMaxPSVersion, int& nMaxImages, int& nMaxBytes)
+{
+    nCanvasStretch = NormalizeCanvasStretch(nCanvasStretch);
+    nTexSizeX = NormalizeTexSizeX(nTexSizeX);
+    nGridX = NormalizeGridX(nGridX);
+    nMaxPSVersion = NormalizeMaxPSVersion(nMaxPSVersion);
+    nMaxImages = NormalizeTextureCacheLimit(nMaxImages);
+    nMaxBytes = NormalizeTextureCacheLimit(nMaxBytes);
+}
+
+static int NormalizeSafeTextureSize(int textureSize)
+{
+    return std::max(textureSize, 1);
 }
 
 static bool EnsureDirectoryExists(const wchar_t* path)
@@ -694,7 +785,7 @@ static int PresetShaderVersionToInternal(int presetVersion)
     {
         case 0: return MD2_PS_NONE;
         case 2: return MD2_PS_2_0;
-        case 3: return MD2_PS_3_0;
+        case 3: return MD2_PS_2_X;
         case 4: return MD2_PS_4_0;
         case 5: return MD2_PS_5_0;
         default:
@@ -1543,16 +1634,17 @@ void CPlugin::MilkDropReadConfig()
 #endif
     ReadCustomMessages();
 
+    NormalizeMilkDropConfig(m_nCanvasStretch, m_nTexSizeX, m_nGridX, m_nMaxPSVersion_ConfigPanel, m_nMaxImages, m_nMaxBytes);
     m_nTexSizeY = m_nTexSizeX;
     m_bTexSizeWasAutoPow2 = (m_nTexSizeX == -2);
     m_bTexSizeWasAutoExact = (m_nTexSizeX == -1);
-    m_nGridY = m_nGridX * 3 / 4;
+    m_nGridY = (m_nGridX * 3) / 4;
 
     // Bounds checking.
-    if (m_nGridX > MAX_GRID_X)
-        m_nGridX = MAX_GRID_X;
     if (m_nGridY > MAX_GRID_Y)
         m_nGridY = MAX_GRID_Y;
+    if (m_nGridY < 1)
+        m_nGridY = 1;
     if (m_fTimeBetweenPresetsRand < 0)
         m_fTimeBetweenPresetsRand = 0;
     if (m_fTimeBetweenPresets < 0.1f)
@@ -1715,6 +1807,22 @@ bool CPlugin::PanelSettings(plugin_config* settings)
     m_fSongTitleAnimDuration = settings->m_fSongTitleAnimDuration;
     m_fTimeBetweenRandomSongTitles = settings->m_fTimeBetweenRandomSongTitles;
     m_fTimeBetweenRandomCustomMsgs = settings->m_fTimeBetweenRandomCustomMsgs;
+
+    NormalizeMilkDropConfig(
+        m_nCanvasStretch,
+        m_nTexSizeX,
+        m_nGridX,
+        m_nMaxPSVersion_ConfigPanel,
+        m_nMaxImages,
+        m_nMaxBytes);
+    m_nTexSizeY = m_nTexSizeX;
+    m_bTexSizeWasAutoPow2 = (m_nTexSizeX == -2);
+    m_bTexSizeWasAutoExact = (m_nTexSizeX == -1);
+    m_nGridY = m_nGridX * 3 / 4;
+    if (m_nGridY > MAX_GRID_Y)
+        m_nGridY = MAX_GRID_Y;
+    if (m_nGridY < 1)
+        m_nGridY = 1;
 
     m_bPresetLockedByUser = settings->m_bPresetLockedByUser;
     //m_bMilkdropScrollLockState = settings->m_bMilkdropScrollLockState;
@@ -2061,6 +2169,9 @@ static float SquishToCenter(float x, float fExp)
 
 static int GetNearestPow2Size(int w, int h)
 {
+    w = NormalizeSafeTextureSize(w);
+    h = NormalizeSafeTextureSize(h);
+
     float fExp = logf(std::max(w, h) * 0.75f + 0.25f * std::min(w, h)) / logf(2.0f);
     float bias = 0.55f;
     if (fExp + bias >= 11.0f) // ..don't jump to 2048x2048 quite as readily
@@ -2103,7 +2214,7 @@ int CPlugin::AllocateMilkDropDX11()
     D3D_FEATURE_LEVEL featureLevel = GetDevice()->GetFeatureLevel();
     if (featureLevel >= D3D_FEATURE_LEVEL_11_0)
         m_nMaxPSVersion_DX = MD2_PS_5_0;
-    if (featureLevel >= D3D_FEATURE_LEVEL_10_0)
+    else if (featureLevel >= D3D_FEATURE_LEVEL_10_0)
         m_nMaxPSVersion_DX = MD2_PS_4_0;
     else if (featureLevel >= D3D_FEATURE_LEVEL_9_3)
         m_nMaxPSVersion_DX = MD2_PS_2_X;
@@ -2281,6 +2392,11 @@ int CPlugin::AllocateMilkDropDX11()
             m_nTexSizeX = log2texsize;
             m_nTexSizeY = log2texsize;
         }
+        else
+        {
+            m_nTexSizeX = NormalizeSafeTextureSize(m_nTexSizeX);
+            m_nTexSizeY = NormalizeSafeTextureSize(m_nTexSizeY);
+        }
 
         // Snap to 16x16 blocks.
         // TODO: DirectX 11 or use own Z-buffer.
@@ -2345,6 +2461,8 @@ int CPlugin::AllocateMilkDropDX11()
                     else
                         break;
                 }
+                else
+                    break;
             }
         } while (!bSuccess); //&& m_nTexSizeX >= 256 && (m_bTexSizeWasAutoExact || m_bTexSizeWasAutoPow2));
 
@@ -8907,6 +9025,8 @@ void CPlugin::LaunchCustomMessage(int nMsgNum)
     }
 
     int fontID = m_customMessage[nMsgNum].nFont;
+    if (fontID < 0 || fontID >= MAX_CUSTOM_MESSAGE_FONTS)
+        fontID = SONGTITLE_FONT;
 
     m_supertext.bRedrawSuperText = true;
     m_supertext.bIsSongTitle = false;

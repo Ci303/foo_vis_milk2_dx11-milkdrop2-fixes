@@ -254,7 +254,7 @@ static constexpr int default_nTexSizeX = -1; // -1 means "auto"
 static constexpr int default_nTexBitsPerCh = 8;
 static constexpr int default_nGridX = 48; //32;
 //static constexpr int default_nGridY = 36; //24;
-static constexpr int default_nMaxPSVersion = -1; // -1 = auto, 0 = disable shaders, 2 = ps_2_0, 3 = ps_3_0
+static constexpr int default_nMaxPSVersion = -1; // -1 = auto, 0 = disable shaders, 2 = ps_2_0, 3 = ps_2_x, 4 = ps_3_0, 5 = ps_4_0, 6 = ps_5_0
 static constexpr int default_nMaxImages = 32;
 static constexpr int default_nMaxBytes = 16000000;
 static constexpr bool default_bPresetLockedByCode = false;

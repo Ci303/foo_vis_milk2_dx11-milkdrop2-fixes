@@ -398,8 +398,8 @@ class CPlugin : public CPluginShell
     //bool m_bAnisotropicFiltering;
     bool m_bPresetLockOnAtStartup;
     bool m_bPreventScollLockHandling;
-    int m_nMaxPSVersion_ConfigPanel; // -1 = auto, 0 = disable shaders, 2 = ps_2_0, 3 = ps_2_x, 4 = ps_3_0, 5 = ps_4_0
-    int m_nMaxPSVersion_DX; // 0 = no shader support, 2 = ps_2_0, 3 = ps_2_x, 4 = ps_3_0, 5 = ps_4_0
+    int m_nMaxPSVersion_ConfigPanel; // -1 = auto, 0 = disable shaders, 2 = ps_2_0, 3 = ps_2_x, 4 = ps_3_0, 5 = ps_4_0, 6 = ps_5_0
+    int m_nMaxPSVersion_DX; // 0 = no shader support, 2 = ps_2_0, 3 = ps_2_x, 4 = ps_3_0, 5 = ps_4_0, 6 = ps_5_0
     int m_nMaxPSVersion; // the minimum of the other two
     int m_nMaxImages;
     int m_nMaxBytes;

@@ -178,7 +178,7 @@ static int PresetShaderVersionToInternal(int presetVersion)
     {
         case 0: return MD2_PS_NONE;
         case 2: return MD2_PS_2_0;
-        case 3: return MD2_PS_3_0;
+        case 3: return MD2_PS_2_X;
         case 4: return MD2_PS_4_0;
         case 5: return MD2_PS_5_0;
         default:
