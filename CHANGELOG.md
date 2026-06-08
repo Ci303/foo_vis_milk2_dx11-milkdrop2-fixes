@@ -2,6 +2,17 @@
 
 ## Release History
 
+### 0.2.1.37 - 2026-06-08
+
+Natural title animation and shader-hardening update.
+
+- Expanded centred track-title transitions with separate non-repeating entrance and exit styles, including fades, slides, wipes, bounces, ripples, folds, spirals, page-turns, and soft preset-aware motion.
+- Added occasional readable pastel title colours, with subtle preset palette tinting and a stronger colour merge during fade-out.
+- Changed track-title fade-outs to merge more naturally with the active preset by using smoother easing, layered low-amplitude flow, restrained texture drift, and preset rotation/warp/wave cues.
+- Hardened DX11 fixed-function text and shape rendering paths so vertex-colour rendering, textured shapes, and custom pixel-shader state do not leak into each other.
+- Added safer shader compilation behaviour for legacy math-heavy presets, including compatibility wrappers, shader debug logging, bytecode cache reuse, and fallback tracking for risky shaders.
+- Fixed blur-range clamping and blur source sizing edge cases that could produce invalid sampling ranges or zero-sized blur sources.
+
 ### 0.2.1.36 - 2026-06-07
 
 MilkDrop3-inspired preset navigation, transition, and crash-hardening update.
