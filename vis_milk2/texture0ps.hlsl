@@ -17,5 +17,6 @@ struct PS_INPUT
 
 float4 main(PS_INPUT In) : SV_TARGET
 {
-    return float4(g_Texture0.Sample(g_Sampler0, In.Tex0.xy).rgb, In.Diffuse.a);
+    float4 texel = g_Texture0.Sample(g_Sampler0, In.Tex0.xy);
+    return saturate(float4((texel * In.Diffuse).rgb, In.Diffuse.a));
 }

@@ -26,6 +26,41 @@ namespace
 #include <texture0ps.inc>
 #include <colorps.inc>
 #include <texture1ps.inc>
+
+void CopyVertexCommon(MDVERTEX& dst, float x, float y, float z, float r, float g, float b, float a)
+{
+    dst.x = x;
+    dst.y = y;
+    dst.z = z;
+    dst.r = r;
+    dst.g = g;
+    dst.b = b;
+    dst.a = a;
+    dst.tu = 0.0f;
+    dst.tv = 0.0f;
+    dst.tu0 = 0.0f;
+    dst.tv0 = 0.0f;
+    dst.rad = 0.0f;
+    dst.ang = 0.0f;
+}
+
+template <typename TSpriteVertex>
+void CopySpriteLikeVertex(MDVERTEX& dst, const TSpriteVertex& src)
+{
+    CopyVertexCommon(dst, src.x, src.y, src.z, src.r, src.g, src.b, src.a);
+    dst.tu = src.tu;
+    dst.tv = src.tv;
+}
+
+void CopySimpleVertex(MDVERTEX& dst, const SIMPLEVERTEX& src)
+{
+    const DWORD diffuse = src.Diffuse;
+    CopyVertexCommon(dst, src.x, src.y, src.z,
+                     static_cast<float>((diffuse >> 16) & 0xff) / 255.0f,
+                     static_cast<float>((diffuse >> 8) & 0xff) / 255.0f,
+                     static_cast<float>(diffuse & 0xff) / 255.0f,
+                     static_cast<float>((diffuse >> 24) & 0xff) / 255.0f);
+}
 }
 
 D3D11Shim::D3D11Shim(ID3D11Device* pDevice, ID3D11DeviceContext* pContext) :
@@ -40,6 +75,9 @@ D3D11Shim::D3D11Shim(ID3D11Device* pDevice, ID3D11DeviceContext* pContext) :
     m_pCBuffer(nullptr),
     m_bCBufferIsDirty(false),
     m_uCurrShader(0),
+    m_bTexture0Bound(false),
+    m_bVertexColorOnly(false),
+    m_bCustomPixelShaderActive(false),
     m_pState(nullptr),
     m_transforms({})
 {
@@ -105,7 +143,7 @@ void D3D11Shim::Initialize()
     m_pDevice->CreateBuffer(&bDesc, NULL, &m_pIBuffer);
 
     std::vector<uint16_t> indices;
-    for (size_t i = 1; i < MAX_VERTICES_COUNT / 6 - 2; ++i)
+    for (size_t i = 1; i < MAX_VERTICES_COUNT - 1; ++i)
     {
         indices.push_back(0);
         indices.push_back(static_cast<uint16_t>(i));
@@ -192,10 +230,10 @@ void D3D11Shim::DrawPrimitive(unsigned int primType, unsigned int iPrimCount, co
         m_bCBufferIsDirty = false;
     }
 
-    UpdateVBuffer(drawVerts, pVData, vertexStride);
+    const unsigned int gpuVertexStride = UpdateVBuffer(drawVerts, pVData, vertexStride);
 
     unsigned int offsets = 0;
-    m_pContext->IASetVertexBuffers(0, 1, &m_pVBuffer, &vertexStride, &offsets);
+    m_pContext->IASetVertexBuffers(0, 1, &m_pVBuffer, &gpuVertexStride, &offsets);
     m_pContext->IASetInputLayout(m_pInputLayout);
     if (primType == D3D_PRIMITIVE_TOPOLOGY_TRIANGLEFAN)
     {
@@ -242,11 +280,11 @@ void D3D11Shim::DrawIndexedPrimitive(unsigned int primType, unsigned int uStartV
         m_bCBufferIsDirty = false;
     }
 
-    UpdateVBuffer(drawVertices, pVData, vertexStride);
+    const unsigned int gpuVertexStride = UpdateVBuffer(drawVertices, pVData, vertexStride);
     UpdateIBuffer(drawIndices, pIData);
 
     unsigned int offsets = 0;
-    m_pContext->IASetVertexBuffers(0, 1, &m_pVBuffer, &vertexStride, &offsets);
+    m_pContext->IASetVertexBuffers(0, 1, &m_pVBuffer, &gpuVertexStride, &offsets);
     m_pContext->IASetIndexBuffer(m_pIBuffer, DXGI_FORMAT_R16_UINT, 0);
     m_pContext->IASetInputLayout(m_pInputLayout);
     m_pContext->IASetPrimitiveTopology((D3D_PRIMITIVE_TOPOLOGY)primType);
@@ -441,8 +479,10 @@ void D3D11Shim::SetShader(unsigned int iIndex)
     if (iIndex >= MAX_NUM_SHADERS)
         return;
 
-    m_pContext->PSSetShader(m_pPShader[iIndex], NULL, 0);
     m_uCurrShader = iIndex;
+    m_bCustomPixelShaderActive = false;
+    m_bVertexColorOnly = false;
+    ApplyFixedFunctionPixelShader();
 }
 
 void D3D11Shim::SetTexture(unsigned int iSlot, ID3D11Resource* pResource)
@@ -473,6 +513,12 @@ void D3D11Shim::SetTexture(unsigned int iSlot, ID3D11Resource* pResource)
 
     m_pContext->PSSetShaderResources(iSlot, 1, views);
 
+    if (iSlot == 0)
+    {
+        m_bTexture0Bound = (pResource != nullptr);
+        ApplyFixedFunctionPixelShader();
+    }
+
     if (views[0])
         views[0]->Release();
 }
@@ -494,13 +540,9 @@ void D3D11Shim::SetTransform(unsigned int transType, DirectX::XMMATRIX* pMatrix)
 
 void D3D11Shim::SetVertexColor(bool bUseColor)
 {
-    if (!m_pContext)
-        return;
-
-    if (!bUseColor)
-        m_pContext->PSSetShader(m_pPShader[m_uCurrShader], NULL, 0);
-    else
-        m_pContext->PSSetShader(m_pPShader[2], NULL, 0);
+    m_bCustomPixelShaderActive = false;
+    m_bVertexColorOnly = bUseColor;
+    ApplyFixedFunctionPixelShader();
 }
 
 HRESULT D3D11Shim::CreateVertexShader(const void* pByteCode, SIZE_T codeLength, ID3D11VertexShader** ppShader,
@@ -554,7 +596,30 @@ void D3D11Shim::SetPixelShader(ID3D11PixelShader* pPShader, CConstantTable* pTab
         m_pContext->PSSetConstantBuffers(0, static_cast<UINT>(pTable->GetBuffersCount()), ppBuffers);
         delete[] ppBuffers;
     }
-    m_pContext->PSSetShader((pPShader ? pPShader : m_pPShader[m_uCurrShader]), NULL, 0);
+    if (pPShader)
+    {
+        m_bCustomPixelShaderActive = true;
+        m_pContext->PSSetShader(pPShader, NULL, 0);
+    }
+    else
+    {
+        m_bCustomPixelShaderActive = false;
+        m_bVertexColorOnly = false;
+        ApplyFixedFunctionPixelShader();
+    }
+}
+
+void D3D11Shim::ApplyFixedFunctionPixelShader()
+{
+    if (m_bCustomPixelShaderActive)
+        return;
+
+    ID3D11PixelShader* shader = m_pPShader[m_uCurrShader];
+
+    if (m_bVertexColorOnly || !m_bTexture0Bound)
+        shader = m_pPShader[2];
+
+    m_pContext->PSSetShader(shader, NULL, 0);
 }
 
 void D3D11Shim::ClearRenderTarget(ID3D11Texture2D* pRTTexture, const float color[4])
@@ -646,17 +711,53 @@ int D3D11Shim::NumVertsFromType(unsigned int primType, int iPrimCount)
     }
 }
 
-void D3D11Shim::UpdateVBuffer(unsigned int iNumVerts, const void* pVData, unsigned int vertexStride)
+unsigned int D3D11Shim::UpdateVBuffer(unsigned int iNumVerts, const void* pVData, unsigned int vertexStride)
 {
     if (!m_pContext || !m_pVBuffer || !pVData || iNumVerts == 0 || vertexStride == 0 || vertexStride > sizeof(MDVERTEX))
-        return;
+        return sizeof(MDVERTEX);
 
     D3D11_MAPPED_SUBRESOURCE res;
-    if (S_OK == m_pContext->Map(m_pVBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res))
+    if (!pVData || iNumVerts == 0)
+        return sizeof(MDVERTEX);
+
+    const unsigned int numVerts = std::min(iNumVerts, MAX_VERTICES_COUNT);
+
+    if (S_OK != m_pContext->Map(m_pVBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &res))
+        return sizeof(MDVERTEX);
+
+    if (vertexStride == sizeof(MDVERTEX))
     {
-        memcpy(res.pData, pVData, std::min(iNumVerts, MAX_VERTICES_COUNT) * vertexStride);
-        m_pContext->Unmap(m_pVBuffer, 0);
+        memcpy(res.pData, pVData, numVerts * sizeof(MDVERTEX));
     }
+    else if (vertexStride == sizeof(WFVERTEX))
+    {
+        auto* dst = static_cast<MDVERTEX*>(res.pData);
+        const auto* src = static_cast<const WFVERTEX*>(pVData);
+        for (unsigned int i = 0; i < numVerts; ++i)
+            CopyVertexCommon(dst[i], src[i].x, src[i].y, src[i].z, src[i].r, src[i].g, src[i].b, src[i].a);
+    }
+    else if (vertexStride == sizeof(SPRITEVERTEX) || vertexStride == sizeof(HELPVERTEX))
+    {
+        static_assert(sizeof(SPRITEVERTEX) == sizeof(HELPVERTEX), "sprite and help vertices must stay layout-compatible");
+        auto* dst = static_cast<MDVERTEX*>(res.pData);
+        const auto* src = static_cast<const SPRITEVERTEX*>(pVData);
+        for (unsigned int i = 0; i < numVerts; ++i)
+            CopySpriteLikeVertex(dst[i], src[i]);
+    }
+    else if (vertexStride == sizeof(SIMPLEVERTEX))
+    {
+        auto* dst = static_cast<MDVERTEX*>(res.pData);
+        const auto* src = static_cast<const SIMPLEVERTEX*>(pVData);
+        for (unsigned int i = 0; i < numVerts; ++i)
+            CopySimpleVertex(dst[i], src[i]);
+    }
+    else
+    {
+        memset(res.pData, 0, numVerts * sizeof(MDVERTEX));
+    }
+
+    m_pContext->Unmap(m_pVBuffer, 0);
+    return sizeof(MDVERTEX);
 }
 
 void D3D11Shim::UpdateIBuffer(unsigned int iNumIndices, const void* pIData)

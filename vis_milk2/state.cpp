@@ -172,6 +172,44 @@ static int GetFastInt(const char* szVarName, int def, FILE* f)
     return def;
 }
 
+static int PresetShaderVersionToInternal(int presetVersion)
+{
+    switch (presetVersion)
+    {
+        case 0: return MD2_PS_NONE;
+        case 2: return MD2_PS_2_0;
+        case 3: return MD2_PS_3_0;
+        case 4: return MD2_PS_4_0;
+        case 5: return MD2_PS_5_0;
+        default:
+            if (presetVersion <= 0)
+                return MD2_PS_NONE;
+            if (presetVersion >= 5)
+                return MD2_PS_5_0;
+            return MD2_PS_2_0;
+    }
+}
+
+static int InternalShaderVersionToPreset(int internalVersion)
+{
+    switch (internalVersion)
+    {
+        case MD2_PS_NONE: return 0;
+        case MD2_PS_2_0:
+        case MD2_PS_2_X:
+            return 2;
+        case MD2_PS_3_0: return 3;
+        case MD2_PS_4_0: return 4;
+        case MD2_PS_5_0: return 5;
+        default:
+            if (internalVersion <= MD2_PS_NONE)
+                return 0;
+            if (internalVersion >= MD2_PS_5_0)
+                return 5;
+            return 2;
+    }
+}
+
 static float GetFastFloat(const char* szVarName, float def, FILE* f)
 {
     char buf[256];
@@ -490,10 +528,14 @@ void CState::RegisterBuiltInVariables(int flags)
             m_shape[i].var_pf_tex_zoom  = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "tex_zoom"); // i/o
             m_shape[i].var_pf_sides     = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "sides");    // i/o
             m_shape[i].var_pf_textured  = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "textured"); // i/o
+            m_shape[i].var_pf_tex_capture = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "tex_capture"); // i/o
             m_shape[i].var_pf_instance  = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "instance"); // i/o
             m_shape[i].var_pf_instances = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "num_inst"); // i/o
             m_shape[i].var_pf_additive  = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "additive"); // i/o
             m_shape[i].var_pf_thick     = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "thick");    // i/o
+            m_shape[i].var_pf_x_wrap_mode = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "x_wrap_mode"); // i/o
+            m_shape[i].var_pf_y_wrap_mode = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "y_wrap_mode"); // i/o
+            m_shape[i].var_pf_draw_back = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "draw_back"); // i/o
             m_shape[i].var_pf_r         = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "r");        // i/o
             m_shape[i].var_pf_g         = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "g");        // i/o
             m_shape[i].var_pf_b         = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "b");        // i/o
@@ -506,6 +548,8 @@ void CState::RegisterBuiltInVariables(int flags)
             m_shape[i].var_pf_border_g  = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "border_g"); // i/o
             m_shape[i].var_pf_border_b  = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "border_b"); // i/o
             m_shape[i].var_pf_border_a  = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "border_a"); // i/o
+            m_shape[i].var_pf_tex_cx    = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "tex_cx");   // i/o
+            m_shape[i].var_pf_tex_cy    = NSEEL_VM_regvar(m_shape[i].m_pf_eel, "tex_cy");   // i/o
         }
     }
 }
@@ -607,11 +651,17 @@ void CState::Default(DWORD ApplyFlags)
             m_shape[i].enabled      = 0;
             m_shape[i].sides        = 4;
             m_shape[i].additive     = 0;
+            m_shape[i].bDrawBack    = 0;
             m_shape[i].thickOutline = 0;
+            m_shape[i].x_wrap_mode  = 0;
+            m_shape[i].y_wrap_mode  = 0;
             m_shape[i].textured     = 0;
             m_shape[i].instances    = 1;
             m_shape[i].tex_zoom     = 1.0f;
             m_shape[i].tex_ang      = 0.0f;
+            m_shape[i].tex_capture  = 1.0f;
+            m_shape[i].tex_cx       = 0.5f;
+            m_shape[i].tex_cy       = 0.5f;
             m_shape[i].x            = 0.5f;
             m_shape[i].y            = 0.5f;
             m_shape[i].rad          = 0.1f;
@@ -878,9 +928,9 @@ bool CState::Export(const wchar_t* szIniFile)
     if (m_nMaxPSVersion > 0)
     {
         fprintf_s(fOut, "MILKDROP_PRESET_VERSION=%d\n", CUR_MILKDROP_PRESET_VERSION);
-        fprintf_s(fOut, "PSVERSION=%d\n", m_nMaxPSVersion); // the maximum
-        fprintf_s(fOut, "PSVERSION_WARP=%d\n", m_nWarpPSVersion);
-        fprintf_s(fOut, "PSVERSION_COMP=%d\n", m_nCompPSVersion);
+        fprintf_s(fOut, "PSVERSION=%d\n", InternalShaderVersionToPreset(m_nMaxPSVersion)); // the maximum
+        fprintf_s(fOut, "PSVERSION_WARP=%d\n", InternalShaderVersionToPreset(m_nWarpPSVersion));
+        fprintf_s(fOut, "PSVERSION_COMP=%d\n", InternalShaderVersionToPreset(m_nCompPSVersion));
     }
 
     // Just for backwards compatibility; MilkDrop 1 can read MilkDrop 2 presets, minus the new features.
@@ -1034,8 +1084,14 @@ int CShape::Export(FILE* fOut, const wchar_t* szFile, int i) const
     fprintf_s(f2, "shapecode_%d_%s=%d\n", i, "enabled", enabled);
     fprintf_s(f2, "shapecode_%d_%s=%d\n", i, "sides", sides);
     fprintf_s(f2, "shapecode_%d_%s=%d\n", i, "additive", additive);
+    fprintf_s(f2, "shapecode_%d_%s=%d\n", i, "bDrawBack", bDrawBack);
     fprintf_s(f2, "shapecode_%d_%s=%d\n", i, "thickOutline", thickOutline);
+    fprintf_s(f2, "shapecode_%d_%s=%d\n", i, "x_wrap_mode", x_wrap_mode);
+    fprintf_s(f2, "shapecode_%d_%s=%d\n", i, "y_wrap_mode", y_wrap_mode);
     fprintf_s(f2, "shapecode_%d_%s=%d\n", i, "textured", textured);
+    fprintf_s(f2, "shapecode_%d_%s=%.3f\n", i, "tex_capture", tex_capture);
+    fprintf_s(f2, "shapecode_%d_%s=%.3f\n", i, "tex_cx", tex_cx);
+    fprintf_s(f2, "shapecode_%d_%s=%.3f\n", i, "tex_cy", tex_cy);
     fprintf_s(f2, "shapecode_%d_%s=%d\n", i, "num_inst", instances);
     fprintf_s(f2, "shapecode_%d_%s=%.3f\n", i, "x", x);
     fprintf_s(f2, "shapecode_%d_%s=%.3f\n", i, "y", y);
@@ -1242,8 +1298,14 @@ int CShape::Import(FILE* f, const wchar_t* szFile, int i)
     sprintf_s(buf, "shapecode_%d_%s", i, "enabled");      enabled   = GetFastInt(buf, enabled, f2);
     sprintf_s(buf, "shapecode_%d_%s", i, "sides");        sides     = GetFastInt(buf, sides, f2);
     sprintf_s(buf, "shapecode_%d_%s", i, "additive");     additive  = GetFastInt(buf, additive, f2);
+    sprintf_s(buf, "shapecode_%d_%s", i, "bDrawBack");    bDrawBack = GetFastInt(buf, bDrawBack, f2);
     sprintf_s(buf, "shapecode_%d_%s", i, "thickOutline"); thickOutline = GetFastInt(buf, thickOutline, f2);
+    sprintf_s(buf, "shapecode_%d_%s", i, "x_wrap_mode");  x_wrap_mode = GetFastInt(buf, x_wrap_mode, f2);
+    sprintf_s(buf, "shapecode_%d_%s", i, "y_wrap_mode");  y_wrap_mode = GetFastInt(buf, y_wrap_mode, f2);
     sprintf_s(buf, "shapecode_%d_%s", i, "textured");     textured  = GetFastInt(buf, textured, f2);
+    sprintf_s(buf, "shapecode_%d_%s", i, "tex_capture");  tex_capture = GetFastFloat(buf, tex_capture, f2);
+    sprintf_s(buf, "shapecode_%d_%s", i, "tex_cx");       tex_cx    = GetFastFloat(buf, tex_cx, f2);
+    sprintf_s(buf, "shapecode_%d_%s", i, "tex_cy");       tex_cy    = GetFastFloat(buf, tex_cy, f2);
     sprintf_s(buf, "shapecode_%d_%s", i, "num_inst");     instances = GetFastInt(buf, instances, f2);
     sprintf_s(buf, "shapecode_%d_%s", i, "x");            x         = GetFastFloat(buf, x, f2);
     sprintf_s(buf, "shapecode_%d_%s", i, "y");            y         = GetFastFloat(buf, y, f2);
@@ -1337,13 +1399,13 @@ bool CState::Import(const wchar_t* szIniFile, float fTime, CState* pOldState, DW
     }
     else if (nMilkdropPresetVersion == 200)
     {
-        nWarpPSVersionInFile = GetFastInt("PSVERSION", 2, f);
+        nWarpPSVersionInFile = PresetShaderVersionToInternal(GetFastInt("PSVERSION", 2, f));
         nCompPSVersionInFile = nWarpPSVersionInFile;
     }
     else
     {
-        nWarpPSVersionInFile = GetFastInt("PSVERSION_WARP", 2, f);
-        nCompPSVersionInFile = GetFastInt("PSVERSION_COMP", 2, f);
+        nWarpPSVersionInFile = PresetShaderVersionToInternal(GetFastInt("PSVERSION_WARP", 2, f));
+        nCompPSVersionInFile = PresetShaderVersionToInternal(GetFastInt("PSVERSION_COMP", 2, f));
     }
 
     // General.

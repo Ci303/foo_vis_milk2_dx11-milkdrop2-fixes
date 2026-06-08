@@ -142,6 +142,52 @@ typedef struct
     wchar_t szText[256];
 } td_custom_msg;
 
+enum
+{
+    SUPER_TEXT_ANIM_ZOOM = 0,
+    SUPER_TEXT_ANIM_SLIDE_LEFT = 1,
+    SUPER_TEXT_ANIM_SLIDE_RIGHT = 2,
+    SUPER_TEXT_ANIM_LIFT = 3,
+    SUPER_TEXT_ANIM_DROP = 4,
+    SUPER_TEXT_ANIM_BURST = 5,
+    SUPER_TEXT_ANIM_SWIRL = 6,
+    SUPER_TEXT_ANIM_SQUEEZE = 7,
+    SUPER_TEXT_ANIM_RIPPLE = 8,
+    SUPER_TEXT_ANIM_TILT = 9,
+    SUPER_TEXT_ANIM_ROLL = 10,
+    SUPER_TEXT_ANIM_SCAN = 11,
+    SUPER_TEXT_ANIM_SHARDS = 12,
+    SUPER_TEXT_ANIM_FOLD = 13,
+    SUPER_TEXT_ANIM_VORTEX = 14,
+    SUPER_TEXT_ANIM_FADE = 15,
+    SUPER_TEXT_ANIM_SLIDE_UP = 16,
+    SUPER_TEXT_ANIM_SLIDE_DOWN = 17,
+    SUPER_TEXT_ANIM_SWIPE_LEFT = 18,
+    SUPER_TEXT_ANIM_SWIPE_RIGHT = 19,
+    SUPER_TEXT_ANIM_SWIPE_UP = 20,
+    SUPER_TEXT_ANIM_SWIPE_DOWN = 21,
+    SUPER_TEXT_ANIM_EXPAND = 22,
+    SUPER_TEXT_ANIM_CONTRACT = 23,
+    SUPER_TEXT_ANIM_BOUNCE_LEFT = 24,
+    SUPER_TEXT_ANIM_BOUNCE_RIGHT = 25,
+    SUPER_TEXT_ANIM_BOUNCE_UP = 26,
+    SUPER_TEXT_ANIM_BOUNCE_DOWN = 27,
+    SUPER_TEXT_ANIM_JIGGLE = 28,
+    SUPER_TEXT_ANIM_DRIFT_LEFT = 29,
+    SUPER_TEXT_ANIM_DRIFT_RIGHT = 30,
+    SUPER_TEXT_ANIM_PINCH = 31,
+    SUPER_TEXT_ANIM_UNFOLD_X = 32,
+    SUPER_TEXT_ANIM_UNFOLD_Y = 33,
+    SUPER_TEXT_ANIM_SPIRAL = 34,
+    SUPER_TEXT_ANIM_SOFT_WAVE = 35,
+    SUPER_TEXT_ANIM_GLIDE_UP_LEFT = 36,
+    SUPER_TEXT_ANIM_GLIDE_UP_RIGHT = 37,
+    SUPER_TEXT_ANIM_GLIDE_DOWN_LEFT = 38,
+    SUPER_TEXT_ANIM_GLIDE_DOWN_RIGHT = 39,
+    SUPER_TEXT_ANIM_PAGE_TURN = 40,
+    SUPER_TEXT_ANIM_STYLE_COUNT = 41,
+};
+
 typedef struct
 {
     int bRedrawSuperText; // true if it needs redraw
@@ -163,6 +209,8 @@ typedef struct
     int nColorR;
     int nColorG;
     int nColorB;
+    int nIntroStyle; // song-title entrance style; ignored by custom messages
+    int nOutroStyle; // song-title exit style; ignored by custom messages
 } td_supertext;
 
 typedef struct
@@ -555,6 +603,8 @@ class CPlugin : public CPluginShell
     texmgr m_texmgr; // for user sprites
 
     td_supertext m_supertext; // **contains info about current Song Title or Custom Message.**
+    int m_nLastSongTitleIntroStyle;
+    int m_nLastSongTitleOutroStyle;
 #ifdef _SUPERTEXT
     std::unique_ptr<SuperText> m_superTitle;
 #endif
@@ -656,7 +706,7 @@ class CPlugin : public CPluginShell
 
     bool LoadShaders(PShaderSet* sh, CState* pState, bool bTick);
     void UvToMathSpace(float u, float v, float* rad, float* ang);
-    void ApplyShaderParams(CShaderParams* p, CConstantTable* pCT, CState* pState);
+    void ApplyShaderParams(CShaderParams* p, CConstantTable* pCT, CState* pState, ID3D11Texture2D* vsTextureOverride = nullptr);
     void RestoreShaderParams();
     bool AddNoiseTex(const wchar_t* szTexName, int size, int zoom_factor);
     bool AddNoiseVol(const wchar_t* szTexName, int size, int zoom_factor);

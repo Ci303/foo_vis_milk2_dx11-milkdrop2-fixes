@@ -72,8 +72,9 @@ class D3D11Shim
     };
 
     int NumVertsFromType(unsigned int primType, int iPrimCount);
-    void UpdateVBuffer(unsigned int iNumVerts, const void* pVData, unsigned int vertexStride);
+    unsigned int UpdateVBuffer(unsigned int iNumVerts, const void* pVData, unsigned int vertexStride);
     void UpdateIBuffer(unsigned int iNumIndices, const void* pIData);
+    void ApplyFixedFunctionPixelShader();
 
     cbTransforms m_transforms;
     ID3D11Device* m_pDevice;
@@ -88,6 +89,9 @@ class D3D11Shim
     ID3D11Buffer* m_pCBuffer;
     bool m_bCBufferIsDirty;
     unsigned int m_uCurrShader;
+    bool m_bTexture0Bound;
+    bool m_bVertexColorOnly;
+    bool m_bCustomPixelShaderActive;
     ID3D11BlendState* m_pState;
 
     std::unique_ptr<DirectX::CommonStates> m_states;

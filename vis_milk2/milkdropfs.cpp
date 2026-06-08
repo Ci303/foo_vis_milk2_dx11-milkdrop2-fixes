@@ -1175,9 +1175,32 @@ void CPlugin::RenderFrame(int bRedraw)
     }
 
     if (m_nMaxPSVersion > 0)
-        BlurPasses();
+    {
+        auto noteCompBlurUse = [this](const PShaderInfo& shader)
+        {
+            for (int i = 0; i < ARRAYSIZE(shader.params.m_texcode); i++)
+            {
+                if (shader.params.m_texcode[i] >= TEX_BLUR1 && shader.params.m_texcode[i] <= TEX_BLUR_LAST)
+                {
+                    m_nHighestBlurTexUsedThisFrame = std::max(
+                        m_nHighestBlurTexUsedThisFrame,
+                        ((int)shader.params.m_texcode[i] - (int)TEX_BLUR1) + 1
+                    );
+                }
+            }
+        };
 
-    // Draw audio data.
+        if (bNewPresetUsesCompShader)
+            noteCompBlurUse(m_shaders.comp);
+        if (m_pState->m_bBlending && bOldPresetUsesCompShader)
+            noteCompBlurUse(m_OldShaders.comp);
+
+        BlurPasses();
+    }
+
+    // Draw audio data after the blur chain, matching the original D3D9 order:
+    // blur is derived from the feedback history, not from this frame's freshly
+    // drawn waves/shapes.
     DrawCustomShapes(); // draw these first; better for feedback if the waves draw *over* them
     DrawCustomWaves();
     DrawWave(mdsound.fWave[0].data(), mdsound.fWave[1].data());
@@ -1493,7 +1516,7 @@ void CPlugin::GetSafeBlurMinMax(CState* pState, float* blur_min, float* blur_max
     {
         float avg = (blur_min[0] + blur_max[0]) * 0.5f;
         blur_min[0] = avg - fMinDist * 0.5f;
-        blur_max[0] = avg - fMinDist * 0.5f;
+        blur_max[0] = avg + fMinDist * 0.5f;
     }
     blur_max[1] = std::min(blur_max[0], blur_max[1]);
     blur_min[1] = std::max(blur_min[0], blur_min[1]);
@@ -1501,7 +1524,7 @@ void CPlugin::GetSafeBlurMinMax(CState* pState, float* blur_min, float* blur_max
     {
         float avg = (blur_min[1] + blur_max[1]) * 0.5f;
         blur_min[1] = avg - fMinDist * 0.5f;
-        blur_max[1] = avg - fMinDist * 0.5f;
+        blur_max[1] = avg + fMinDist * 0.5f;
     }
     blur_max[2] = std::min(blur_max[1], blur_max[2]);
     blur_min[2] = std::max(blur_min[1], blur_min[2]);
@@ -1509,7 +1532,7 @@ void CPlugin::GetSafeBlurMinMax(CState* pState, float* blur_min, float* blur_max
     {
         float avg = (blur_min[2] + blur_max[2]) * 0.5f;
         blur_min[2] = avg - fMinDist * 0.5f;
-        blur_max[2] = avg - fMinDist * 0.5f;
+        blur_max[2] = avg + fMinDist * 0.5f;
     }
 }
 
@@ -1606,6 +1629,8 @@ void CPlugin::BlurPasses()
 
         int srcw = (i == 0) ? GetWidth() : m_nBlurTexW[i - 1];
         int srch = (i == 0) ? GetHeight() : m_nBlurTexH[i - 1];
+        srcw = std::max(1, srcw);
+        srch = std::max(1, srch);
         XMFLOAT4 srctexsize = XMFLOAT4(static_cast<float>(srcw), static_cast<float>(srch), 1.0f / static_cast<float>(srcw), 1.0f / static_cast<float>(srch));
 
         float fscale_now = fscale[i / 2];
@@ -2300,8 +2325,11 @@ void CPlugin::DrawCustomShapes()
                     v[0].x = (float)(*pState->m_shape[i].var_pf_x * 2 - 1); // * ASPECT;
                     v[0].y = (float)(*pState->m_shape[i].var_pf_y * -2 + 1);
                     v[0].z = 0;
-                    v[0].tu = 0.5f;
-                    v[0].tv = 0.5f;
+                    const float tex_zoom = std::max(0.0001f, static_cast<float>(*pState->m_shape[i].var_pf_tex_zoom));
+                    const float tex_cx = static_cast<float>(*pState->m_shape[i].var_pf_tex_cx);
+                    const float tex_cy = static_cast<float>(*pState->m_shape[i].var_pf_tex_cy);
+                    v[0].tu = tex_cx;
+                    v[0].tv = tex_cy;
                     v[0].a = COLOR_NORM(*pState->m_shape[i].var_pf_a * alpha_mult);
                     v[0].r = COLOR_NORM(*pState->m_shape[i].var_pf_r);
                     v[0].g = COLOR_NORM(*pState->m_shape[i].var_pf_g);
@@ -2316,15 +2344,18 @@ void CPlugin::DrawCustomShapes()
                         v[j].x = v[0].x + (float)*pState->m_shape[i].var_pf_rad * cosf(t * 3.1415927f * 2 + (float)*pState->m_shape[i].var_pf_ang + 3.1415927f * 0.25f) * m_fAspectY; // DON'T TOUCH!
                         v[j].y = v[0].y + (float)*pState->m_shape[i].var_pf_rad * sinf(t * 3.1415927f * 2 + (float)*pState->m_shape[i].var_pf_ang + 3.1415927f * 0.25f);              // DON'T TOUCH!
                         v[j].z = 0;
-                        v[j].tu = 0.5f + 0.5f * cosf(t * 3.1415927f * 2 + (float)*pState->m_shape[i].var_pf_tex_ang + 3.1415927f * 0.25f) / ((float)*pState->m_shape[i].var_pf_tex_zoom) * m_fAspectY; // DON'T TOUCH!
-                        v[j].tv = 0.5f + 0.5f * sinf(t * 3.1415927f * 2 + (float)*pState->m_shape[i].var_pf_tex_ang + 3.1415927f * 0.25f) / ((float)*pState->m_shape[i].var_pf_tex_zoom);              // DON'T TOUCH!
+                        v[j].tu = tex_cx + 0.5f * cosf(t * 3.1415927f * 2 + (float)*pState->m_shape[i].var_pf_tex_ang + 3.1415927f * 0.25f) / tex_zoom * m_fAspectY; // DON'T TOUCH!
+                        v[j].tv = tex_cy + 0.5f * sinf(t * 3.1415927f * 2 + (float)*pState->m_shape[i].var_pf_tex_ang + 3.1415927f * 0.25f) / tex_zoom;              // DON'T TOUCH!
                         COPY_COLOR(v[j], v[1]);
                     }
                     v[sides + 1] = v[1];
 
-                    if ((int)(*pState->m_shape[i].var_pf_textured) != 0)
+                    const bool isTexturedShape = (int)(*pState->m_shape[i].var_pf_textured) != 0 && *pState->m_shape[i].var_pf_tex_capture > 0.001;
+                    if (isTexturedShape)
                     {
                         // Draw textured version.
+                        lpDevice->SetShader(0);
+                        lpDevice->SetVertexColor(false);
                         lpDevice->SetTexture(0, m_lpVS[0]);
                         lpDevice->SetVertexShader(NULL, NULL);
                         lpDevice->DrawPrimitive(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP + 1, sides, (LPVOID)v, sizeof(SPRITEVERTEX));
@@ -2382,6 +2413,7 @@ void CPlugin::DrawCustomShapes()
 
                     lpDevice->SetTexture(0, m_lpVS[0]);
                     lpDevice->SetVertexShader(NULL, NULL);
+                    lpDevice->SetShader(0);
                     lpDevice->SetVertexColor(false);
                     //lpDevice->SetFVF(SPRITEVERTEX_FORMAT);
                 }
@@ -2414,12 +2446,18 @@ void CPlugin::LoadCustomShapePerFrameEvallibVars(CState* pState, int i, int inst
     *pState->m_shape[i].var_pf_ang       = pState->m_shape[i].ang;
     *pState->m_shape[i].var_pf_tex_zoom  = pState->m_shape[i].tex_zoom;
     *pState->m_shape[i].var_pf_tex_ang   = pState->m_shape[i].tex_ang;
+    *pState->m_shape[i].var_pf_tex_capture = pState->m_shape[i].tex_capture;
+    *pState->m_shape[i].var_pf_tex_cx    = pState->m_shape[i].tex_cx;
+    *pState->m_shape[i].var_pf_tex_cy    = pState->m_shape[i].tex_cy;
     *pState->m_shape[i].var_pf_sides     = pState->m_shape[i].sides;
     *pState->m_shape[i].var_pf_additive  = pState->m_shape[i].additive;
     *pState->m_shape[i].var_pf_textured  = pState->m_shape[i].textured;
     *pState->m_shape[i].var_pf_instances = pState->m_shape[i].instances;
     *pState->m_shape[i].var_pf_instance  = instance;
     *pState->m_shape[i].var_pf_thick     = pState->m_shape[i].thickOutline;
+    *pState->m_shape[i].var_pf_x_wrap_mode = pState->m_shape[i].x_wrap_mode;
+    *pState->m_shape[i].var_pf_y_wrap_mode = pState->m_shape[i].y_wrap_mode;
+    *pState->m_shape[i].var_pf_draw_back = pState->m_shape[i].bDrawBack;
     *pState->m_shape[i].var_pf_r         = pState->m_shape[i].r;
     *pState->m_shape[i].var_pf_g         = pState->m_shape[i].g;
     *pState->m_shape[i].var_pf_b         = pState->m_shape[i].b;
@@ -3807,7 +3845,7 @@ void CPlugin::RestoreShaderParams()
     lpDevice->SetPixelShader(NULL, NULL);
 }
 
-void CPlugin::ApplyShaderParams(CShaderParams* p, CConstantTable* pCT, CState* pState)
+void CPlugin::ApplyShaderParams(CShaderParams* p, CConstantTable* pCT, CState* pState, ID3D11Texture2D* vsTextureOverride)
 {
     D3D11Shim* lpDevice = GetDevice();
     if (!lpDevice)
@@ -3816,23 +3854,34 @@ void CPlugin::ApplyShaderParams(CShaderParams* p, CConstantTable* pCT, CState* p
     //if (p->texbind_vs >= 0) lpDevice->SetTexture(p->texbind_vs, m_lpVS[0]);
     //if (p->texbind_noise >= 0) lpDevice->SetTexture(p->texbind_noise, m_pTexNoise);
 
+    // Clear shader resource slots first. Some DX11 shader reflections map a
+    // sampler to a different texture bind point; clearing during the bind loop
+    // can otherwise wipe a texture that was just bound by an earlier sampler.
+    for (int i = 0; i < sizeof(p->m_texture_bindings) / sizeof(p->m_texture_bindings[0]); i++)
+        lpDevice->SetTexture(i, NULL);
+
     // Bind textures.
     for (int i = 0; i < sizeof(p->m_texture_bindings) / sizeof(p->m_texture_bindings[0]); i++)
     {
-        if (p->m_texcode[i] == TEX_VS)
-            lpDevice->SetTexture(p->m_texture_bindings[i].bindPoint, m_lpVS[0]);
-        else
-            lpDevice->SetTexture(p->m_texture_bindings[i].texptr ? p->m_texture_bindings[i].bindPoint : i, p->m_texture_bindings[i].texptr);
+        const bool hasTexture = (p->m_texcode[i] == TEX_VS || p->m_texture_bindings[i].texptr);
+        if (!hasTexture)
+            continue;
 
-        // Also set up sampler stage, if anything is bound here...
-        if (p->m_texcode[i] == TEX_VS || p->m_texture_bindings[i].texptr)
-        {
-            bool bAniso = false; // TODO: DirectX 11 anisotropy
-            D3D11_FILTER HQFilter = bAniso ? D3D11_FILTER_ANISOTROPIC : D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-            D3D11_TEXTURE_ADDRESS_MODE wrap = p->m_texture_bindings[i].bWrap ? D3D11_TEXTURE_ADDRESS_WRAP : D3D11_TEXTURE_ADDRESS_CLAMP;
-            D3D11_FILTER filter = p->m_texture_bindings[i].bBilinear ? HQFilter : D3D11_FILTER_MIN_MAG_MIP_POINT;
-            lpDevice->SetSamplerState(i, filter, wrap);
-        }
+        UINT bindPoint = p->m_texture_bindings[i].bindPoint;
+        if (bindPoint >= sizeof(p->m_texture_bindings) / sizeof(p->m_texture_bindings[0]))
+            bindPoint = static_cast<UINT>(i);
+
+        if (p->m_texcode[i] == TEX_VS)
+            lpDevice->SetTexture(bindPoint, vsTextureOverride ? vsTextureOverride : m_lpVS[0]);
+        else
+            lpDevice->SetTexture(bindPoint, p->m_texture_bindings[i].texptr);
+
+        // Also set up sampler stage.
+        bool bAniso = false; // TODO: DirectX 11 anisotropy
+        D3D11_FILTER HQFilter = bAniso ? D3D11_FILTER_ANISOTROPIC : D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+        D3D11_TEXTURE_ADDRESS_MODE wrap = p->m_texture_bindings[i].bWrap ? D3D11_TEXTURE_ADDRESS_WRAP : D3D11_TEXTURE_ADDRESS_CLAMP;
+        D3D11_FILTER filter = p->m_texture_bindings[i].bBilinear ? HQFilter : D3D11_FILTER_MIN_MAG_MIP_POINT;
+        lpDevice->SetSamplerState(i, filter, wrap);
 
         // Finally, if it was a blur texture, note that.
         if (p->m_texcode[i] >= TEX_BLUR1 && p->m_texcode[i] <= TEX_BLUR_LAST)
@@ -3853,7 +3902,9 @@ void CPlugin::ApplyShaderParams(CShaderParams* p, CConstantTable* pCT, CState* p
     float time = GetTime() - m_fStartTime;
     float progress = (GetTime() - m_fPresetStartTime) / (m_fNextPresetTime - m_fPresetStartTime);
     float mip_x = logf((float)GetWidth()) / logf(2.0f);
-    float mip_y = logf((float)GetHeight()) / logf(2.0f);
+    // Match the original MilkDrop shader constant behaviour. Presets were
+    // authored against this value even though it duplicates the width mip.
+    float mip_y = logf((float)GetWidth()) / logf(2.0f);
     float mip_avg = 0.5f * (mip_x + mip_y);
     float aspect_x = 1;
     float aspect_y = 1;
@@ -4449,6 +4500,14 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
     lpDevice->SetBlendState(true, D3D11_BLEND_ONE, D3D11_BLEND_ONE);
 
     MDVERTEX v3[128]{};
+    constexpr float song_title_intro_fraction = 0.34f;
+    constexpr float song_title_outro_start = 0.62f;
+    constexpr float song_title_outro_fraction = 1.0f - song_title_outro_start;
+    const auto smooth_step = [](float value) -> float
+    {
+        value = std::clamp(value, 0.0f, 1.0f);
+        return value * value * (3.0f - 2.0f * value);
+    };
 
 #ifdef _SUPERTEXT
     m_superTitle->CreateWindowSizeDependentResources(w, h);
@@ -4469,6 +4528,44 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
     );
     m_superTitle->OnRender();
 #else
+    const float now = GetTime();
+    const auto finite_or_zero = [](float value) -> float
+    {
+        return std::isfinite(value) ? value : 0.0f;
+    };
+    const auto finite_or_one = [](float value) -> float
+    {
+        return std::isfinite(value) ? value : 1.0f;
+    };
+    const auto audio_rel = [](float damped) -> float
+    {
+        return std::clamp(std::isfinite(damped) ? damped - 1.0f : 0.0f, 0.0f, 0.70f);
+    };
+    const float bass_amount = audio_rel(mdsound.avg_rel[0]);
+    const float mid_amount = audio_rel(mdsound.avg_rel[1]);
+    const float treble_amount = audio_rel(mdsound.avg_rel[2]);
+    const float energy_amount = std::clamp(bass_amount * 0.35f + mid_amount * 0.35f + treble_amount * 0.30f, 0.0f, 0.50f);
+    const float preset_rot = m_pState ? finite_or_zero(static_cast<float>(m_pState->m_fRot.eval(now))) : 0.0f;
+    const float preset_warp = m_pState ? std::abs(finite_or_zero(static_cast<float>(m_pState->m_fWarpAmount.eval(now)))) : 0.0f;
+    const float preset_wave_param = m_pState ? finite_or_zero(static_cast<float>(m_pState->m_fWaveParam.eval(now))) : 0.0f;
+    const float preset_zoom = m_pState ? finite_or_one(static_cast<float>(m_pState->m_fZoom.eval(now))) : 1.0f;
+    const float preset_stretch_x = m_pState ? finite_or_one(static_cast<float>(m_pState->m_fStretchX.eval(now))) : 1.0f;
+    const float preset_stretch_y = m_pState ? finite_or_one(static_cast<float>(m_pState->m_fStretchY.eval(now))) : 1.0f;
+    const float preset_xpush = m_pState ? finite_or_zero(static_cast<float>(m_pState->m_fXPush.eval(now))) : 0.0f;
+    const float preset_ypush = m_pState ? finite_or_zero(static_cast<float>(m_pState->m_fYPush.eval(now))) : 0.0f;
+    const float preset_mv_x = m_pState ? finite_or_zero(static_cast<float>(m_pState->m_fMvX.eval(now))) : 0.0f;
+    const float preset_mv_y = m_pState ? finite_or_zero(static_cast<float>(m_pState->m_fMvY.eval(now))) : 0.0f;
+    const float preset_warp_speed = m_pState ? std::abs(finite_or_one(static_cast<float>(m_pState->m_fWarpAnimSpeed))) : 1.0f;
+    const float preset_wave_r = m_pState ? std::clamp(finite_or_zero(static_cast<float>(m_pState->m_fWaveR.eval(now))), 0.0f, 1.0f) : 1.0f;
+    const float preset_wave_g = m_pState ? std::clamp(finite_or_zero(static_cast<float>(m_pState->m_fWaveG.eval(now))), 0.0f, 1.0f) : 1.0f;
+    const float preset_wave_b = m_pState ? std::clamp(finite_or_zero(static_cast<float>(m_pState->m_fWaveB.eval(now))), 0.0f, 1.0f) : 1.0f;
+    const float preset_wave_alpha = m_pState ? std::clamp(finite_or_zero(static_cast<float>(m_pState->m_fWaveAlpha.eval(now))), 0.0f, 1.0f) : 1.0f;
+    const int preset_wave_mode = m_pState ? m_pState->m_nWaveMode : 0;
+    const float visual_angle = preset_rot * 3.1415927f + preset_wave_param * 0.7853982f + preset_wave_mode * 0.1963495f;
+    const float visual_dx = std::cos(visual_angle);
+    const float visual_dy = std::sin(visual_angle);
+    const float motion_gain = std::clamp(0.86f + energy_amount * 0.08f + std::min(preset_warp, 2.0f) * 0.025f, 0.82f, 1.02f);
+
     if (m_supertext.bIsSongTitle)
     {
         // Positioning.
@@ -4557,32 +4654,405 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
             }
         }
 
-        // Warping.
-        float ramped_progress = std::max(0.0f, 1 - fProgress * 1.5f);
-        float t2 = std::pow(ramped_progress, 1.8f) * 1.3f;
-        for (int y = 0; y < 8; y++)
+        // Song-title entrance/exit animation.
+        const float safe_progress = std::clamp(fProgress, 0.0f, 1.0f);
+        const float intro_amount = 1.0f - smooth_step(safe_progress / song_title_intro_fraction);
+        const float outro_amount = smooth_step((safe_progress - song_title_outro_start) / song_title_outro_fraction);
+        const int intro_style = std::clamp(
+            m_supertext.nIntroStyle,
+            static_cast<int>(SUPER_TEXT_ANIM_ZOOM),
+            static_cast<int>(SUPER_TEXT_ANIM_STYLE_COUNT - 1)
+        );
+        const int outro_style = std::clamp(
+            m_supertext.nOutroStyle,
+            static_cast<int>(SUPER_TEXT_ANIM_ZOOM),
+            static_cast<int>(SUPER_TEXT_ANIM_STYLE_COUNT - 1)
+        );
+        auto apply_song_title_style = [&](int style, float amount, bool outgoing)
         {
-            for (int x = 0; x < 16; x++)
-            {
-                i = y * 16 + x;
-                v3[i].x += t2 * 0.070f * std::sin(GetTime() * 0.31f + v3[i].x * 0.39f - v3[i].y * 1.94f);
-                v3[i].x += t2 * 0.044f * std::sin(GetTime() * 0.81f - v3[i].x * 1.91f + v3[i].y * 0.27f);
-                v3[i].x += t2 * 0.061f * std::sin(GetTime() * 1.31f + v3[i].x * 0.61f + v3[i].y * 0.74f);
-                v3[i].y += t2 * 0.061f * std::sin(GetTime() * 0.37f + v3[i].x * 1.83f + v3[i].y * 0.69f);
-                v3[i].y += t2 * 0.070f * std::sin(GetTime() * 0.67f + v3[i].x * 0.42f - v3[i].y * 1.39f);
-                v3[i].y += t2 * 0.087f * std::sin(GetTime() * 1.07f + v3[i].x * 3.55f + v3[i].y * 0.89f);
-            }
-        }
+            if (amount <= 0.0001f)
+                return;
 
-        // Scale down over time.
-        float scale = 1.01f / (std::pow(fProgress, 0.21f) + 0.01f);
-        const float outProgress = song_title_out_progress(fProgress);
-        scale *= 1.0f - 0.08f * outProgress;
-        for (i = 0; i < 128; i++)
+            const float eased_amount = smooth_step(amount);
+            const float anim_progress = outgoing ? eased_amount : 1.0f - eased_amount;
+            const float audio_amount = std::clamp(eased_amount * motion_gain, 0.0f, 1.02f);
+            const float blend_pulse = std::sin(std::clamp(anim_progress, 0.0f, 1.0f) * 3.1415927f) * 0.10f;
+
+            for (int y = 0; y < 8; y++)
+            {
+                for (int x = 0; x < 16; x++)
+                {
+                    i = y * 16 + x;
+                    const float grid_x = x / 15.0f * 2.0f - 1.0f;
+                    const float grid_y = y / 7.0f * 2.0f - 1.0f;
+                    const float radius = std::sqrt(grid_x * grid_x + grid_y * grid_y);
+                    const float phase = static_cast<float>(style) * 1.731f;
+
+                    switch (style)
+                    {
+                        case SUPER_TEXT_ANIM_SLIDE_LEFT:
+                            v3[i].x -= audio_amount * (0.18f + energy_amount * 0.008f);
+                            v3[i].y += audio_amount * (0.010f + treble_amount * 0.002f) * std::sin(now * 0.45f + grid_x * 3.2f + visual_angle + phase);
+                            break;
+
+                        case SUPER_TEXT_ANIM_SLIDE_RIGHT:
+                            v3[i].x += audio_amount * (0.18f + energy_amount * 0.008f);
+                            v3[i].y += audio_amount * (0.010f + treble_amount * 0.002f) * std::sin(now * 0.45f + grid_x * 3.2f + visual_angle + phase);
+                            break;
+
+                        case SUPER_TEXT_ANIM_LIFT:
+                            v3[i].x += audio_amount * (0.012f + treble_amount * 0.002f) * std::sin(now * 0.46f + grid_y * 3.1f + phase);
+                            v3[i].y += audio_amount * (outgoing ? -0.15f : 0.11f) * (1.0f + energy_amount * 0.04f);
+                            break;
+
+                        case SUPER_TEXT_ANIM_DROP:
+                            v3[i].x += audio_amount * (0.012f + treble_amount * 0.002f) * std::sin(now * 0.46f + grid_y * 3.1f + phase);
+                            v3[i].y += audio_amount * (outgoing ? 0.15f : -0.11f) * (1.0f + energy_amount * 0.04f);
+                            break;
+
+                        case SUPER_TEXT_ANIM_BURST:
+                        {
+                            const float strength = audio_amount * (outgoing ? 0.12f : 0.065f + radius * 0.018f) * (1.0f + energy_amount * 0.04f);
+                            v3[i].x += grid_x * strength;
+                            v3[i].y += grid_y * strength;
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_SWIRL:
+                        {
+                            const float angle = audio_amount * (outgoing ? 0.30f : -0.23f) * (1.0f - std::min(radius, 1.5f) * 0.14f) * (1.0f + energy_amount * 0.03f);
+                            const float s = std::sin(angle);
+                            const float c = std::cos(angle);
+                            const float old_x = v3[i].x;
+                            const float old_y = v3[i].y;
+                            v3[i].x = old_x * c - old_y * s;
+                            v3[i].y = old_x * s + old_y * c;
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_SQUEEZE:
+                        {
+                            const float squeeze = outgoing ? audio_amount * 0.18f : audio_amount * 0.24f;
+                            v3[i].x *= 1.0f + (outgoing ? -squeeze : squeeze);
+                            v3[i].y *= 1.0f + (outgoing ? squeeze * 0.42f : -squeeze * 0.28f);
+                            v3[i].y += audio_amount * grid_y * (0.009f + blend_pulse * 0.006f);
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_RIPPLE:
+                            v3[i].x += audio_amount * (0.017f + treble_amount * 0.004f) * std::sin(now * 0.45f + grid_y * 5.4f + visual_angle + phase);
+                            v3[i].y += audio_amount * (0.013f + mid_amount * 0.003f) * std::sin(now * 0.39f + grid_x * 4.7f - visual_angle - phase);
+                            break;
+
+                        case SUPER_TEXT_ANIM_TILT:
+                            v3[i].x += audio_amount * grid_y * (outgoing ? -0.095f : 0.085f) * (1.0f + energy_amount * 0.03f);
+                            v3[i].y += audio_amount * grid_x * (outgoing ? 0.026f : -0.022f) * (1.0f + treble_amount * 0.03f);
+                            break;
+
+                        case SUPER_TEXT_ANIM_ROLL:
+                        {
+                            const float angle = audio_amount * (outgoing ? 0.19f : -0.16f) * (1.0f + energy_amount * 0.03f);
+                            const float s = std::sin(angle);
+                            const float c = std::cos(angle);
+                            const float old_x = v3[i].x;
+                            const float old_y = v3[i].y;
+                            v3[i].x = old_x * c - old_y * s + audio_amount * (outgoing ? 0.12f : -0.10f);
+                            v3[i].y = old_x * s + old_y * c;
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_SCAN:
+                        {
+                            const float column = x / 15.0f;
+                            const float sweep_pos = outgoing ? column : 1.0f - column;
+                            const float sweep = smooth_step(std::clamp(1.0f - std::abs(anim_progress - sweep_pos) * 2.2f, 0.0f, 1.0f));
+                            const float strength = audio_amount * (0.040f + sweep * (0.060f + treble_amount * 0.020f));
+                            v3[i].x += visual_dx * strength + grid_y * sweep * audio_amount * 0.016f;
+                            v3[i].y += visual_dy * strength + std::sin(grid_x * 4.2f + visual_angle) * sweep * audio_amount * 0.014f;
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_SHARDS:
+                        {
+                            const float shard = std::sin(static_cast<float>(x * 37 + y * 83 + style * 19) * 12.9898f) * 43758.5453f;
+                            const float shard_frac = shard - std::floor(shard);
+                            const float shard_angle = shard_frac * 6.2831853f + visual_angle;
+                            const float strength = audio_amount * (0.030f + shard_frac * 0.038f) * (1.0f + energy_amount * 0.03f);
+                            v3[i].x += std::cos(shard_angle) * strength;
+                            v3[i].y += std::sin(shard_angle) * strength;
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_FOLD:
+                        {
+                            const float fold = audio_amount * (0.18f + energy_amount * 0.02f);
+                            v3[i].x *= 1.0f - fold * std::abs(grid_x) * 0.24f;
+                            v3[i].y += std::sin(grid_x * 3.1415927f + visual_angle * 0.35f) * fold * 0.060f;
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_VORTEX:
+                        {
+                            const float angle = audio_amount * (outgoing ? 0.38f : -0.30f) * (1.0f + energy_amount * 0.04f) * (1.0f - std::min(radius, 1.4f) * 0.16f);
+                            const float s = std::sin(angle);
+                            const float c = std::cos(angle);
+                            const float old_x = v3[i].x;
+                            const float old_y = v3[i].y;
+                            const float pull = audio_amount * (outgoing ? 0.048f : -0.030f) * (1.0f + energy_amount * 0.03f);
+                            v3[i].x = old_x * c - old_y * s + visual_dx * pull * (1.0f - radius * 0.18f);
+                            v3[i].y = old_x * s + old_y * c + visual_dy * pull * (1.0f - radius * 0.18f);
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_FADE:
+                            break;
+
+                        case SUPER_TEXT_ANIM_SLIDE_UP:
+                            v3[i].x += audio_amount * (0.010f + treble_amount * 0.002f) * std::sin(now * 0.42f + grid_y * 3.0f + phase);
+                            v3[i].y -= audio_amount * (0.14f + energy_amount * 0.006f);
+                            break;
+
+                        case SUPER_TEXT_ANIM_SLIDE_DOWN:
+                            v3[i].x += audio_amount * (0.010f + treble_amount * 0.002f) * std::sin(now * 0.42f + grid_y * 3.0f + phase);
+                            v3[i].y += audio_amount * (0.14f + energy_amount * 0.006f);
+                            break;
+
+                        case SUPER_TEXT_ANIM_SWIPE_LEFT:
+                        case SUPER_TEXT_ANIM_SWIPE_RIGHT:
+                        case SUPER_TEXT_ANIM_SWIPE_UP:
+                        case SUPER_TEXT_ANIM_SWIPE_DOWN:
+                        {
+                            const bool horizontal = style == SUPER_TEXT_ANIM_SWIPE_LEFT || style == SUPER_TEXT_ANIM_SWIPE_RIGHT;
+                            const float axis_pos = horizontal ? (x / 15.0f) : (y / 7.0f);
+                            const float sweep_edge = (style == SUPER_TEXT_ANIM_SWIPE_LEFT || style == SUPER_TEXT_ANIM_SWIPE_UP) ? axis_pos : 1.0f - axis_pos;
+                            const float sweep = smooth_step(std::clamp(1.0f - std::abs(anim_progress - sweep_edge) * 2.0f, 0.0f, 1.0f));
+                            const float strength = audio_amount * (0.055f + sweep * 0.085f);
+                            if (style == SUPER_TEXT_ANIM_SWIPE_LEFT)
+                                v3[i].x -= strength + sweep * grid_y * 0.014f;
+                            else if (style == SUPER_TEXT_ANIM_SWIPE_RIGHT)
+                                v3[i].x += strength + sweep * grid_y * 0.014f;
+                            else if (style == SUPER_TEXT_ANIM_SWIPE_UP)
+                                v3[i].y -= strength + sweep * grid_x * 0.012f;
+                            else
+                                v3[i].y += strength + sweep * grid_x * 0.012f;
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_EXPAND:
+                        {
+                            const float scale = 1.0f + audio_amount * (outgoing ? -0.12f : 0.42f);
+                            v3[i].x *= scale;
+                            v3[i].y *= scale;
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_CONTRACT:
+                        {
+                            const float scale = 1.0f + audio_amount * (outgoing ? 0.20f : -0.28f);
+                            v3[i].x *= scale;
+                            v3[i].y *= scale;
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_BOUNCE_LEFT:
+                        case SUPER_TEXT_ANIM_BOUNCE_RIGHT:
+                        case SUPER_TEXT_ANIM_BOUNCE_UP:
+                        case SUPER_TEXT_ANIM_BOUNCE_DOWN:
+                        {
+                            const float bounce = std::sin(anim_progress * 6.2831853f) * 0.018f;
+                            const float strength = audio_amount * 0.12f + bounce;
+                            if (style == SUPER_TEXT_ANIM_BOUNCE_LEFT)
+                                v3[i].x -= strength;
+                            else if (style == SUPER_TEXT_ANIM_BOUNCE_RIGHT)
+                                v3[i].x += strength;
+                            else if (style == SUPER_TEXT_ANIM_BOUNCE_UP)
+                                v3[i].y -= strength;
+                            else
+                                v3[i].y += strength;
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_JIGGLE:
+                            v3[i].x += audio_amount * 0.014f * std::sin(anim_progress * 12.566371f + grid_y * 4.3f + phase);
+                            v3[i].y += audio_amount * 0.010f * std::sin(anim_progress * 9.424778f + grid_x * 3.7f - phase);
+                            break;
+
+                        case SUPER_TEXT_ANIM_DRIFT_LEFT:
+                            v3[i].x -= audio_amount * 0.12f;
+                            v3[i].y += audio_amount * (visual_dy * 0.025f + std::sin(anim_progress * 3.1415927f + grid_x * 2.2f) * 0.010f);
+                            break;
+
+                        case SUPER_TEXT_ANIM_DRIFT_RIGHT:
+                            v3[i].x += audio_amount * 0.12f;
+                            v3[i].y += audio_amount * (visual_dy * 0.025f + std::sin(anim_progress * 3.1415927f + grid_x * 2.2f) * 0.010f);
+                            break;
+
+                        case SUPER_TEXT_ANIM_PINCH:
+                        {
+                            const float pinch = audio_amount * 0.24f;
+                            v3[i].x *= 1.0f - pinch * (1.0f - std::abs(grid_y) * 0.30f);
+                            v3[i].y *= 1.0f + pinch * 0.35f;
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_UNFOLD_X:
+                        {
+                            const float fold = audio_amount * 0.32f;
+                            v3[i].x *= 1.0f - fold * (1.0f - std::abs(grid_x));
+                            v3[i].y += grid_x * fold * 0.045f;
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_UNFOLD_Y:
+                        {
+                            const float fold = audio_amount * 0.28f;
+                            v3[i].y *= 1.0f - fold * (1.0f - std::abs(grid_y));
+                            v3[i].x += grid_y * fold * 0.045f;
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_SPIRAL:
+                        {
+                            const float angle = audio_amount * (outgoing ? 0.32f : -0.26f) * (1.0f - std::min(radius, 1.6f) * 0.12f);
+                            const float scale = 1.0f + audio_amount * (outgoing ? -0.06f : 0.18f);
+                            const float s = std::sin(angle);
+                            const float c = std::cos(angle);
+                            const float old_x = v3[i].x * scale;
+                            const float old_y = v3[i].y * scale;
+                            v3[i].x = old_x * c - old_y * s;
+                            v3[i].y = old_x * s + old_y * c;
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_SOFT_WAVE:
+                            v3[i].x += audio_amount * 0.018f * std::sin(anim_progress * 3.1415927f + grid_y * 4.0f + visual_angle);
+                            v3[i].y += audio_amount * 0.012f * std::sin(anim_progress * 3.1415927f + grid_x * 3.0f - visual_angle);
+                            break;
+
+                        case SUPER_TEXT_ANIM_GLIDE_UP_LEFT:
+                            v3[i].x -= audio_amount * 0.12f;
+                            v3[i].y -= audio_amount * 0.09f;
+                            break;
+
+                        case SUPER_TEXT_ANIM_GLIDE_UP_RIGHT:
+                            v3[i].x += audio_amount * 0.12f;
+                            v3[i].y -= audio_amount * 0.09f;
+                            break;
+
+                        case SUPER_TEXT_ANIM_GLIDE_DOWN_LEFT:
+                            v3[i].x -= audio_amount * 0.12f;
+                            v3[i].y += audio_amount * 0.09f;
+                            break;
+
+                        case SUPER_TEXT_ANIM_GLIDE_DOWN_RIGHT:
+                            v3[i].x += audio_amount * 0.12f;
+                            v3[i].y += audio_amount * 0.09f;
+                            break;
+
+                        case SUPER_TEXT_ANIM_PAGE_TURN:
+                        {
+                            const float turn = audio_amount * 0.34f;
+                            v3[i].x *= 1.0f - turn * (x / 15.0f) * 0.55f;
+                            v3[i].y += grid_x * turn * 0.035f;
+                            v3[i].x += turn * 0.040f * std::sin(grid_y * 3.1415927f);
+                            break;
+                        }
+
+                        case SUPER_TEXT_ANIM_ZOOM:
+                        default:
+                        {
+                            const float scale = outgoing ? (1.0f - audio_amount * 0.09f) : (1.0f + audio_amount * (0.50f + energy_amount * 0.04f));
+                            v3[i].x *= scale;
+                            v3[i].y *= scale;
+                            break;
+                        }
+                    }
+                }
+            }
+        };
+        apply_song_title_style(intro_style, intro_amount, false);
+        apply_song_title_style(outro_style, outro_amount, true);
+
+        const auto smoother_step = [](float value) -> float
         {
-            v3[i].x *= scale;
-            v3[i].y *= scale;
-            v3[i].y += 0.035f * outProgress;
+            value = std::clamp(value, 0.0f, 1.0f);
+            return value * value * value * (value * (value * 6.0f - 15.0f) + 10.0f);
+        };
+        const float transition_amount = smoother_step(std::max(intro_amount, outro_amount));
+        const float outro_merge_colour = smoother_step(outro_amount);
+        const float outro_merge_motion = outro_merge_colour *
+                                         (1.0f - 0.30f * smooth_step((outro_merge_colour - 0.70f) / 0.30f));
+        if (transition_amount > 0.0001f)
+        {
+            const float warp_amount = std::clamp(preset_warp, 0.0f, 2.5f);
+            const float warp_speed = std::clamp(preset_warp_speed, 0.25f, 2.5f);
+            const float flow_speed = 0.12f + warp_speed * 0.07f;
+            const float zoom_bias = std::clamp(preset_zoom - 1.0f, -0.35f, 0.35f);
+            const float stretch_bias_x = std::clamp(preset_stretch_x - 1.0f, -0.40f, 0.40f);
+            const float stretch_bias_y = std::clamp(preset_stretch_y - 1.0f, -0.40f, 0.40f);
+            const float push_x = std::clamp(preset_xpush + preset_mv_x * 0.25f, -0.35f, 0.35f);
+            const float push_y = std::clamp(preset_ypush + preset_mv_y * 0.25f, -0.35f, 0.35f);
+            const float scale = 1.0f + transition_amount * std::clamp(zoom_bias * 0.075f, -0.020f, 0.025f);
+            const float stretch_x = 1.0f + transition_amount * stretch_bias_x * 0.035f;
+            const float stretch_y = 1.0f + transition_amount * stretch_bias_y * 0.035f;
+            const float rotation = transition_amount * std::clamp(preset_rot * 0.28f, -0.030f, 0.030f);
+            const float rot_s = std::sin(rotation);
+            const float rot_c = std::cos(rotation);
+            const float merge_scale = 1.0f + outro_merge_motion * (0.020f + warp_amount * 0.006f + energy_amount * 0.008f);
+            const float merge_drift = outro_merge_motion * (0.0075f + warp_amount * 0.0020f + energy_amount * 0.0030f);
+            const float merge_shear = outro_merge_motion * std::clamp(preset_wave_param * 0.012f, -0.012f, 0.012f);
+
+            for (int y = 0; y < 8; y++)
+            {
+                for (int x = 0; x < 16; x++)
+                {
+                    i = y * 16 + x;
+                    const float grid_x = x / 15.0f * 2.0f - 1.0f;
+                    const float grid_y = y / 7.0f * 2.0f - 1.0f;
+                    const float radius = std::sqrt(grid_x * grid_x + grid_y * grid_y);
+                    const float centre_weight = 1.0f - std::clamp(radius * 0.42f, 0.0f, 0.72f);
+                    const float phase = now * flow_speed +
+                                        grid_x * (2.15f + warp_amount * 0.24f) +
+                                        grid_y * (1.95f + std::abs(preset_wave_param) * 0.35f) +
+                                        visual_angle;
+                    const float flow = std::sin(phase) * transition_amount *
+                                       (0.0045f + warp_amount * 0.0020f + energy_amount * 0.0040f) *
+                                       centre_weight;
+                    const float drift = transition_amount * (0.0045f + energy_amount * 0.0025f);
+                    const float old_x = v3[i].x * scale * stretch_x;
+                    const float old_y = v3[i].y * scale * stretch_y;
+
+                    v3[i].x = old_x * rot_c - old_y * rot_s;
+                    v3[i].y = old_x * rot_s + old_y * rot_c;
+                    v3[i].x += visual_dx * drift + visual_dy * flow + push_x * transition_amount * 0.010f;
+                    v3[i].y += visual_dy * drift - visual_dx * flow + push_y * transition_amount * 0.010f;
+
+                    if (outro_merge_motion > 0.0001f)
+                    {
+                        const float edge_weight = std::clamp(radius * 0.44f, 0.0f, 0.88f);
+                        const float merge_phase = now * (0.16f + warp_speed * 0.08f) +
+                                                  grid_x * (3.30f + warp_amount * 0.30f) -
+                                                  grid_y * (2.65f + std::abs(preset_wave_param) * 0.45f) +
+                                                  visual_angle;
+                        const float secondary_phase = now * (0.07f + warp_speed * 0.035f) -
+                                                      grid_x * (1.20f + std::abs(preset_wave_param) * 0.24f) +
+                                                      grid_y * (1.55f + warp_amount * 0.16f) -
+                                                      visual_angle * 0.50f;
+                        const float organic_flow = std::sin(merge_phase) * 0.68f +
+                                                   std::sin(secondary_phase) * 0.32f;
+                        const float merge_flow = organic_flow * outro_merge_motion *
+                                                 (0.0075f + warp_amount * 0.0020f + treble_amount * 0.0020f) *
+                                                 (0.45f + edge_weight);
+
+                        v3[i].x *= merge_scale;
+                        v3[i].y *= merge_scale;
+                        v3[i].x += grid_x * merge_drift * edge_weight + visual_dx * merge_drift + visual_dy * merge_flow + grid_y * merge_shear;
+                        v3[i].y += grid_y * merge_drift * edge_weight + visual_dy * merge_drift - visual_dx * merge_flow - grid_x * merge_shear;
+                        v3[i].tu = std::clamp(v3[i].tu + merge_flow * 0.10f + visual_dx * outro_merge_motion * 0.0020f, 0.0f, 1.0f);
+                        v3[i].tv = std::clamp(v3[i].tv - merge_flow * 0.075f + visual_dy * outro_merge_motion * 0.0020f, 0.0f, 1.0f);
+                    }
+                }
+            }
         }
     }
     else
@@ -4744,8 +5214,10 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
 
             if (m_supertext.bIsSongTitle)
             {
-                const float fadeOut = 1.0f - song_title_out_progress(fProgress);
-                t = powf(fProgress, 0.3f) * fadeOut;
+                const float safe_progress = std::clamp(fProgress, 0.0f, 1.0f);
+                const float fade_in = smooth_step(safe_progress / song_title_intro_fraction);
+                const float fade_out = 1.0f - smooth_step((safe_progress - song_title_outro_start) / song_title_outro_fraction);
+                t = fade_in * fade_out;
             }
             else
                 t = CosineInterp(std::min(1.0f, (fProgress / m_supertext.fFadeTime)));
@@ -4754,9 +5226,43 @@ void CPlugin::ShowSongTitleAnim(int w, int h, float fProgress)
                 v3[0].r = v3[0].g = v3[0].b = v3[0].a = t;
             else
             {
-                v3[0].r = COLOR_NORM(t * m_supertext.nColorR / 255.0f);
-                v3[0].g = COLOR_NORM(t * m_supertext.nColorG / 255.0f);
-                v3[0].b = COLOR_NORM(t * m_supertext.nColorB / 255.0f);
+                float text_r = m_supertext.nColorR / 255.0f;
+                float text_g = m_supertext.nColorG / 255.0f;
+                float text_b = m_supertext.nColorB / 255.0f;
+                if (m_supertext.bIsSongTitle)
+                {
+                    const float max_wave = (std::max)(preset_wave_r, (std::max)(preset_wave_g, preset_wave_b));
+                    const float min_wave = (std::min)(preset_wave_r, (std::min)(preset_wave_g, preset_wave_b));
+                    const float wave_chroma = max_wave - min_wave;
+                    const float wave_luma = preset_wave_r * 0.2126f + preset_wave_g * 0.7152f + preset_wave_b * 0.0722f;
+                    float accent_r = preset_wave_r;
+                    float accent_g = preset_wave_g;
+                    float accent_b = preset_wave_b;
+
+                    if (wave_chroma < 0.06f || wave_luma < 0.05f)
+                    {
+                        accent_r = 0.5f + 0.5f * std::cos(visual_angle);
+                        accent_g = 0.5f + 0.5f * std::cos(visual_angle - 2.0943951f);
+                        accent_b = 0.5f + 0.5f * std::cos(visual_angle + 2.0943951f);
+                    }
+
+                    const float colour_progress = std::clamp(fProgress, 0.0f, 1.0f);
+                    const float outro_merge_linear = std::clamp((colour_progress - song_title_outro_start) / song_title_outro_fraction, 0.0f, 1.0f);
+                    const float outro_merge_amount = outro_merge_linear * outro_merge_linear * outro_merge_linear *
+                                                     (outro_merge_linear * (outro_merge_linear * 6.0f - 15.0f) + 10.0f);
+                    const float tint_mix = std::clamp(
+                        0.18f + wave_chroma * 0.16f + preset_wave_alpha * 0.06f + outro_merge_amount * 0.18f,
+                        0.18f,
+                        0.52f
+                    );
+                    text_r = std::clamp(text_r * (1.0f - tint_mix) + accent_r * tint_mix, 0.62f, 1.0f);
+                    text_g = std::clamp(text_g * (1.0f - tint_mix) + accent_g * tint_mix, 0.62f, 1.0f);
+                    text_b = std::clamp(text_b * (1.0f - tint_mix) + accent_b * tint_mix, 0.62f, 1.0f);
+                }
+
+                v3[0].r = COLOR_NORM(t * text_r);
+                v3[0].g = COLOR_NORM(t * text_g);
+                v3[0].b = COLOR_NORM(t * text_b);
                 v3[0].a = t;
             }
 

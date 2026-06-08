@@ -108,7 +108,9 @@ class CShape
     int enabled;
     int sides;
     int additive;
+    int bDrawBack;
     int thickOutline;
+    int x_wrap_mode, y_wrap_mode;
     int textured;
     int instances;
     float x, y, rad, ang;
@@ -116,6 +118,7 @@ class CShape
     float r2, g2, b2, a2;
     float border_r, border_g, border_b, border_a;
     float tex_ang, tex_zoom;
+    float tex_capture, tex_cx, tex_cy;
 
     char m_szInit[MAX_BIGSTRING_LEN]; // note: only executed once -> don't need to save codehandle
     char m_szPerFrame[MAX_BIGSTRING_LEN];
@@ -137,8 +140,9 @@ class CShape
     double *var_pf_r2, *var_pf_g2, *var_pf_b2, *var_pf_a2;
     double *var_pf_border_r, *var_pf_border_g, *var_pf_border_b, *var_pf_border_a;
     double *var_pf_x, *var_pf_y, *var_pf_rad, *var_pf_ang;
-    double *var_pf_sides, *var_pf_textured, *var_pf_additive, *var_pf_thick, *var_pf_instances, *var_pf_instance;
-    double *var_pf_tex_zoom, *var_pf_tex_ang;
+    double *var_pf_sides, *var_pf_textured, *var_pf_tex_capture, *var_pf_additive, *var_pf_thick, *var_pf_instances, *var_pf_instance;
+    double *var_pf_x_wrap_mode, *var_pf_y_wrap_mode, *var_pf_draw_back;
+    double *var_pf_tex_zoom, *var_pf_tex_ang, *var_pf_tex_cx, *var_pf_tex_cy;
 
     /*
     // For per-point expression evaluation.

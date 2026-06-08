@@ -581,6 +581,123 @@ static void RuntimeSafetyRecordPreset(const wchar_t* preset, bool shaderFallback
     ReleaseSRWLockExclusive(&g_runtimeSafetyCacheLock);
 }
 
+static const wchar_t* ShaderTypeName(int shaderType)
+{
+    switch (shaderType)
+    {
+        case SHADER_WARP: return L"warp";
+        case SHADER_COMP: return L"composite";
+        case SHADER_BLUR: return L"blur";
+        case SHADER_OTHER: return L"other";
+        default: return L"unknown";
+    }
+}
+
+static void AppendShaderDebugLog(const wchar_t* message)
+{
+    if (!g_plugin.m_szMilkdrop2Path[0])
+        return;
+
+    wchar_t path[MAX_PATH] = {0};
+    if (swprintf_s(path, ARRAYSIZE(path), L"%sshader-debug.log", g_plugin.m_szMilkdrop2Path) < 0)
+        return;
+
+    FILE* file = nullptr;
+    if (_wfopen_s(&file, path, L"a, ccs=UTF-8") != 0 || !file)
+        return;
+
+    SYSTEMTIME now = {};
+    GetLocalTime(&now);
+    fwprintf_s(file,
+               L"%04u-%02u-%02u %02u:%02u:%02u.%03u %s\n",
+               now.wYear,
+               now.wMonth,
+               now.wDay,
+               now.wHour,
+               now.wMinute,
+               now.wSecond,
+               now.wMilliseconds,
+               message);
+    fclose(file);
+}
+
+static bool IsShaderIdentifierStart(char ch)
+{
+    return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch == '_';
+}
+
+static bool IsShaderIdentifierChar(char ch)
+{
+    return IsShaderIdentifierStart(ch) || (ch >= '0' && ch <= '9');
+}
+
+static bool IsLegacyMathIntrinsic(const std::string& token)
+{
+    return token == "pow" || token == "log" || token == "log10" ||
+           token == "sqrt" || token == "asin" || token == "acos";
+}
+
+static const char* SafeLegacyMathName(const std::string& token)
+{
+    if (token == "pow") return "md_safe_pow";
+    if (token == "log") return "md_safe_log";
+    if (token == "log10") return "md_safe_log10";
+    if (token == "sqrt") return "md_safe_sqrt";
+    if (token == "asin") return "md_safe_asin";
+    if (token == "acos") return "md_safe_acos";
+    return token.c_str();
+}
+
+static std::string RewriteLegacyMathCalls(const char* shaderText)
+{
+    std::string rewritten;
+    rewritten.reserve(strlen(shaderText) + 256);
+
+    const char* p = shaderText;
+    while (*p)
+    {
+        if (!IsShaderIdentifierStart(*p))
+        {
+            rewritten.push_back(*p++);
+            continue;
+        }
+
+        const char* tokenStart = p;
+        while (IsShaderIdentifierChar(*p))
+            p++;
+
+        std::string token(tokenStart, p - tokenStart);
+        const char* lookahead = p;
+        while (*lookahead == ' ' || *lookahead == '\t' || *lookahead == '\r' || *lookahead == '\n' || *lookahead == LINEFEED_CONTROL_CHAR)
+            lookahead++;
+
+        if (IsLegacyMathIntrinsic(token) && *lookahead == '(')
+            rewritten.append(SafeLegacyMathName(token));
+        else
+            rewritten.append(token);
+    }
+
+    return rewritten;
+}
+
+static int PresetShaderVersionToInternal(int presetVersion)
+{
+    switch (presetVersion)
+    {
+        case 0: return MD2_PS_NONE;
+        case 2: return MD2_PS_2_0;
+        case 3: return MD2_PS_3_0;
+        case 4: return MD2_PS_4_0;
+        case 5: return MD2_PS_5_0;
+        default:
+            if (presetVersion <= 0)
+                return MD2_PS_NONE;
+            if (presetVersion >= 5)
+                return MD2_PS_5_0;
+            return MD2_PS_2_0;
+    }
+}
+
 static void ClearPShaderSet(PShaderSet& shaders)
 {
     shaders.comp.Clear();
@@ -1299,7 +1416,11 @@ void CPlugin::MilkDropPreInitialize()
     m_supertext.nFontSizeUsed = 0;
     m_supertext.nTextWidthUsed = 0;
     m_supertext.nFontIndex = -1;
+    m_supertext.nIntroStyle = SUPER_TEXT_ANIM_ZOOM;
+    m_supertext.nOutroStyle = SUPER_TEXT_ANIM_ZOOM;
     m_supertext.fStartTime = -1.0f;
+    m_nLastSongTitleIntroStyle = -1;
+    m_nLastSongTitleOutroStyle = -1;
 
     // Other initialization.
     g_bDebugOutput = false;
@@ -3074,6 +3195,9 @@ void CShaderParams::Clear()
     for (int i = 0; i < sizeof(m_texture_bindings) / sizeof(m_texture_bindings[0]); i++)
     {
         m_texture_bindings[i].texptr = NULL;
+        m_texture_bindings[i].bindPoint = i;
+        m_texture_bindings[i].bBilinear = true;
+        m_texture_bindings[i].bWrap = true;
         m_texcode[i] = TEX_DISK;
     }
 }
@@ -3295,7 +3419,26 @@ void CShaderParams::CacheParams(CConstantTable* pCT, bool /* bHardErrors */)
             std::string strName(h);
             m_texture_bindings[cd.BindPoint].bWrap = bWrap;
             m_texture_bindings[cd.BindPoint].bBilinear = bBilinear;
-            m_texture_bindings[cd.BindPoint].bindPoint = pCT->GetTextureSlot(strName);
+            int textureSlot = pCT->GetTextureSlot(strName);
+            if (textureSlot < 0)
+            {
+                AutoChar rootNameAnsi(szRootName);
+                std::string rootName(rootNameAnsi);
+                textureSlot = pCT->GetTextureSlot(rootName);
+
+                if (textureSlot < 0)
+                {
+                    std::string samplerRootName = "sampler_" + rootName;
+                    textureSlot = pCT->GetTextureSlot(samplerRootName);
+                }
+
+                if (textureSlot < 0 && !wcscmp(L"main", szRootName))
+                {
+                    std::string previousFrameName = "PrevFrameImage";
+                    textureSlot = pCT->GetTextureSlot(previousFrameName);
+                }
+            }
+            m_texture_bindings[cd.BindPoint].bindPoint = textureSlot >= 0 ? static_cast<UINT>(textureSlot) : cd.BindPoint;
 
             // if <szFileName> is "main", map it to the VS...
             if (!wcscmp(L"main", szRootName))
@@ -3340,38 +3483,38 @@ void CShaderParams::CacheParams(CConstantTable* pCT, bool /* bHardErrors */)
             }
 #endif
 #if (NUM_BLUR_TEX >= 8)
-            else if (!wcscmp("blur4", szRootName))
+            else if (!wcscmp(L"blur4", szRootName))
             {
-                m_texture_bindings[cd.RegisterIndex].texptr = g_plugin.m_lpBlur[7];
-                m_texcode[cd.RegisterIndex] = TEX_BLUR4;
+                m_texture_bindings[cd.BindPoint].texptr = g_plugin.m_lpBlur[7];
+                m_texcode[cd.BindPoint] = TEX_BLUR4;
                 if (!bWrapFilterSpecified) // when sampling blur textures, default is CLAMP
                 {
-                    m_texture_bindings[cd.RegisterIndex].bWrap = false;
-                    m_texture_bindings[cd.RegisterIndex].bBilinear = true;
+                    m_texture_bindings[cd.BindPoint].bWrap = false;
+                    m_texture_bindings[cd.BindPoint].bBilinear = true;
                 }
             }
 #endif
 #if (NUM_BLUR_TEX >= 10)
-            else if (!wcscmp("blur5", szRootName))
+            else if (!wcscmp(L"blur5", szRootName))
             {
-                m_texture_bindings[cd.RegisterIndex].texptr = g_plugin.m_lpBlur[9];
-                m_texcode[cd.RegisterIndex] = TEX_BLUR5;
+                m_texture_bindings[cd.BindPoint].texptr = g_plugin.m_lpBlur[9];
+                m_texcode[cd.BindPoint] = TEX_BLUR5;
                 if (!bWrapFilterSpecified) // when sampling blur textures, default is CLAMP
                 {
-                    m_texture_bindings[cd.RegisterIndex].bWrap = false;
-                    m_texture_bindings[cd.RegisterIndex].bBilinear = true;
+                    m_texture_bindings[cd.BindPoint].bWrap = false;
+                    m_texture_bindings[cd.BindPoint].bBilinear = true;
                 }
             }
 #endif
 #if (NUM_BLUR_TEX >= 12)
-            else if (!wcscmp("blur6", szRootName))
+            else if (!wcscmp(L"blur6", szRootName))
             {
-                m_texture_bindings[cd.RegisterIndex].texptr = g_plugin.m_lpBlur[11];
-                m_texcode[cd.RegisterIndex] = TEX_BLUR6;
+                m_texture_bindings[cd.BindPoint].texptr = g_plugin.m_lpBlur[11];
+                m_texcode[cd.BindPoint] = TEX_BLUR6;
                 if (!bWrapFilterSpecified) // when sampling blur textures, default is CLAMP
                 {
-                    m_texture_bindings[cd.RegisterIndex].bWrap = false;
-                    m_texture_bindings[cd.RegisterIndex].bBilinear = true;
+                    m_texture_bindings[cd.BindPoint].bWrap = false;
+                    m_texture_bindings[cd.BindPoint].bBilinear = true;
                 }
             }
 #endif
@@ -3436,9 +3579,15 @@ void CShaderParams::CacheParams(CConstantTable* pCT, bool /* bHardErrors */)
                 // If still not found, load it up / make a new texture.
                 if (!m_texture_bindings[cd.BindPoint].texptr)
                 {
-                    TexInfo x;
+                    TexInfo x{};
                     wcsncpy_s(x.texname, szRootName, 254);
                     x.texptr = NULL;
+                    x.w = 0;
+                    x.h = 0;
+                    x.d = 0;
+                    x.bEvictable = true;
+                    x.nAge = g_plugin.m_nPresetsLoadedTotal;
+                    x.nSizeInBytes = 0;
                     //x.texsize_param = NULL;
 
                     // Check if we need to evict anything from the cache,
@@ -3704,7 +3853,18 @@ bool CPlugin::RecompilePShader(const char* szShadersText, PShaderInfo* si, int s
     }
 
     if (!LoadShaderFromMemory(szShadersText, "PS", ver, &si->CT, (void**)&si->ptr, shaderType, bHardErrors && (GetScreenMode() == WINDOWED)))
+    {
+        wchar_t msg[1024] = {0};
+        swprintf_s(msg,
+                   ARRAYSIZE(msg),
+                   L"pixel shader load failed: preset=\"%s\" shader=%s profile=%S ps_version=%d",
+                   m_szCurrentPresetFile,
+                   ShaderTypeName(shaderType),
+                   ver,
+                   PSVersion);
+        AppendShaderDebugLog(msg);
         return false;
+    }
 
     // Track down texture & float4 param bindings for this shader.
     // Also loads any textures that need loaded.
@@ -3724,6 +3884,13 @@ bool CPlugin::LoadShaders(PShaderSet* sh, CState* pState, bool bTick)
         bool bOK = RecompilePShader(pState->m_szWarpShadersText, &sh->warp, SHADER_WARP, false, pState->m_nWarpPSVersion);
         if (!bOK)
         {
+            wchar_t msg[1024] = {0};
+            swprintf_s(msg,
+                       ARRAYSIZE(msg),
+                       L"using fallback shader: preset=\"%s\" shader=warp ps_version=%d",
+                       m_szCurrentPresetFile,
+                       pState->m_nWarpPSVersion);
+            AppendShaderDebugLog(msg);
             m_lastPresetUsedFallback = true;
             RuntimeSafetyRecordPreset(m_szLoadingPreset[0] ? m_szLoadingPreset : m_szCurrentPresetFile, true, false);
             // Switch to fallback shader.
@@ -3741,6 +3908,13 @@ bool CPlugin::LoadShaders(PShaderSet* sh, CState* pState, bool bTick)
         bool bOK = RecompilePShader(pState->m_szCompShadersText, &sh->comp, SHADER_COMP, false, pState->m_nCompPSVersion);
         if (!bOK)
         {
+            wchar_t msg[1024] = {0};
+            swprintf_s(msg,
+                       ARRAYSIZE(msg),
+                       L"using fallback shader: preset=\"%s\" shader=composite ps_version=%d",
+                       m_szCurrentPresetFile,
+                       pState->m_nCompPSVersion);
+            AppendShaderDebugLog(msg);
             m_lastPresetUsedFallback = true;
             RuntimeSafetyRecordPreset(m_szLoadingPreset[0] ? m_szLoadingPreset : m_szCurrentPresetFile, true, false);
             // Switch to fallback shader.
@@ -3770,9 +3944,51 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
                                  "#define uv _uv.xy\n"
                                  "#define uv_orig _uv.xy\n" //[sic]
                                  "#define hue_shader _vDiffuse.xyz\n";
+    const char szLegacyMathCompat[] =
+        "float md_compat_nonzero(float v) { return max(abs(v), 1e-20); }\n"
+        "float2 md_compat_nonzero(float2 v) { return max(abs(v), 1e-20); }\n"
+        "float3 md_compat_nonzero(float3 v) { return max(abs(v), 1e-20); }\n"
+        "float4 md_compat_nonzero(float4 v) { return max(abs(v), 1e-20); }\n"
+        "float md_compat_sign(float v) { float s = sign(v); return s + (1.0 - abs(s)); }\n"
+        "float2 md_compat_sign(float2 v) { float2 s = sign(v); return s + (1.0 - abs(s)); }\n"
+        "float3 md_compat_sign(float3 v) { float3 s = sign(v); return s + (1.0 - abs(s)); }\n"
+        "float4 md_compat_sign(float4 v) { float4 s = sign(v); return s + (1.0 - abs(s)); }\n"
+        "float md_safe_pow(float x, float y) { return md_compat_sign(x) * pow(md_compat_nonzero(x), y); }\n"
+        "float2 md_safe_pow(float2 x, float2 y) { return md_compat_sign(x) * pow(md_compat_nonzero(x), y); }\n"
+        "float2 md_safe_pow(float2 x, float y) { return md_compat_sign(x) * pow(md_compat_nonzero(x), y); }\n"
+        "float2 md_safe_pow(float x, float2 y) { return md_compat_sign((float2)x) * pow(md_compat_nonzero((float2)x), y); }\n"
+        "float3 md_safe_pow(float3 x, float3 y) { return md_compat_sign(x) * pow(md_compat_nonzero(x), y); }\n"
+        "float3 md_safe_pow(float3 x, float y) { return md_compat_sign(x) * pow(md_compat_nonzero(x), y); }\n"
+        "float3 md_safe_pow(float x, float3 y) { return md_compat_sign((float3)x) * pow(md_compat_nonzero((float3)x), y); }\n"
+        "float4 md_safe_pow(float4 x, float4 y) { return md_compat_sign(x) * pow(md_compat_nonzero(x), y); }\n"
+        "float4 md_safe_pow(float4 x, float y) { return md_compat_sign(x) * pow(md_compat_nonzero(x), y); }\n"
+        "float4 md_safe_pow(float x, float4 y) { return md_compat_sign((float4)x) * pow(md_compat_nonzero((float4)x), y); }\n"
+        "float md_safe_log(float x) { return md_compat_sign(x) * log(md_compat_nonzero(x)); }\n"
+        "float2 md_safe_log(float2 x) { return md_compat_sign(x) * log(md_compat_nonzero(x)); }\n"
+        "float3 md_safe_log(float3 x) { return md_compat_sign(x) * log(md_compat_nonzero(x)); }\n"
+        "float4 md_safe_log(float4 x) { return md_compat_sign(x) * log(md_compat_nonzero(x)); }\n"
+        "float md_safe_log10(float x) { return md_compat_sign(x) * log10(md_compat_nonzero(x)); }\n"
+        "float2 md_safe_log10(float2 x) { return md_compat_sign(x) * log10(md_compat_nonzero(x)); }\n"
+        "float3 md_safe_log10(float3 x) { return md_compat_sign(x) * log10(md_compat_nonzero(x)); }\n"
+        "float4 md_safe_log10(float4 x) { return md_compat_sign(x) * log10(md_compat_nonzero(x)); }\n"
+        "float md_safe_sqrt(float x) { return md_compat_sign(x) * sqrt(abs(x)); }\n"
+        "float2 md_safe_sqrt(float2 x) { return md_compat_sign(x) * sqrt(abs(x)); }\n"
+        "float3 md_safe_sqrt(float3 x) { return md_compat_sign(x) * sqrt(abs(x)); }\n"
+        "float4 md_safe_sqrt(float4 x) { return md_compat_sign(x) * sqrt(abs(x)); }\n"
+        "float md_safe_asin(float x) { return asin(clamp(x, -1.0, 1.0)); }\n"
+        "float2 md_safe_asin(float2 x) { return asin(clamp(x, -1.0, 1.0)); }\n"
+        "float3 md_safe_asin(float3 x) { return asin(clamp(x, -1.0, 1.0)); }\n"
+        "float4 md_safe_asin(float4 x) { return asin(clamp(x, -1.0, 1.0)); }\n"
+        "float md_safe_acos(float x) { return acos(clamp(x, -1.0, 1.0)); }\n"
+        "float2 md_safe_acos(float2 x) { return acos(clamp(x, -1.0, 1.0)); }\n"
+        "float3 md_safe_acos(float3 x) { return acos(clamp(x, -1.0, 1.0)); }\n"
+        "float4 md_safe_acos(float4 x) { return acos(clamp(x, -1.0, 1.0)); }\n";
     const char szWarpParams[]  = "float4 _vDiffuse : COLOR, float4 _uv : TEXCOORD0, float2 _rad_ang : TEXCOORD1, out float4 _return_value : COLOR0";
     const char szCompParams[]  = "float4 _vDiffuse : COLOR, float2 _uv : TEXCOORD0, float2 _rad_ang : TEXCOORD1, out float4 _return_value : COLOR0";
     const char szFirstLine[]   = "    float3 ret = 0;";
+    const char szSafeLastLine[] =
+        "    ret = float3((abs(ret.x) < 1e20) ? ret.x : 0, (abs(ret.y) < 1e20) ? ret.y : 0, (abs(ret.z) < 1e20) ? ret.z : 0);\n"
+        "    _return_value = float4(ret.xyz, _vDiffuse.w);";
     const char szLastLine[]    = "    _return_value = float4(ret.xyz, _vDiffuse.w);";
     // clang-format on
 
@@ -3818,18 +4034,40 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
         writePos += strlen(szCompDefines);
     }
 
+    std::string rewrittenShaderText;
+    const char* shaderSource = szOrigShaderText;
+    const bool useLegacyMathCompat = (shaderType == SHADER_WARP || shaderType == SHADER_COMP) && szProfile[0] == 'p';
+    if (useLegacyMathCompat)
+    {
+        strcpy_s(&szShaderText[writePos], ARRAYSIZE(szShaderText) - writePos, szLegacyMathCompat);
+        writePos += strlen(szLegacyMathCompat);
+
+        rewrittenShaderText = RewriteLegacyMathCalls(szOrigShaderText);
+        shaderSource = rewrittenShaderText.c_str();
+    }
+
     // Paste in the shader itself - converting LCCs to 13+10s.
     // Avoid `lstrcpy()` because it might not handle the linefeed stuff...?
     size_t shaderStartPos = writePos;
     {
-        const char* s = szOrigShaderText;
+        const char* s = shaderSource;
         char* d = &szShaderText[writePos];
         while (*s)
         {
             if (*s == LINEFEED_CONTROL_CHAR)
             {
                 if (writePos + 2 >= ARRAYSIZE(szShaderText))
+                {
+                    wchar_t msg[1024] = {0};
+                    swprintf_s(msg,
+                               ARRAYSIZE(msg),
+                               L"shader text overflow: preset=\"%s\" shader=%s profile=%S",
+                               m_szCurrentPresetFile,
+                               ShaderTypeName(shaderType),
+                               szProfile);
+                    AppendShaderDebugLog(msg);
                     return false;
+                }
                 *d++ = '\r';
                 writePos++;
                 *d++ = '\n';
@@ -3838,7 +4076,17 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
             else
             {
                 if (writePos + 1 >= ARRAYSIZE(szShaderText))
+                {
+                    wchar_t msg[1024] = {0};
+                    swprintf_s(msg,
+                               ARRAYSIZE(msg),
+                               L"shader text overflow: preset=\"%s\" shader=%s profile=%S",
+                               m_szCurrentPresetFile,
+                               ShaderTypeName(shaderType),
+                               szProfile);
+                    AppendShaderDebugLog(msg);
                     return false;
+                }
                 *d++ = *s;
                 writePos++;
             }
@@ -3940,7 +4188,7 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
                 if (p)
                 {
                     remains = ARRAYSIZE(szShaderText) - (p - &szShaderText[0] + 1) + 1;
-                    length = sprintf_s(p, remains, " %s\n}\n", szLastLine);
+                    length = sprintf_s(p, remains, " %s\n}\n", useLegacyMathCompat ? szSafeLastLine : szLastLine);
                     if (length <= 0 || static_cast<size_t>(length) >= remains)
                         return false;
                 }
@@ -3949,6 +4197,14 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
 
         if (!p)
         {
+            wchar_t msg[1024] = {0};
+            swprintf_s(msg,
+                       ARRAYSIZE(msg),
+                       L"shader_body parse failed: preset=\"%s\" shader=%s profile=%S",
+                       m_szCurrentPresetFile,
+                       ShaderTypeName(shaderType),
+                       szProfile);
+            AppendShaderDebugLog(msg);
             /*
             wchar_t temp[512] = {0};
             swprintf_s(err, WASABI_API_LNGSTRINGW(IDS_ERROR_PARSING_X_X_SHADER), szProfile, szWhichShader);
@@ -4000,6 +4256,17 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
 
     if (failed)
     {
+        const char* compileErrors = m_pShaderCompileErrors ? reinterpret_cast<const char*>(m_pShaderCompileErrors->GetBufferPointer()) : "";
+        wchar_t msg[4096] = {0};
+        swprintf_s(msg,
+                   ARRAYSIZE(msg),
+                   L"d3d compile failed: preset=\"%s\" shader=%s profile=%S bytes=%zu error=\"%.2400S\"",
+                   m_szCurrentPresetFile,
+                   ShaderTypeName(shaderType),
+                   szProfile,
+                   len,
+                   compileErrors);
+        AppendShaderDebugLog(msg);
         /*
         wchar_t temp[1024] = {0};
         swprintf_s(err, WASABI_API_LNGSTRINGW(IDS_ERROR_COMPILING_X_X_SHADER), strcmp(szProfile, "ps_4_0_level_9_1") ? szProfile : "ps_4_0_level_9_3", szWhichShader);
@@ -4027,6 +4294,15 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
     ID3D11ShaderReflection* pReflection = nullptr;
     if (S_OK != D3DReflect(pShaderByteCode->GetBufferPointer(), pShaderByteCode->GetBufferSize(), IID_ID3D11ShaderReflection, reinterpret_cast<void**>(&pReflection)))
     {
+        wchar_t msg[1024] = {0};
+        swprintf_s(msg,
+                   ARRAYSIZE(msg),
+                   L"d3d reflect failed: preset=\"%s\" shader=%s profile=%S bytes=%zu",
+                   m_szCurrentPresetFile,
+                   ShaderTypeName(shaderType),
+                   szProfile,
+                   len);
+        AppendShaderDebugLog(msg);
         SafeRelease(m_pShaderCompileErrors);
         SafeRelease(pShaderByteCode);
         return false;
@@ -4046,6 +4322,15 @@ bool CPlugin::LoadShaderFromMemory(const char* szOrigShaderText, const char* szF
 
     if (hr != S_OK)
     {
+        wchar_t msg[1024] = {0};
+        swprintf_s(msg,
+                   ARRAYSIZE(msg),
+                   L"d3d shader create failed: preset=\"%s\" shader=%s profile=%S hr=0x%08X",
+                   m_szCurrentPresetFile,
+                   ShaderTypeName(shaderType),
+                   szProfile,
+                   static_cast<unsigned int>(hr));
+        AppendShaderDebugLog(msg);
         /*
         wchar_t temp[512] = {0};
         WASABI_API_LNGSTRINGW_BUF(IDS_ERROR_CREATING_SHADER, temp, sizeof(temp));
@@ -7350,7 +7635,7 @@ static bool TryReadPresetListScanInfo(const wchar_t* presetPath, int nMaxPSVersi
         }
     }
 
-    if (isMilkDrop2Preset && (warpPSVersion > nMaxPSVersion || compPSVersion > nMaxPSVersion))
+    if (isMilkDrop2Preset && (PresetShaderVersionToInternal(warpPSVersion) > nMaxPSVersion || PresetShaderVersionToInternal(compPSVersion) > nMaxPSVersion))
         return false;
 
     bool inPreset00 = false;
@@ -8629,6 +8914,8 @@ void CPlugin::LaunchCustomMessage(int nMsgNum)
     m_supertext.fGrowth = m_customMessage[nMsgNum].growth;
     m_supertext.fDuration = m_customMessage[nMsgNum].fTime;
     m_supertext.fFadeTime = m_customMessage[nMsgNum].fFade;
+    m_supertext.nIntroStyle = SUPER_TEXT_ANIM_ZOOM;
+    m_supertext.nOutroStyle = SUPER_TEXT_ANIM_ZOOM;
 
     // Overridables.
     if (m_customMessage[nMsgNum].bOverrideFace)
@@ -8697,9 +8984,74 @@ void CPlugin::LaunchSongTitleAnim(bool refreshCurrentTitle)
     m_supertext.fY = 0.5f;
     m_supertext.fGrowth = 1.0f;
     m_supertext.fDuration = m_fSongTitleAnimDuration;
+    auto chooseStyle = [](int avoid1, int avoid2, int avoid3) -> int
+    {
+        for (int attempts = 0; attempts < SUPER_TEXT_ANIM_STYLE_COUNT * 2; attempts++)
+        {
+            const int style = warand() % SUPER_TEXT_ANIM_STYLE_COUNT;
+            if (style != avoid1 && style != avoid2 && style != avoid3)
+                return style;
+        }
+
+        for (int style = 0; style < SUPER_TEXT_ANIM_STYLE_COUNT; style++)
+        {
+            if (style != avoid1 && style != avoid2 && style != avoid3)
+                return style;
+        }
+
+        return warand() % SUPER_TEXT_ANIM_STYLE_COUNT;
+    };
+    m_supertext.nIntroStyle = chooseStyle(m_nLastSongTitleIntroStyle, m_nLastSongTitleOutroStyle, -1);
+    m_supertext.nOutroStyle = chooseStyle(m_supertext.nIntroStyle, m_nLastSongTitleIntroStyle, m_nLastSongTitleOutroStyle);
+    m_nLastSongTitleIntroStyle = m_supertext.nIntroStyle;
+    m_nLastSongTitleOutroStyle = m_supertext.nOutroStyle;
+
+    const int previousColorR = m_supertext.nColorR;
+    const int previousColorG = m_supertext.nColorG;
+    const int previousColorB = m_supertext.nColorB;
     m_supertext.nColorR = 255;
     m_supertext.nColorG = 255;
     m_supertext.nColorB = 255;
+    if (warand() % 100 < 52)
+    {
+        struct PastelColor
+        {
+            int r;
+            int g;
+            int b;
+        };
+        static constexpr PastelColor pastelColors[] = {
+            {255, 204, 220},
+            {255, 218, 186},
+            {255, 238, 184},
+            {218, 242, 198},
+            {198, 244, 224},
+            {190, 238, 240},
+            {202, 230, 255},
+            {214, 218, 255},
+            {230, 210, 255},
+            {246, 214, 255},
+            {255, 220, 244},
+            {236, 232, 205},
+        };
+
+        int colorIndex = warand() % ARRAYSIZE(pastelColors);
+        for (int attempts = 0; attempts < ARRAYSIZE(pastelColors); attempts++)
+        {
+            const int candidate = (colorIndex + attempts) % ARRAYSIZE(pastelColors);
+            const PastelColor& color = pastelColors[candidate];
+            if (color.r != previousColorR || color.g != previousColorG || color.b != previousColorB)
+            {
+                colorIndex = candidate;
+                break;
+            }
+        }
+
+        const PastelColor& color = pastelColors[colorIndex];
+        m_supertext.nColorR = color.r;
+        m_supertext.nColorG = color.g;
+        m_supertext.nColorB = color.b;
+    }
 
     m_supertext.fStartTime = GetTime();
 }
@@ -8727,6 +9079,8 @@ void CPlugin::LaunchStatusText(const wchar_t* text, float duration, float fadeTi
     m_supertext.fGrowth = 1.0f;
     m_supertext.fDuration = duration;
     m_supertext.fFadeTime = fadeTime;
+    m_supertext.nIntroStyle = SUPER_TEXT_ANIM_ZOOM;
+    m_supertext.nOutroStyle = SUPER_TEXT_ANIM_ZOOM;
     m_supertext.nColorR = 255;
     m_supertext.nColorG = 255;
     m_supertext.nColorB = 255;
