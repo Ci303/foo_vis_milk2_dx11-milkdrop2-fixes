@@ -29,13 +29,13 @@ jobs:
       SDK_SHA256: 4e2051430dce273029e3e349ec3fbd2bbe222f388b21541762f06a3abcf15990
     steps:
       - name: Clone foo_vis_milk2 repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@v3
         with:
           msbuild-architecture: ${{ matrix.platform }}
       - name: Cache foobar2000 SDK
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: sdk
         with:
           path: |
@@ -72,7 +72,7 @@ jobs:
           }
           Remove-Item -Path "$(Get-Location)\.git" -Recurse -Force
       - name: Clone projectm-eval repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: projectM-visualizer/projectm-eval
           path: external/projectm-eval
@@ -87,7 +87,7 @@ jobs:
               Set-Content -LiteralPath $_.FullName -NoNewline
           }
       - name: Cache NuGet packages (DirectXTK and WTL)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: nuget
         with:
           path: |
@@ -142,7 +142,7 @@ jobs:
       #    vstest.console.exe ${{ github.workspace }}\src\vis_milk2\${{ matrix.configuration }}\test.dll
       - name: Upload ${{ matrix.platform }} foobar2000 MilkDrop 2 Visualization Component for ${{ matrix.configuration }}
         if: ${{ (matrix.configuration == 'Release') }} #&& ((matrix.platform == 'x86') || (matrix.platform == 'x64')) }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: milk2-${{ matrix.platform }}-${{ matrix.configuration }}
           path: |
@@ -154,31 +154,31 @@ jobs:
     runs-on: windows-2025-vs2026
     steps:
       - name: Clone foo_vis_milk2 repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Download x86 DLL
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: milk2-x86-Release
           path: ${{ github.workspace }}\Bin\Win32\Release
       - name: Download x64 DLL
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: milk2-x64-Release
           path: ${{ github.workspace }}\Bin\x64\Release
       - name: Download ARM64 DLL
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: milk2-ARM64-Release
           path: ${{ github.workspace }}\Bin\ARM64\Release
       - name: Download ARM64EC DLL
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: milk2-ARM64EC-Release
           path: ${{ github.workspace }}\Bin\ARM64EC\Release
       - name: Package foobar2000 MilkDrop 2 component
         run: |
           &"${{ github.workspace }}\tools\build-fb2k_component.ps1" -Version ''
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: foo_vis_milk2-component
           path: ${{ github.workspace }}\foo_vis_milk2.fb2k-component
