@@ -2,6 +2,16 @@
 
 ## Release History
 
+### 0.2.1.38 - 2026-06-08
+
+Render stability hotfix.
+
+- Stopped non-indexed and indexed draws when dynamic vertex or index buffer updates fail, avoiding stale GPU buffer reuse during device pressure or reset churn.
+- Guarded fixed-function pixel-shader rebinding when the Direct3D context is unavailable.
+- Clamped invalid song-title, status-text, and custom-message duration/fade values before render-time divisions.
+- Clamped malformed preset `fWarpScale` values before CPU warp division so bad presets cannot feed non-finite warp coordinates into rendering.
+- Rejected non-finite Direct2D text fade timers.
+
 ### 0.2.1.37 - 2026-06-08
 
 Natural title animation and shader-hardening update.
