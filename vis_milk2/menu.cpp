@@ -425,10 +425,14 @@ void CMilkMenu::OnWaitStringAcceptCode(const char* szNewCode)
     // Find the item.
     CMilkMenuItem* pItem = m_pFirstChildItem;
     for (int i = m_nChildMenus; i < m_nCurSel; i++)
+    {
+        if (!pItem)
+            break;
         pItem = pItem->m_pNext;
+    }
+    if (!pItem || pItem->m_type != MENUITEMTYPE_STRING)
+        return;
     size_t addr = pItem->m_var_offset + reinterpret_cast<size_t>(g_plugin.m_pState);
-
-    assert(pItem->m_type == MENUITEMTYPE_STRING);
 
     // Apply the edited string into the original narrow preset buffer using
     // the destination capacity supplied when the menu item was created.
@@ -459,10 +463,26 @@ LRESULT CMilkMenu::HandleKeydown(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
 {
 #ifdef _FOOBAR
 #define ClearText() { EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(hwnd)); g_plugin.ClearText(); LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(hwnd)); }
-#define UndrawMenus() { EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(hwnd)); g_plugin.m_pCurMenu->UndrawMenus(); LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(hwnd)); }
+#define UndrawMenus()                                                                                                     \
+    do                                                                                                                  \
+    {                                                                                                                   \
+        if (g_plugin.m_pCurMenu)                                                                                        \
+        {                                                                                                               \
+            EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(hwnd));                                              \
+            g_plugin.m_pCurMenu->UndrawMenus();                                                                           \
+            LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(hwnd));                                              \
+        }                                                                                                               \
+    }                                                                                                                   \
+    while (0)
 #else
 #define ClearText g_plugin.ClearText
-#define UndrawMenus g_plugin.m_pCurMenu->UndrawMenus
+#define UndrawMenus()                                                                                                     \
+    do                                                                                                                  \
+    {                                                                                                                   \
+        if (g_plugin.m_pCurMenu)                                                                                        \
+            g_plugin.m_pCurMenu->UndrawMenus();                                                                           \
+    }                                                                                                                   \
+    while (0)
     UNREFERENCED_PARAMETER(hwnd);
 #endif
     UNREFERENCED_PARAMETER(message);

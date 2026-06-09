@@ -541,7 +541,7 @@ class CPlugin : public CPluginShell
     //bool m_bUserMessageIsError;
 
     ErrorMsgList m_errors;
-    void AddError(wchar_t* szMsg, float fDuration, ErrorCategory category = ERR_ALL, bool bBold = true);
+    void AddError(const wchar_t* szMsg, float fDuration, ErrorCategory category = ERR_ALL, bool bBold = true);
     void ClearErrors(int category = ERR_ALL);
 
     wchar_t m_szSongTitle[256];

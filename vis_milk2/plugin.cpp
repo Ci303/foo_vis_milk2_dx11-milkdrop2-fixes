@@ -3372,7 +3372,8 @@ bool CPlugin::EvictSomeTexture()
     for (size_t i = 0; i < N; i++)
         if (m_textures[i].bEvictable && m_textures[i].nSizeInBytes > 0 && m_textures[i].nAge < m_nPresetsLoadedTotal - 1) // note: -1 here keeps images around for the blend-from preset, too...
         {
-            float size_mult = 1.0f + (m_textures[i].nAge - newest) / (float)(oldest - newest);
+            const int ageRange = oldest - newest;
+            const float size_mult = (ageRange > 0) ? (1.0f + (m_textures[i].nAge - newest) / (float)ageRange) : 1.0f;
             int bytes = static_cast<int>(m_textures[i].nSizeInBytes * size_mult);
             if (bytes > biggest_bytes)
             {
@@ -3384,11 +3385,15 @@ bool CPlugin::EvictSomeTexture()
         return false;
 
     // Evict that sucker.
-    assert(m_textures[biggest_index].texptr);
+    if (biggest_index < 0 || biggest_index >= static_cast<int>(N))
+        return false;
+    ID3D11Resource* const evictTex = m_textures[biggest_index].texptr;
+    if (!evictTex)
+        return false;
 
     // Notify all CShaderParams classes that we're releasing a bindable texture!!
     for (auto const& i : global_CShaderParams_master_list)
-        i->OnTextureEvict(m_textures[biggest_index].texptr);
+        i->OnTextureEvict(evictTex);
 
     // 2. Erase the texture itself.
     SafeRelease(m_textures[biggest_index].texptr);
@@ -3496,7 +3501,7 @@ void CShaderParams::CacheParams(CConstantTable* pCT, bool /* bHardErrors */)
         //cd.RegisterIndex = 3
         if (cd.Type == D3D_SIT_SAMPLER && cd.BindPoint >= 0 && cd.BindPoint < sizeof(m_texture_bindings) / sizeof(m_texture_bindings[0]))
         {
-            assert(m_texture_bindings[cd.BindPoint].texptr == NULL);
+            m_texture_bindings[cd.BindPoint].texptr = NULL;
 
             // Remove "sampler_" prefix to create root file name. Could still have "FW_" prefix or something like that.
             wchar_t szRootName[MAX_PATH];
@@ -3682,7 +3687,6 @@ void CShaderParams::CacheParams(CConstantTable* pCT, bool /* bHardErrors */)
                                 *p = 0;
                         }
 
-                        assert(RandTexName[rand_slot].length() == 0);
                         RandTexName[rand_slot] = szRootName; // we'll need to remember this for texsize_ params!
                     }
                 }
@@ -3940,6 +3944,9 @@ void CShaderParams::CacheParams(CConstantTable* pCT, bool /* bHardErrors */)
 
 bool CPlugin::RecompileVShader(const char* szShadersText, VShaderInfo* si, int shaderType, bool bHardErrors)
 {
+    if (!si || !szShadersText)
+        return false;
+
     si->Clear();
 
     // LOAD SHADER
@@ -3955,7 +3962,8 @@ bool CPlugin::RecompileVShader(const char* szShadersText, VShaderInfo* si, int s
 
 bool CPlugin::RecompilePShader(const char* szShadersText, PShaderInfo* si, int shaderType, bool bHardErrors, int PSVersion)
 {
-    assert(m_nMaxPSVersion > 0);
+    if (!si || !szShadersText || m_nMaxPSVersion <= 0)
+        return false;
 
     si->Clear();
 
@@ -3975,7 +3983,7 @@ bool CPlugin::RecompilePShader(const char* szShadersText, PShaderInfo* si, int s
         case MD2_PS_3_0: strcpy_s(ver, "ps_4_0_level_9_3"); break; // was ps_3_0
         case MD2_PS_4_0: strcpy_s(ver, "ps_4_0"); break;
         case MD2_PS_5_0: strcpy_s(ver, "ps_5_0"); break;
-        default: assert(0); break;
+        default: return false;
     }
 
     if (!LoadShaderFromMemory(szShadersText, "PS", ver, &si->CT, (void**)&si->ptr, shaderType, bHardErrors && (GetScreenMode() == WINDOWED)))
@@ -5142,12 +5150,13 @@ void CPlugin::OnAltK()
     AddError(WASABI_API_LNGSTRINGW(IDS_PLEASE_EXIT_VIS_BEFORE_RUNNING_CONFIG_PANEL), 3.0f, ERR_NOTIFY, true);
 }
 
-void CPlugin::AddError(wchar_t* szMsg, float fDuration, ErrorCategory category, bool bBold)
+void CPlugin::AddError(const wchar_t* szMsg, float fDuration, ErrorCategory category, bool bBold)
 {
+    if (category == ERR_ALL)
+        category = ERR_MISC;
     if (category == ERR_NOTIFY)
         ClearErrors(category);
 
-    assert(category != ERR_ALL);
     ErrorMsg x;
     x.msg = szMsg;
     x.birthTime = GetTime();
@@ -5794,7 +5803,12 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
         // clang-format off
         else if (m_UI_mode == UI_MENU)
         {
-            assert(m_pCurMenu);
+            if (!m_pCurMenu)
+            {
+                m_UI_mode = UI_REGULAR;
+                AddError(L"Menu no longer active.", 3.0f, ERR_NOTIFY, true);
+                return;
+            }
             r = D2D1::RectF(static_cast<FLOAT>(xL), static_cast<FLOAT>(*upper_left_corner_y), static_cast<FLOAT>(xR), static_cast<FLOAT>(*lower_left_corner_y));
 
             D2D1_RECT_F darkbox{};
@@ -5811,14 +5825,14 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
             r.bottom += PLAYLIST_INNER_MARGIN;
             m_pCurMenu->DrawMenu(r, xR, *lower_right_corner_y);
         }
-        else if (m_UI_mode == UI_UPGRADE_PIXEL_SHADER)
-        {
-            D2D1_RECT_F rect{};
-            rect = D2D1::RectF(static_cast<FLOAT>(xL), static_cast<FLOAT>(*upper_left_corner_y), static_cast<FLOAT>(xR), static_cast<FLOAT>(*lower_left_corner_y));
+    else if (m_UI_mode == UI_UPGRADE_PIXEL_SHADER)
+    {
+        D2D1_RECT_F rect{};
+        rect = D2D1::RectF(static_cast<FLOAT>(xL), static_cast<FLOAT>(*upper_left_corner_y), static_cast<FLOAT>(xR), static_cast<FLOAT>(*lower_left_corner_y));
+        wchar_t unsupportedPSVersion[] = L"Unsupported pixel shader version";
 
-            if (m_pState->m_nWarpPSVersion >= m_nMaxPSVersion && m_pState->m_nCompPSVersion >= m_nMaxPSVersion)
-            {
-                assert(m_pState->m_nMaxPSVersion == m_nMaxPSVersion);
+        if (m_pState->m_nWarpPSVersion >= m_nMaxPSVersion && m_pState->m_nCompPSVersion >= m_nMaxPSVersion)
+        {
                 MilkDropMenuOut_Box(rect.top, 0, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_PRESET_USES_HIGHEST_PIXEL_SHADER_VERSION), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
                 MilkDropMenuOut_Box(rect.top, 1, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_PRESS_ESC_TO_RETURN), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
             }
@@ -5850,7 +5864,7 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
                             break;
                         case MD2_PS_5_0:
                         default:
-                            assert(false);
+                            MilkDropMenuOut_Box(rect.top, 0, GetFont(SIMPLE_FONT), unsupportedPSVersion, rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
                             break;
                     }
                 }
@@ -5884,7 +5898,7 @@ void CPlugin::MilkDropRenderUI(int* upper_left_corner_y, int* upper_right_corner
                             MilkDropMenuOut_Box(rect.top, 2, GetFont(SIMPLE_FONT), WASABI_API_LNGSTRINGW(IDS_WARNING_OLD_GPU_MIGHT_NOT_WORK_WITH_PRESET), rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
                             break;
                         default:
-                            assert(false);
+                            MilkDropMenuOut_Box(rect.top, 0, GetFont(SIMPLE_FONT), unsupportedPSVersion, rect, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX, MENU_COLOR, true, 0xFF000000);
                             break;
                     }
                 }
@@ -8267,6 +8281,7 @@ retry:
     g_plugin.m_nPresetListCurPos = 0;
     if (bTryReselectCurrentPreset)
     {
+        bool bFoundCurrentPreset = false;
         if (g_plugin.m_szCurrentPresetFile[0])
         {
             // Try to automatically seek to the last preset loaded.
@@ -8278,10 +8293,21 @@ retry:
                 {
                     g_plugin.m_nPresetListCurPos = i;
                     g_plugin.m_nCurrentPreset = i;
+                    bFoundCurrentPreset = true;
                     break;
                 }
             }
         }
+
+        if (!bFoundCurrentPreset)
+        {
+            g_plugin.m_nCurrentPreset = -1;
+            g_plugin.m_nPresetListCurPos = 0;
+        }
+    }
+    else if (g_plugin.m_nCurrentPreset < g_plugin.m_nDirs || g_plugin.m_nCurrentPreset >= g_plugin.m_nPresets)
+    {
+        g_plugin.m_nCurrentPreset = -1;
     }
 
     g_plugin.m_bPresetListReady = true;
@@ -8310,7 +8336,8 @@ void CPlugin::UpdatePresetList(bool bBackground, bool bForce, bool bTryReselectC
             return;
     }
 
-    assert(!g_bThreadAlive);
+    if (g_bThreadAlive)
+        return;
 
     // Spawn new thread.
     ULONG_PTR flags = (bForce ? 1 : 0) | (bTryReselectCurrentPreset ? 2 : 0);
@@ -8900,6 +8927,13 @@ void CPlugin::ReadCustomMessages()
         m_customMessageFont[n].nColorB = 255;
     }
 
+    const auto clampFloat = [](float value, float minimum, float maximum) {
+        return std::clamp(value, minimum, maximum);
+    };
+    const auto clampInt = [](int value, int minimum, int maximum) {
+        return std::clamp(value, minimum, maximum);
+    };
+
     for (int n = 0; n < MAX_CUSTOM_MESSAGES; n++)
     {
         m_customMessage[n].szText[0] = 0;
@@ -8974,6 +9008,19 @@ void CPlugin::ReadCustomMessages()
             m_customMessage[n].nRandG = GetPrivateProfileInt(szSectionName, L"randg", m_customMessage[n].nRandG, m_szMsgIniFile);
             m_customMessage[n].nRandB = GetPrivateProfileInt(szSectionName, L"randb", m_customMessage[n].nRandB, m_szMsgIniFile);
 
+            m_customMessage[n].nFont = clampInt(m_customMessage[n].nFont, 0, MAX_CUSTOM_MESSAGE_FONTS - 1);
+            m_customMessage[n].fSize = clampFloat(m_customMessage[n].fSize, 0.0f, 100.0f);
+            m_customMessage[n].x = clampFloat(m_customMessage[n].x, 0.0f, 1.0f);
+            m_customMessage[n].y = clampFloat(m_customMessage[n].y, 0.0f, 1.0f);
+            m_customMessage[n].fTime = clampFloat(m_customMessage[n].fTime, 0.1f, 3600.0f);
+            m_customMessage[n].fFade = clampFloat(m_customMessage[n].fFade, 0.0f, 1.0f);
+            m_customMessage[n].nColorR = clampInt(m_customMessage[n].nColorR, 0, 255);
+            m_customMessage[n].nColorG = clampInt(m_customMessage[n].nColorG, 0, 255);
+            m_customMessage[n].nColorB = clampInt(m_customMessage[n].nColorB, 0, 255);
+            m_customMessage[n].nRandR = clampInt(m_customMessage[n].nRandR, -255, 255);
+            m_customMessage[n].nRandG = clampInt(m_customMessage[n].nRandG, -255, 255);
+            m_customMessage[n].nRandB = clampInt(m_customMessage[n].nRandB, -255, 255);
+
             // Overrides: r,g,b,face,bold,ital
             GetPrivateProfileString(szSectionName, L"face", L"", m_customMessage[n].szFace, ARRAYSIZE(m_customMessage[n].szFace), m_szMsgIniFile);
             m_customMessage[n].bBold = GetPrivateProfileInt(szSectionName, L"bold", -1, m_szMsgIniFile);
@@ -8994,14 +9041,14 @@ void CPlugin::ReadCustomMessages()
 
 void CPlugin::LaunchCustomMessage(int nMsgNum)
 {
-    if (nMsgNum > 99)
-        nMsgNum = 99;
+    if (nMsgNum >= MAX_CUSTOM_MESSAGES)
+        nMsgNum = MAX_CUSTOM_MESSAGES - 1;
 
     if (nMsgNum < 0)
     {
         int count = 0;
         // Choose randomly.
-        for (nMsgNum = 0; nMsgNum < 100; nMsgNum++)
+        for (nMsgNum = 0; nMsgNum < MAX_CUSTOM_MESSAGES; nMsgNum++)
             if (m_customMessage[nMsgNum].szText[0])
                 count++;
 
@@ -9010,7 +9057,7 @@ void CPlugin::LaunchCustomMessage(int nMsgNum)
 
         int sel = (warand() % count) + 1;
         count = 0;
-        for (nMsgNum = 0; nMsgNum < 100; nMsgNum++)
+        for (nMsgNum = 0; nMsgNum < MAX_CUSTOM_MESSAGES; nMsgNum++)
         {
             if (m_customMessage[nMsgNum].szText[0])
                 count++;
