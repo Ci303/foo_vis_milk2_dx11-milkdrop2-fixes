@@ -75,6 +75,7 @@
 #include "pch.h"
 #include "plugin.h"
 
+#include <atomic>
 #include <climits>
 #include <cwctype>
 #include <unordered_map>
@@ -116,9 +117,9 @@ extern bool g_bDebugOutput;
 extern bool g_bDumpFileCleared;
 
 // For `__UpdatePresetList`.
-volatile HANDLE g_hThread;        // only r/w from our MAIN thread
-volatile bool g_bThreadAlive;     // set true by MAIN thread, and set false upon exit from 2nd thread.
-volatile int g_bThreadShouldQuit; // set by MAIN thread to flag 2nd thread that it wants it to exit.
+static std::atomic<HANDLE> g_hThread{INVALID_HANDLE_VALUE}; // only r/w from our MAIN thread
+static std::atomic<bool> g_bThreadAlive{false};            // set true by MAIN thread, and set false upon exit from 2nd thread.
+static std::atomic<bool> g_bThreadShouldQuit{false};       // set by MAIN thread to flag 2nd thread that it wants it to exit.
 static CRITICAL_SECTION g_cs;
 
 static SRWLOCK g_runtimeSafetyCacheLock = SRWLOCK_INIT;
@@ -2084,9 +2085,9 @@ int CPlugin::AllocateMilkDropNonDX11()
         m_hBlackBrush = CreateSolidBrush(RGB(0, 0, 0));
     */
 
-    g_hThread = INVALID_HANDLE_VALUE;
-    g_bThreadAlive = false;
-    g_bThreadShouldQuit = false;
+    g_hThread.store(INVALID_HANDLE_VALUE);
+    g_bThreadAlive.store(false);
+    g_bThreadShouldQuit.store(false);
     InitializeCriticalSection(&g_cs);
 
     // Read in `m_szShaderIncludeText`.
@@ -2126,10 +2127,10 @@ int CPlugin::AllocateMilkDropNonDX11()
 
 static void CancelThread(int max_wait_time_ms)
 {
-    g_bThreadShouldQuit = true;
+    g_bThreadShouldQuit.store(true);
     int waited = 0;
-    const HANDLE thread = g_hThread;
-    while (g_bThreadAlive && waited < max_wait_time_ms)
+    const HANDLE thread = g_hThread.load();
+    while (g_bThreadAlive.load() && waited < max_wait_time_ms)
     {
         if (thread && thread != INVALID_HANDLE_VALUE)
         {
@@ -2144,7 +2145,7 @@ static void CancelThread(int max_wait_time_ms)
         waited += 30;
     }
 
-    if (g_bThreadAlive)
+    if (g_bThreadAlive.load())
     {
 #ifdef TARGET_WINDOWS_DESKTOP
         if (thread && thread != INVALID_HANDLE_VALUE)
@@ -2153,24 +2154,24 @@ static void CancelThread(int max_wait_time_ms)
             WaitForSingleObject(thread, INFINITE);
         }
 #endif
-        g_bThreadAlive = false;
+        g_bThreadAlive.store(false);
     }
 
     if (thread && thread != INVALID_HANDLE_VALUE)
         CloseHandle(thread);
-    g_hThread = INVALID_HANDLE_VALUE;
+    g_hThread.store(INVALID_HANDLE_VALUE);
 }
 
 static void CloseThreadHandleIfFinished()
 {
-    const HANDLE thread = g_hThread;
-    if (!thread || thread == INVALID_HANDLE_VALUE || g_bThreadAlive)
+    const HANDLE thread = g_hThread.load();
+    if (!thread || thread == INVALID_HANDLE_VALUE || g_bThreadAlive.load())
         return;
 
     if (WaitForSingleObject(thread, 0) == WAIT_OBJECT_0)
     {
         CloseHandle(thread);
-        g_hThread = INVALID_HANDLE_VALUE;
+        g_hThread.store(INVALID_HANDLE_VALUE);
     }
 }
 
@@ -8138,7 +8139,7 @@ retry:
             if (bRetrying)
             {
                 LeaveCriticalSection(&g_cs);
-                g_bThreadAlive = false;
+                g_bThreadAlive.store(false);
                 _endthreadex(0);
                 return 0;
             }
@@ -8156,7 +8157,7 @@ retry:
     if (g_plugin.m_bPresetListReady)
     {
         LeaveCriticalSection(&g_cs);
-        g_bThreadAlive = false;
+        g_bThreadAlive.store(false);
         _endthreadex(0);
         return 0;
     }
@@ -8185,7 +8186,7 @@ retry:
     int temp_nPresets = 0;
 
     // Scan for the desired number of presets, this call...
-    while (!g_bThreadShouldQuit && h != INVALID_HANDLE_VALUE)
+    while (!g_bThreadShouldQuit.load() && h != INVALID_HANDLE_VALUE)
     {
         bool bSkip = false;
         bool bIsDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
@@ -8286,10 +8287,10 @@ retry:
 
     }
 
-    if (g_bThreadShouldQuit)
+    if (g_bThreadShouldQuit.load())
     {
         // Just abort...either exiting the program or restarting the scan.
-        g_bThreadAlive = false;
+        g_bThreadAlive.store(false);
         _endthreadex(0);
         return 0;
     }
@@ -8306,7 +8307,7 @@ retry:
 
         if (bRetrying)
         {
-            g_bThreadAlive = false;
+            g_bThreadAlive.store(false);
             _endthreadex(0);
             return 0;
         }
@@ -8381,7 +8382,7 @@ retry:
     g_plugin.m_bPresetListReady = true;
     LeaveCriticalSection(&g_cs);
 
-    g_bThreadAlive = false;
+    g_bThreadAlive.store(false);
     //_endthreadex(0); // calling this here stops destructors from being called for local objects!
     return 0;
 }
@@ -8393,55 +8394,56 @@ void CPlugin::UpdatePresetList(bool bBackground, bool bForce, bool bTryReselectC
 
     if (bForce)
     {
-        if (g_bThreadAlive)
+        if (g_bThreadAlive.load())
             CancelThread(3000); // flags it to exit; the param is the number of milliseconds to wait before forcefully killing it
     }
     else
     {
-        if (bBackground && (g_bThreadAlive || m_bPresetListReady))
+        if (bBackground && (g_bThreadAlive.load() || m_bPresetListReady))
             return;
         if (!bBackground && m_bPresetListReady)
             return;
     }
 
-    if (g_bThreadAlive)
+    if (g_bThreadAlive.load())
         return;
 
     // Spawn new thread.
     ULONG_PTR flags = (bForce ? 1 : 0) | (bTryReselectCurrentPreset ? 2 : 0);
-    g_bThreadShouldQuit = false;
-    g_bThreadAlive = true;
-    g_hThread = (HANDLE)_beginthreadex(NULL, 0, __UpdatePresetList, reinterpret_cast<void*>(flags), 0, 0);
-    if (!g_hThread || g_hThread == INVALID_HANDLE_VALUE)
+    g_bThreadShouldQuit.store(false);
+    g_bThreadAlive.store(true);
+    g_hThread.store((HANDLE)_beginthreadex(NULL, 0, __UpdatePresetList, reinterpret_cast<void*>(flags), 0, 0));
+    const HANDLE thread = g_hThread.load();
+    if (!thread || thread == INVALID_HANDLE_VALUE)
     {
-        g_hThread = INVALID_HANDLE_VALUE;
-        g_bThreadAlive = false;
+        g_hThread.store(INVALID_HANDLE_VALUE);
+        g_bThreadAlive.store(false);
         return;
     }
 
     if (!bBackground)
     {
         // Crank up priority, wait for it to finish, and then return.
-        SetThreadPriority(g_hThread, THREAD_PRIORITY_HIGHEST);
+        SetThreadPriority(thread, THREAD_PRIORITY_HIGHEST);
 
         // Wait for it to finish.
-        WaitForSingleObject(g_hThread, INFINITE);
-        CloseHandle(g_hThread);
-        g_hThread = INVALID_HANDLE_VALUE;
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+        g_hThread.store(INVALID_HANDLE_VALUE);
     }
     else
     {
         // It will just run in the background til it finishes.
         // however, we want to wait until at least ~32 presets are found (or failure) before returning,
         // so we know we have *something* in the preset list to start with.
-        SetThreadPriority(g_hThread, THREAD_PRIORITY_HIGHEST);
+        SetThreadPriority(thread, THREAD_PRIORITY_HIGHEST);
 
         // Wait until either the thread exits, or number of presets is >32, before returning.
         // Also enter the CS whenever checking on it!
         // (thread will update preset list every so often, with the newest presets scanned in...)
-        while (g_bThreadAlive)
+        while (g_bThreadAlive.load())
         {
-            if (WaitForSingleObject(g_hThread, 30) == WAIT_OBJECT_0)
+            if (WaitForSingleObject(thread, 30) == WAIT_OBJECT_0)
                 break;
 
             EnterCriticalSection(&g_cs);
@@ -8452,12 +8454,12 @@ void CPlugin::UpdatePresetList(bool bBackground, bool bForce, bool bTryReselectC
                 break;
         }
 
-        if (g_bThreadAlive)
+        if (g_bThreadAlive.load())
         {
             // The load still takes a while even at THREAD_PRIORITY_ABOVE_NORMAL,
             // because it is waiting on the HDD so much...
             // But the OS is smart, and the CPU stays nice and zippy in other threads =)
-            SetThreadPriority(g_hThread, THREAD_PRIORITY_ABOVE_NORMAL);
+            SetThreadPriority(thread, THREAD_PRIORITY_ABOVE_NORMAL);
         }
         else
         {
