@@ -322,32 +322,28 @@ INT_PTR LDialogBoxParamW(HINSTANCE localized, HINSTANCE owner, UINT uID, HWND pa
 
 std::string GetExtension(const std::string& filename)
 {
-    size_t lastDotIndex = filename.rfind('.');
-    if (lastDotIndex != std::string::npos)
-    {
-        std::unique_ptr<char[]> extension(new char[filename.length() - lastDotIndex]);
-        for (unsigned int i = 0; i < filename.length() - lastDotIndex; i++)
-        {
-            extension[i] = static_cast<char>(tolower(*(filename.c_str() + lastDotIndex + 1 + i)));
-        }
-        return std::string(extension.get());
-    }
-    return "";
+    const size_t lastDotIndex = filename.rfind('.');
+    if (lastDotIndex == std::string::npos)
+        return "";
+
+    std::string extension = filename.substr(lastDotIndex + 1);
+    for (char& ch : extension)
+        ch = static_cast<char>(tolower(static_cast<unsigned char>(ch)));
+
+    return extension;
 }
 
 std::wstring GetExtension(const std::wstring& filename)
 {
-    size_t lastDotIndex = filename.rfind(L'.');
-    if (lastDotIndex != std::string::npos)
-    {
-        std::unique_ptr<wchar_t[]> extension(new wchar_t[filename.length() - lastDotIndex]);
-        for (unsigned int i = 0; i < filename.length() - lastDotIndex; i++)
-        {
-            extension[i] = static_cast<char>(tolower(*(filename.c_str() + lastDotIndex + 1 + i)));
-        }
-        return std::wstring(extension.get());
-    }
-    return L"";
+    const size_t lastDotIndex = filename.rfind(L'.');
+    if (lastDotIndex == std::wstring::npos)
+        return L"";
+
+    std::wstring extension = filename.substr(lastDotIndex + 1);
+    for (wchar_t& ch : extension)
+        ch = static_cast<wchar_t>(towlower(ch));
+
+    return extension;
 }
 
 // char* u8Name = _WideToUTF8(szName);
@@ -355,9 +351,23 @@ std::wstring GetExtension(const std::wstring& filename)
 // delete[] u8Name;
 char* _WideToUTF8(const wchar_t* WFilename)
 {
-    int SizeNeeded = WideCharToMultiByte(CP_UTF8, 0, &WFilename[0], -1, NULL, 0, NULL, NULL);
-    char* utf8Name = new char[SizeNeeded];
-    WideCharToMultiByte(CP_UTF8, 0, &WFilename[0], -1, &utf8Name[0], SizeNeeded, NULL, NULL);
+    if (!WFilename)
+        return nullptr;
+
+    const int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, WFilename, -1, nullptr, 0, nullptr, nullptr);
+    if (sizeNeeded <= 0)
+        return nullptr;
+
+    char* utf8Name = new (std::nothrow) char[sizeNeeded];
+    if (!utf8Name)
+        return nullptr;
+
+    if (WideCharToMultiByte(CP_UTF8, 0, WFilename, -1, utf8Name, sizeNeeded, nullptr, nullptr) == 0)
+    {
+        delete[] utf8Name;
+        return nullptr;
+    }
+
     return utf8Name;
 }
 

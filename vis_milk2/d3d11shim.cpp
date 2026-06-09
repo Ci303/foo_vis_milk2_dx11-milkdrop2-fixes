@@ -578,10 +578,13 @@ void D3D11Shim::SetVertexShader(ID3D11VertexShader* pVShader, CConstantTable* pT
     if (pTable)
     {
         pTable->ApplyChanges(m_pContext);
-        ID3D11Buffer** ppBuffers = new ID3D11Buffer*[pTable->GetBuffersCount()];
-        pTable->GetBuffers(ppBuffers);
-        m_pContext->VSSetConstantBuffers(0, static_cast<UINT>(pTable->GetBuffersCount()), ppBuffers);
-        delete[] ppBuffers;
+        const UINT bufferCount = static_cast<UINT>(pTable->GetBuffersCount());
+        if (bufferCount > 0)
+        {
+            std::vector<ID3D11Buffer*> buffers(bufferCount);
+            pTable->GetBuffers(buffers.data());
+            m_pContext->VSSetConstantBuffers(0, bufferCount, buffers.data());
+        }
     }
     m_pContext->VSSetShader((pVShader ? pVShader : m_pVShader), NULL, 0);
 }
@@ -594,10 +597,13 @@ void D3D11Shim::SetPixelShader(ID3D11PixelShader* pPShader, CConstantTable* pTab
     if (pTable)
     {
         pTable->ApplyChanges(m_pContext);
-        ID3D11Buffer** ppBuffers = new ID3D11Buffer*[pTable->GetBuffersCount()];
-        pTable->GetBuffers(ppBuffers);
-        m_pContext->PSSetConstantBuffers(0, static_cast<UINT>(pTable->GetBuffersCount()), ppBuffers);
-        delete[] ppBuffers;
+        const UINT bufferCount = static_cast<UINT>(pTable->GetBuffersCount());
+        if (bufferCount > 0)
+        {
+            std::vector<ID3D11Buffer*> buffers(bufferCount);
+            pTable->GetBuffers(buffers.data());
+            m_pContext->PSSetConstantBuffers(0, bufferCount, buffers.data());
+        }
     }
     if (pPShader)
     {

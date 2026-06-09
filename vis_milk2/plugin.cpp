@@ -2781,18 +2781,36 @@ int CPlugin::AllocateMilkDropDX11()
     m_texmgr.Init(GetDevice());
 
     //DumpDebugMessage("Init: mesh allocation");
-    m_verts = new MDVERTEX[(m_nGridX + 1) * (m_nGridY + 1)];
-    m_verts_temp = new MDVERTEX[(m_nGridX + 2) * 4];
-    m_vertinfo = new td_vertinfo[(m_nGridX + 1) * (m_nGridY + 1)];
-    m_indices_strip = new int[(m_nGridX + 2) * (m_nGridY * 2)];
-    m_indices_list = new int[m_nGridX * m_nGridY * 6];
-    if (!m_verts || !m_vertinfo)
+    if (m_nGridX < 1 || m_nGridY < 1)
+        return false;
+
+    const size_t nVerts = static_cast<size_t>(m_nGridX + 1) * static_cast<size_t>(m_nGridY + 1);
+    const size_t nVertsTemp = static_cast<size_t>(m_nGridX + 2) * 4;
+    const size_t nStripIndices = static_cast<size_t>(m_nGridX + 2) * static_cast<size_t>(m_nGridY) * 2;
+    const size_t nListIndices = static_cast<size_t>(m_nGridX) * static_cast<size_t>(m_nGridY) * 6;
+
+    m_verts = new (std::nothrow) MDVERTEX[nVerts];
+    m_verts_temp = new (std::nothrow) MDVERTEX[nVertsTemp];
+    m_vertinfo = new (std::nothrow) td_vertinfo[nVerts];
+    m_indices_strip = new (std::nothrow) int[nStripIndices];
+    m_indices_list = new (std::nothrow) int[nListIndices];
+    if (!m_verts || !m_verts_temp || !m_vertinfo || !m_indices_strip || !m_indices_list)
     {
         /*
         swprintf_s(buf, L"Could not allocate mesh - out of memory.");
         DumpDebugMessage(buf);
         MessageBox(GetPluginWindow(), buf, WASABI_API_LNGSTRINGW_BUF(IDS_MILKDROP_ERROR, title, 64), MB_OK | MB_SETFOREGROUND | MB_TOPMOST);
         */
+        delete[] m_verts;
+        m_verts = nullptr;
+        delete[] m_verts_temp;
+        m_verts_temp = nullptr;
+        delete[] m_vertinfo;
+        m_vertinfo = nullptr;
+        delete[] m_indices_strip;
+        m_indices_strip = nullptr;
+        delete[] m_indices_list;
+        m_indices_list = nullptr;
         return false;
     }
 
