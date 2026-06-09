@@ -1,6 +1,13 @@
 # MilkDrop 2 Visualization Library Notes
 
 ## Release History
+### 0.2.1.45 - 2026-06-09
+
+Threading stability update.
+
+- Replaced preset list worker thread state tracking with atomic variables to avoid data races between UI and worker thread.
+- Hardened preset scan cancellation and shutdown handling with atomic stores/loads to reduce race-related hangs/crashes.
+- Kept existing scan lifecycle behaviour, only changing synchronisation semantics.
 
 ### 0.2.1.41 - 2026-06-09
 
