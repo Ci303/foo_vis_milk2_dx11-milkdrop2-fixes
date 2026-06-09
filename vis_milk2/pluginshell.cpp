@@ -55,6 +55,25 @@ CPluginShell::~CPluginShell() { /* This should remain empty! */ }
 
 namespace
 {
+struct HelpSplitMarker
+{
+    std::wstring_view marker;
+    size_t splitOffset = 0;
+};
+
+bool TrySplitTextByMarker(const std::wstring& text, const HelpSplitMarker& splitRule, std::wstring& leftText, std::wstring& rightText)
+{
+    const size_t split = text.find(splitRule.marker);
+    if (split == std::wstring::npos)
+    {
+        return false;
+    }
+
+    leftText = text.substr(0, split);
+    rightText = text.substr(split + splitRule.splitOffset);
+    return true;
+}
+
 void ConfigureHelpTextElement(TextElement& element, DXContext* dx, const D2D1_COLOR_F& color, TextStyle* style)
 {
     if (!dx || !dx->GetD2DDeviceContext() || !style)
@@ -119,21 +138,15 @@ std::wstring NormalizeHelpLineEndings(std::wstring text)
 
 bool SplitHelpColumns(const std::wstring& text, std::wstring& leftText, std::wstring& rightText)
 {
-    constexpr wchar_t explicitMarker[] = L"\n---RIGHT---\n";
-    size_t split = text.find(explicitMarker);
-    if (split != std::wstring::npos)
+    static const HelpSplitMarker explicitMarker = { L"\n---RIGHT---\n", std::wcslen(L"\n---RIGHT---\n") };
+    if (TrySplitTextByMarker(text, explicitMarker, leftText, rightText))
     {
-        leftText = text.substr(0, split);
-        rightText = text.substr(split + std::wcslen(explicitMarker));
         return true;
     }
 
-    constexpr wchar_t legacyMarker[] = L"\nPLAYBACK\n";
-    split = text.find(legacyMarker);
-    if (split != std::wstring::npos)
+    static const HelpSplitMarker legacyMarker = { L"\nPLAYBACK\n", 1 };
+    if (TrySplitTextByMarker(text, legacyMarker, leftText, rightText))
     {
-        leftText = text.substr(0, split);
-        rightText = text.substr(split + 1);
         return true;
     }
 
