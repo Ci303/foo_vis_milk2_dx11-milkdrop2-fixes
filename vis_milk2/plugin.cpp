@@ -7406,6 +7406,9 @@ void CPlugin::GenPlasma(int x0, int x1, int y0, int y1, float dt)
 
 void CPlugin::LoadPreset(const wchar_t* szPresetFilename, float fBlendTime)
 {
+    if (!szPresetFilename || !szPresetFilename[0])
+        return;
+
     const wchar_t* presetName = wcsrchr(szPresetFilename, L'\\');
     presetName = (presetName) ? (presetName + 1) : szPresetFilename;
     if (IsPresetBlacklisted(presetName))
@@ -7464,7 +7467,8 @@ void CPlugin::LoadPreset(const wchar_t* szPresetFilename, float fBlendTime)
         // Do it all NOW!
         wchar_t previousPresetFile[MAX_PATH] = {0};
         wcscpy_s(previousPresetFile, m_szCurrentPresetFile);
-        if (szPresetFilename != m_szCurrentPresetFile) // [sic]
+        const bool bChangingPreset = (_wcsicmp(previousPresetFile, szPresetFilename) != 0);
+        if (bChangingPreset)
             wcscpy_s(m_szCurrentPresetFile, szPresetFilename);
 
         CState* temp = m_pState;
@@ -7480,7 +7484,8 @@ void CPlugin::LoadPreset(const wchar_t* szPresetFilename, float fBlendTime)
             temp = m_pState;
             m_pState = m_pOldState;
             m_pOldState = temp;
-            wcscpy_s(m_szCurrentPresetFile, previousPresetFile);
+            if (bChangingPreset)
+                wcscpy_s(m_szCurrentPresetFile, previousPresetFile);
             return;
         }
 
