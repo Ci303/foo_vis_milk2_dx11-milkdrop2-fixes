@@ -982,48 +982,71 @@ static BOOL FileExists(LPCTSTR szPath)
 // Copies the given string to the clipboard.
 static void copyStringToClipboardA(const char* source)
 {
-    int ok = OpenClipboard(NULL);
+    const char* safeSource = source ? source : "";
+    const int ok = OpenClipboard(NULL);
     if (!ok)
         return;
 
     HGLOBAL clipbuffer;
+    bool clipbufferOwned = false;
     EmptyClipboard();
-    if ((clipbuffer = GlobalAlloc(GMEM_DDESHARE, (strlen(source) + 1) * sizeof(wchar_t))) == NULL)
-        return;
-    else
+    if ((clipbuffer = GlobalAlloc(GMEM_DDESHARE, strlen(safeSource) + 1)) == NULL)
+        goto cleanup;
+
+    clipbufferOwned = true;
     {
-        char* buffer = reinterpret_cast<char*>(GlobalLock(clipbuffer));
+        char* buffer = static_cast<char*>(GlobalLock(clipbuffer));
         if (buffer)
-            strcpy_s(buffer, strlen(source) + 1, source);
+            if (strcpy_s(buffer, strlen(safeSource) + 1, safeSource) != 0)
+                goto cleanup;
         else
-            return;
+            goto cleanup;
+
+        GlobalUnlock(clipbuffer);
     }
-    GlobalUnlock(clipbuffer);
-    SetClipboardData(CF_TEXT, clipbuffer);
+
+    if (SetClipboardData(CF_TEXT, clipbuffer) != NULL)
+        clipbufferOwned = false;
+cleanup:
+    if (clipbufferOwned)
+        GlobalFree(clipbuffer);
     CloseClipboard();
 }
 
 // Copies the given string to the clipboard.
 static void copyStringToClipboardW(const wchar_t* source)
 {
-    int ok = OpenClipboard(NULL);
+    if (!source)
+        return;
+
+    const int ok = OpenClipboard(NULL);
     if (!ok)
         return;
 
     HGLOBAL clipbuffer;
+    bool clipbufferOwned = false;
     EmptyClipboard();
-    if ((clipbuffer = GlobalAlloc(GMEM_DDESHARE, (wcslen(source) + 1) * sizeof(wchar_t))) == NULL)
-        return;
-    else
+    const size_t sourceChars = wcslen(source);
+    if ((clipbuffer = GlobalAlloc(GMEM_DDESHARE, (sourceChars + 1) * sizeof(wchar_t))) == NULL)
+        goto cleanup;
+
+    clipbufferOwned = true;
     {
-        wchar_t* buffer = reinterpret_cast<wchar_t*>(GlobalLock(clipbuffer));
+        wchar_t* buffer = static_cast<wchar_t*>(GlobalLock(clipbuffer));
         if (buffer)
-            wcscpy_s(buffer, wcslen(source) + 1, source);
+            if (wcscpy_s(buffer, sourceChars + 1, source) != 0)
+                goto cleanup;
         else
-            return;
+            goto cleanup;
+
+        GlobalUnlock(clipbuffer);
     }
-    GlobalUnlock(clipbuffer);
-    SetClipboardData(CF_UNICODETEXT, clipbuffer);
+
+    if (SetClipboardData(CF_UNICODETEXT, clipbuffer) != NULL)
+        clipbufferOwned = false;
+cleanup:
+    if (clipbufferOwned)
+        GlobalFree(clipbuffer);
     CloseClipboard();
 }
 
@@ -1035,7 +1058,18 @@ static char* getStringFromClipboardA()
         return NULL;
 
     HANDLE hData = GetClipboardData(CF_TEXT);
+    if (!hData)
+    {
+        CloseClipboard();
+        return NULL;
+    }
+
     char* buffer = reinterpret_cast<char*>(GlobalLock(hData));
+    if (!buffer)
+    {
+        CloseClipboard();
+        return NULL;
+    }
     GlobalUnlock(hData);
     CloseClipboard();
     return buffer;
@@ -1049,7 +1083,18 @@ static wchar_t* getStringFromClipboardW()
         return NULL;
 
     HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+    if (!hData)
+    {
+        CloseClipboard();
+        return NULL;
+    }
+
     wchar_t* buffer = reinterpret_cast<wchar_t*>(GlobalLock(hData));
+    if (!buffer)
+    {
+        CloseClipboard();
+        return NULL;
+    }
     GlobalUnlock(hData);
     CloseClipboard();
     return buffer;
@@ -8358,8 +8403,6 @@ void CPlugin::UpdatePresetList(bool bBackground, bool bForce, bool bTryReselectC
 
         // Wait for it to finish.
         WaitForSingleObject(g_hThread, INFINITE);
-
-        assert(g_hThread != INVALID_HANDLE_VALUE);
         CloseHandle(g_hThread);
         g_hThread = INVALID_HANDLE_VALUE;
     }
@@ -8557,14 +8600,16 @@ void CPlugin::WaitString_Paste()
         {
             std::vector<char> tmp;
             tmp.resize(65536);
-            strcpy_s(tmp.data(), 65536, getStringFromClipboardA());
+            const char* clipboardText = getStringFromClipboardA();
+            strcpy_s(tmp.data(), 65536, clipboardText ? clipboardText : "");
             ConvertCRsToLFCA(tmp.data(), m_waitstring.szCodeClipboard);
         }
         else
         {
             std::vector<wchar_t> tmp;
             tmp.resize(65536);
-            wcscpy_s(tmp.data(), 65536, getStringFromClipboardW());
+            const wchar_t* clipboardText = getStringFromClipboardW();
+            wcscpy_s(tmp.data(), 65536, clipboardText ? clipboardText : L"");
             ConvertCRsToLFCW(tmp.data(), m_waitstring.szClipboard);
         }
 

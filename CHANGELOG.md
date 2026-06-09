@@ -2,6 +2,14 @@
 
 ## Release History
 
+### 0.2.1.41 - 2026-06-09
+
+Clipboard and preset-scan stability fixes.
+
+- Hardened clipboard read/write helpers against missing formats, null clipboard handles, and clipboard lock failures.
+- Guarded paste and copy paths to avoid crashes when paste data is unavailable or malformed.
+- Fixed clipboard byte-size allocation for ANSI text writes and removed brittle `assert` gating in preset scan thread completion.
+
 ### 0.2.1.39 - 2026-06-08
 
 Click play/pause overlay animation update.
