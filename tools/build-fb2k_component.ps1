@@ -200,23 +200,20 @@ elseif ($componentName -eq 'foo_vis_vumeter')
 
 # Check versions.
 $x86Version, $x64Version, $arm64Version, $arm64ecVersion = $versions
-if ($Platforms.Count -ge 4)
+if ($x86Version -and $x64Version -and ($x86Version -ne $x64Version))
 {
-    if ($x86Version -ne $x64Version)
-    {
-        Write-Host "FATAL: Win32 (${x86Version}) and x64 (${x64Version}) DLL versions mismatch."
-        exit 1
-    }
-    if ($arm64Version -and ($x86Version -ne $arm64Version))
-    {
-        Write-Host "FATAL: Win32 (${x86Version}) and ARM64 (${arm64Version}) DLL versions mismatch."
-        exit 1
-    }
-    if ($arm64ecVersion -and ($x86Version -ne $arm64ecVersion))
-    {
-        Write-Host "FATAL: Win32 (${x86Version}) and ARM64EC (${arm64ecVersion}) DLL versions mismatch."
-        exit 1
-    }
+    Write-Host "FATAL: Win32 (${x86Version}) and x64 (${x64Version}) DLL versions mismatch."
+    exit 1
+}
+if ($arm64Version -and ($x86Version -ne $arm64Version))
+{
+    Write-Host "FATAL: Win32 (${x86Version}) and ARM64 (${arm64Version}) DLL versions mismatch."
+    exit 1
+}
+if ($arm64ecVersion -and ($x86Version -ne $arm64ecVersion))
+{
+    Write-Host "FATAL: Win32 (${x86Version}) and ARM64EC (${arm64ecVersion}) DLL versions mismatch."
+    exit 1
 }
 
 # Define component output file name.

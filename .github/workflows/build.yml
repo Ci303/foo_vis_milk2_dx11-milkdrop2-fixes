@@ -89,6 +89,7 @@ jobs:
       - name: Cache NuGet packages (DirectXTK and WTL)
         uses: actions/cache@v5
         id: nuget
+        continue-on-error: true
         with:
           path: |
             ${{ github.workspace }}\external\directxtk*
@@ -166,18 +167,38 @@ jobs:
           name: milk2-x64-Release
           path: ${{ github.workspace }}\Bin\x64\Release
       - name: Download ARM64 DLL
+        id: download_arm64
+        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: milk2-ARM64-Release
           path: ${{ github.workspace }}\Bin\ARM64\Release
       - name: Download ARM64EC DLL
+        id: download_arm64ec
+        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: milk2-ARM64EC-Release
           path: ${{ github.workspace }}\Bin\ARM64EC\Release
+      - name: Set packaging platforms
+        id: packaging-platforms
+        shell: pwsh
+        run: |
+          $platforms = @('x86', 'x64')
+          if (Test-Path "${{ github.workspace }}\Bin\ARM64\Release\foo_vis_milk2.dll")
+          {
+            $platforms += 'ARM64'
+          }
+          if (Test-Path "${{ github.workspace }}\Bin\ARM64EC\Release\foo_vis_milk2.dll")
+          {
+            $platforms += 'ARM64EC'
+          }
+
+          "PLATFORMS=$($platforms -join ',')" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "INFO: Packaging platforms: $($platforms -join ',')"
       - name: Package foobar2000 MilkDrop 2 component
         run: |
-          &"${{ github.workspace }}\tools\build-fb2k_component.ps1" -Version ''
+          &"${{ github.workspace }}\tools\build-fb2k_component.ps1" -Version '' -Platforms $($env:PLATFORMS -split ',')
       - uses: actions/upload-artifact@v7
         with:
           name: foo_vis_milk2-component
