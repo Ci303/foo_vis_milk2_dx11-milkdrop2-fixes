@@ -510,6 +510,36 @@ class FormatInfoDlg : public CDialogImpl<FormatInfoDlg>
     HFONT m_monospace_font = nullptr;
 };
 
+class ThemedMessageDlg : public CDialogImpl<ThemedMessageDlg>
+{
+  public:
+    ThemedMessageDlg(std::wstring title, std::wstring message)
+        : m_title(std::move(title)), m_message(std::move(message))
+    {
+    }
+
+    enum themed_message_dialog_id
+    {
+        IDD = IDD_THEMED_MESSAGE
+    };
+
+    BEGIN_MSG_MAP(ThemedMessageDlg)
+        MSG_WM_INITDIALOG(OnInitDialog)
+        MSG_WM_DESTROY(OnDestroy)
+        COMMAND_ID_HANDLER_EX(IDOK, OnCloseCmd)
+        COMMAND_ID_HANDLER_EX(IDCANCEL, OnCloseCmd)
+    END_MSG_MAP()
+
+  private:
+    BOOL OnInitDialog(CWindow, LPARAM);
+    void OnDestroy();
+    void OnCloseCmd(UINT, int nID, CWindow);
+
+    std::wstring m_title;
+    std::wstring m_message;
+    fb2k::CDarkModeHooks m_dark;
+};
+
 class PresetBlacklistDlg : public CDialogImpl<PresetBlacklistDlg>
 {
   public:
@@ -532,6 +562,7 @@ class PresetBlacklistDlg : public CDialogImpl<PresetBlacklistDlg>
         COMMAND_HANDLER_EX(IDC_BLACKLIST_PRESET_DIR, BN_CLICKED, OnOpenPresetDirectory)
         COMMAND_HANDLER_EX(IDC_BLACKLIST_IMPORT, BN_CLICKED, OnImport)
         COMMAND_HANDLER_EX(IDC_BLACKLIST_EXPORT, BN_CLICKED, OnExport)
+        COMMAND_HANDLER_EX(IDC_BLACKLIST_SCAN, BN_CLICKED, OnScanPresets)
         COMMAND_HANDLER_EX(IDC_BLACKLIST_ENTRY, EN_CHANGE, OnEntryChanged)
         COMMAND_HANDLER_EX(IDC_BLACKLIST_ENTRY, EN_SETFOCUS, OnEntrySetFocus)
         COMMAND_HANDLER_EX(IDC_BLACKLIST_ENTRY, EN_KILLFOCUS, OnEntryKillFocus)
@@ -542,6 +573,7 @@ class PresetBlacklistDlg : public CDialogImpl<PresetBlacklistDlg>
   private:
     BOOL OnInitDialog(CWindow, LPARAM);
     void OnDestroy();
+    static LRESULT CALLBACK PresetListSubclassProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR subclassId, DWORD_PTR refData);
     LRESULT OnCtlColorEdit(UINT, WPARAM, LPARAM);
     void OnCloseCmd(UINT, int nID, CWindow);
     void OnAdd(UINT, int, CWindow);
@@ -550,6 +582,7 @@ class PresetBlacklistDlg : public CDialogImpl<PresetBlacklistDlg>
     void OnOpenPresetDirectory(UINT, int, CWindow);
     void OnImport(UINT, int, CWindow);
     void OnExport(UINT, int, CWindow);
+    void OnScanPresets(UINT, int, CWindow);
     void OnEntryChanged(UINT, int, CWindow);
     void OnEntrySetFocus(UINT, int, CWindow);
     void OnEntryKillFocus(UINT, int, CWindow);
@@ -562,6 +595,37 @@ class PresetBlacklistDlg : public CDialogImpl<PresetBlacklistDlg>
     bool m_changed = false;
     bool m_entry_placeholder_active = false;
     HFONT m_entry_placeholder_font = nullptr;
+    fb2k::CDarkModeHooks m_dark;
+};
+
+class PresetBlacklistScanResultDlg : public CDialogImpl<PresetBlacklistScanResultDlg>
+{
+  public:
+    enum preset_blacklist_scan_result_dialog_id
+    {
+        IDD = IDD_PRESET_BLACKLIST_SCAN_RESULT
+    };
+
+    PresetBlacklistScanResultDlg(std::wstring summary, std::wstring details, bool canApply)
+        : m_summary(std::move(summary)), m_details(std::move(details)), m_can_apply(canApply)
+    {
+    }
+
+    BEGIN_MSG_MAP(PresetBlacklistScanResultDlg)
+        MSG_WM_INITDIALOG(OnInitDialog)
+        MSG_WM_DESTROY(OnDestroy)
+        COMMAND_ID_HANDLER_EX(IDOK, OnCloseCmd)
+        COMMAND_ID_HANDLER_EX(IDCANCEL, OnCloseCmd)
+    END_MSG_MAP()
+
+  private:
+    BOOL OnInitDialog(CWindow, LPARAM);
+    void OnDestroy();
+    void OnCloseCmd(UINT, int nID, CWindow);
+
+    std::wstring m_summary;
+    std::wstring m_details;
+    bool m_can_apply = false;
     fb2k::CDarkModeHooks m_dark;
 };
 

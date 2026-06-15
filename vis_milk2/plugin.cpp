@@ -125,6 +125,7 @@ static CRITICAL_SECTION g_cs;
 static SRWLOCK g_runtimeSafetyCacheLock = SRWLOCK_INIT;
 static std::unordered_set<std::wstring> g_shaderFallbackPresets;
 static std::unordered_set<std::wstring> g_slowLoadPresets;
+static std::unordered_set<std::wstring> g_visualInactivePresets;
 static std::unordered_map<std::wstring, unsigned> g_runtimeSafetyCounts;
 static wchar_t g_runtimeSafetyCacheFile[MAX_PATH] = {};
 static wchar_t g_runtimeSafetyResetFile[MAX_PATH] = {};
@@ -380,30 +381,58 @@ static std::wstring RuntimeSafetyNormalizePresetName(const wchar_t* preset)
     return normalized;
 }
 
-static void RuntimeSafetySaveCache()
+static std::unordered_set<std::wstring> BuildPresetBlacklistLookup(const std::vector<std::wstring>& entries)
 {
-    if (!g_runtimeSafetyCacheFile[0])
+    std::unordered_set<std::wstring> lookup;
+    lookup.reserve(entries.size());
+    for (const auto& entry : entries)
+    {
+        std::wstring normalized = MakeLowercaseCopy(entry);
+        if (!normalized.empty())
+            lookup.insert(std::move(normalized));
+    }
+    return lookup;
+}
+
+static bool PresetBlacklistLookupContains(const std::unordered_set<std::wstring>& lookup, const std::wstring& preset)
+{
+    return !lookup.empty() && lookup.find(MakeLowercaseCopy(preset)) != lookup.end();
+}
+
+static void RuntimeSafetySaveCacheSnapshot(const wchar_t* cacheFile,
+                                           const std::unordered_set<std::wstring>& shaderFallbackPresets,
+                                           const std::unordered_set<std::wstring>& slowLoadPresets,
+                                           const std::unordered_set<std::wstring>& visualInactivePresets,
+                                           const std::unordered_map<std::wstring, unsigned>& runtimeSafetyCounts)
+{
+    if (!cacheFile || !cacheFile[0])
         return;
 
     FILE* file = nullptr;
-    if (_wfopen_s(&file, g_runtimeSafetyCacheFile, L"wt, ccs=UTF-8") != 0 || !file)
+    if (_wfopen_s(&file, cacheFile, L"wt, ccs=UTF-8") != 0 || !file)
         return;
 
     fputws(L"# foo_vis_milk2 runtime safety cache\n", file);
     fputws(L"# Delete this file, or create reset-runtime-safety-cache.txt beside it before starting foobar2000, to allow all presets again.\n", file);
-    fwprintf(file, L"# Presets are only auto-skipped after %u recorded slow-load or shader-fallback events.\n", RUNTIME_SAFETY_SKIP_THRESHOLD);
+    fwprintf(file, L"# Presets are only auto-skipped after %u recorded slow-load, shader-fallback, or visual-inactive events.\n", RUNTIME_SAFETY_SKIP_THRESHOLD);
     fputws(L"# type<TAB>count<TAB>preset\n", file);
 
-    for (const auto& preset : g_shaderFallbackPresets)
+    for (const auto& preset : shaderFallbackPresets)
     {
-        const auto count = g_runtimeSafetyCounts.find(preset);
-        fwprintf(file, L"shader-fallback\t%u\t%ls\n", count != g_runtimeSafetyCounts.end() ? count->second : 1u, preset.c_str());
+        const auto count = runtimeSafetyCounts.find(preset);
+        fwprintf(file, L"shader-fallback\t%u\t%ls\n", count != runtimeSafetyCounts.end() ? count->second : 1u, preset.c_str());
     }
 
-    for (const auto& preset : g_slowLoadPresets)
+    for (const auto& preset : slowLoadPresets)
     {
-        const auto count = g_runtimeSafetyCounts.find(preset);
-        fwprintf(file, L"slow-load\t%u\t%ls\n", count != g_runtimeSafetyCounts.end() ? count->second : 1u, preset.c_str());
+        const auto count = runtimeSafetyCounts.find(preset);
+        fwprintf(file, L"slow-load\t%u\t%ls\n", count != runtimeSafetyCounts.end() ? count->second : 1u, preset.c_str());
+    }
+
+    for (const auto& preset : visualInactivePresets)
+    {
+        const auto count = runtimeSafetyCounts.find(preset);
+        fwprintf(file, L"visual-inactive\t%u\t%ls\n", count != runtimeSafetyCounts.end() ? count->second : 1u, preset.c_str());
     }
 
     fclose(file);
@@ -415,6 +444,7 @@ static void RuntimeSafetyLoadCache(const wchar_t* milkdropPath)
 
     g_shaderFallbackPresets.clear();
     g_slowLoadPresets.clear();
+    g_visualInactivePresets.clear();
     g_runtimeSafetyCounts.clear();
     g_runtimeSafetyCacheFile[0] = 0;
     g_runtimeSafetyResetFile[0] = 0;
@@ -463,6 +493,8 @@ static void RuntimeSafetyLoadCache(const wchar_t* milkdropPath)
                 g_shaderFallbackPresets.insert(preset);
             else if (!_wcsicmp(type, L"slow-load"))
                 g_slowLoadPresets.insert(preset);
+            else if (!_wcsicmp(type, L"visual-inactive"))
+                g_visualInactivePresets.insert(preset);
             else
                 continue;
 
@@ -554,6 +586,9 @@ static void PresetScanCacheLoadLocked()
 
 static void PresetScanCacheSave()
 {
+    std::wstring cacheFile;
+    std::unordered_map<std::wstring, PresetScanCacheEntry> snapshot;
+
     AcquireSRWLockExclusive(&g_presetScanCacheLock);
 
     if (!g_presetScanCacheDirty || !g_presetScanCacheFile[0])
@@ -562,16 +597,23 @@ static void PresetScanCacheSave()
         return;
     }
 
+    cacheFile = g_presetScanCacheFile;
+    snapshot = g_presetScanCache;
+    g_presetScanCacheDirty = false;
+    ReleaseSRWLockExclusive(&g_presetScanCacheLock);
+
     FILE* file = nullptr;
-    if (_wfopen_s(&file, g_presetScanCacheFile, L"wt, ccs=UTF-8") != 0 || !file)
+    if (_wfopen_s(&file, cacheFile.c_str(), L"wt, ccs=UTF-8") != 0 || !file)
     {
+        AcquireSRWLockExclusive(&g_presetScanCacheLock);
+        g_presetScanCacheDirty = true;
         ReleaseSRWLockExclusive(&g_presetScanCacheLock);
         return;
     }
 
     fputws(L"# foo_vis_milk2 preset scan cache\n", file);
     fputws(L"# path<TAB>size<TAB>write-low<TAB>write-high<TAB>max-ps<TAB>runnable<TAB>rating-known<TAB>rating\n", file);
-    for (const auto& item : g_presetScanCache)
+    for (const auto& item : snapshot)
     {
         const auto& e = item.second;
         fwprintf(file, L"%ls\t%llu\t%lu\t%lu\t%d\t%d\t%d\t%.6f\n",
@@ -586,8 +628,6 @@ static void PresetScanCacheSave()
     }
 
     fclose(file);
-    g_presetScanCacheDirty = false;
-    ReleaseSRWLockExclusive(&g_presetScanCacheLock);
 }
 
 static bool PresetScanCacheGet(const wchar_t* presetPath, const WIN32_FIND_DATA& fd, int maxPSVersion, float& rating, bool& runnable)
@@ -652,33 +692,316 @@ static bool RuntimeSafetyShouldSkipPreset(const wchar_t* preset)
 
     AcquireSRWLockShared(&g_runtimeSafetyCacheLock);
     const auto count = g_runtimeSafetyCounts.find(normalized);
-    const bool skip = count != g_runtimeSafetyCounts.end() && count->second >= RUNTIME_SAFETY_SKIP_THRESHOLD &&
-                      (g_shaderFallbackPresets.find(normalized) != g_shaderFallbackPresets.end() ||
-                       g_slowLoadPresets.find(normalized) != g_slowLoadPresets.end());
+    const bool shaderFallback = g_shaderFallbackPresets.find(normalized) != g_shaderFallbackPresets.end();
+    const bool slowLoad = g_slowLoadPresets.find(normalized) != g_slowLoadPresets.end();
+    const bool visualInactive = g_visualInactivePresets.find(normalized) != g_visualInactivePresets.end();
+    const unsigned int threshold = visualInactive ? 1 : RUNTIME_SAFETY_SKIP_THRESHOLD;
+    const bool skip = count != g_runtimeSafetyCounts.end() && count->second >= threshold &&
+                      (shaderFallback || slowLoad || visualInactive);
     ReleaseSRWLockShared(&g_runtimeSafetyCacheLock);
     return skip;
 }
 
-static void RuntimeSafetyRecordPreset(const wchar_t* preset, bool shaderFallback, bool slowLoad)
+static void RuntimeSafetyRecordPreset(const wchar_t* preset, bool shaderFallback, bool slowLoad, bool visualInactive = false)
 {
     const std::wstring normalized = RuntimeSafetyNormalizePresetName(preset);
     if (normalized.empty())
         return;
 
     bool changed = false;
+    wchar_t cacheFile[MAX_PATH] = {};
+    std::unordered_set<std::wstring> shaderFallbackSnapshot;
+    std::unordered_set<std::wstring> slowLoadSnapshot;
+    std::unordered_set<std::wstring> visualInactiveSnapshot;
+    std::unordered_map<std::wstring, unsigned> countsSnapshot;
     AcquireSRWLockExclusive(&g_runtimeSafetyCacheLock);
     if (shaderFallback)
         changed = g_shaderFallbackPresets.insert(normalized).second || changed;
     if (slowLoad)
         changed = g_slowLoadPresets.insert(normalized).second || changed;
-    if (shaderFallback || slowLoad)
+    if (visualInactive)
+        changed = g_visualInactivePresets.insert(normalized).second || changed;
+    if (shaderFallback || slowLoad || visualInactive)
     {
         g_runtimeSafetyCounts[normalized]++;
         changed = true;
     }
     if (changed)
-        RuntimeSafetySaveCache();
+    {
+        wcscpy_s(cacheFile, g_runtimeSafetyCacheFile);
+        shaderFallbackSnapshot = g_shaderFallbackPresets;
+        slowLoadSnapshot = g_slowLoadPresets;
+        visualInactiveSnapshot = g_visualInactivePresets;
+        countsSnapshot = g_runtimeSafetyCounts;
+    }
     ReleaseSRWLockExclusive(&g_runtimeSafetyCacheLock);
+
+    if (changed)
+        RuntimeSafetySaveCacheSnapshot(cacheFile, shaderFallbackSnapshot, slowLoadSnapshot, visualInactiveSnapshot, countsSnapshot);
+}
+
+static float RuntimeSafetyReadFiniteDouble(const double* value, float fallback = 0.0f)
+{
+    if (!value || !std::isfinite(*value))
+        return fallback;
+
+    return static_cast<float>(*value);
+}
+
+static void RuntimeSafetyAddSignal(float& signature, const double* value, float weight)
+{
+    const float sampled = RuntimeSafetyReadFiniteDouble(value);
+    signature += sampled * weight;
+    signature += std::abs(sampled) * weight * 0.37f;
+}
+
+void CPlugin::ResetVisualInactivityTracking()
+{
+    m_bVisualInactivityTrackingArmed = false;
+    m_bVisualInactivityRecorded = false;
+    m_fVisualInactivityLastActivityTime = 0.0f;
+    m_fVisualInactivityLastSignature = 0.0f;
+    m_fVisualInactivityNextSampleTime = 0.0f;
+    m_nVisualInactivityDarkSamples = 0;
+}
+
+void CPlugin::AutoBlacklistVisualInactivePreset()
+{
+    if (m_bVisualInactivityRecorded || !m_szCurrentPresetFile[0])
+        return;
+
+    wchar_t presetFile[MAX_PATH] = {0};
+    wcscpy_s(presetFile, m_szCurrentPresetFile);
+
+    RuntimeSafetyRecordPreset(presetFile, false, false, true);
+    m_bVisualInactivityRecorded = true;
+
+    const wchar_t* presetName = wcsrchr(presetFile, L'\\');
+    presetName = presetName ? presetName + 1 : presetFile;
+    AddPresetToBlacklist(presetName);
+
+    LoadRandomPreset(m_fBlendTimeUser);
+}
+
+bool CPlugin::SampleVisualOutputBrightness(float& maxBrightness)
+{
+    maxBrightness = 0.0f;
+    return false;
+
+#if 0
+    D3D11Shim* lpDevice = GetDevice();
+    if (!lpDevice || !m_lpVS[0])
+        return false;
+
+    D3D11_TEXTURE2D_DESC desc = {};
+    m_lpVS[0]->GetDesc(&desc);
+    if (desc.Width == 0 || desc.Height == 0)
+        return false;
+
+    const bool supportedFormat =
+        desc.Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+        desc.Format == DXGI_FORMAT_B8G8R8X8_UNORM ||
+        desc.Format == DXGI_FORMAT_R8G8B8A8_UNORM;
+    if (!supportedFormat)
+        return false;
+
+    if (!m_visualInactivityReadbackTexture ||
+        m_visualInactivityReadbackWidth != desc.Width ||
+        m_visualInactivityReadbackHeight != desc.Height ||
+        m_visualInactivityReadbackFormat != desc.Format)
+    {
+        SafeRelease(m_visualInactivityReadbackTexture);
+        m_visualInactivityReadbackWidth = 0;
+        m_visualInactivityReadbackHeight = 0;
+        m_visualInactivityReadbackFormat = DXGI_FORMAT_UNKNOWN;
+
+        if (!lpDevice->CreateTexture(desc.Width, desc.Height, 1, 0, desc.Format, &m_visualInactivityReadbackTexture, 0, D3D11_USAGE_STAGING))
+            return false;
+
+        m_visualInactivityReadbackWidth = desc.Width;
+        m_visualInactivityReadbackHeight = desc.Height;
+        m_visualInactivityReadbackFormat = desc.Format;
+    }
+
+    lpDevice->CopyResource(m_visualInactivityReadbackTexture, m_lpVS[0]);
+
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    if (!lpDevice->LockRect(m_visualInactivityReadbackTexture, 0, D3D11_MAP_READ, &mapped))
+        return false;
+
+    const UINT sampleColumns = 24;
+    const UINT sampleRows = 16;
+    const UINT stepX = (std::max)(static_cast<UINT>(1), desc.Width / sampleColumns);
+    const UINT stepY = (std::max)(static_cast<UINT>(1), desc.Height / sampleRows);
+    const UINT startX = (std::min)(desc.Width - 1, stepX / 2);
+    const UINT startY = (std::min)(desc.Height - 1, stepY / 2);
+
+    for (UINT y = startY; y < desc.Height; y += stepY)
+    {
+        const uint8_t* row = static_cast<const uint8_t*>(mapped.pData) + static_cast<size_t>(mapped.RowPitch) * y;
+        for (UINT x = startX; x < desc.Width; x += stepX)
+        {
+            const uint8_t* pixel = row + static_cast<size_t>(x) * 4;
+            uint8_t r = 0;
+            uint8_t g = 0;
+            uint8_t b = 0;
+
+            if (desc.Format == DXGI_FORMAT_R8G8B8A8_UNORM)
+            {
+                r = pixel[0];
+                g = pixel[1];
+                b = pixel[2];
+            }
+            else
+            {
+                b = pixel[0];
+                g = pixel[1];
+                r = pixel[2];
+            }
+
+            const uint8_t brightestChannel = (std::max)(r, (std::max)(g, b));
+            const float brightness = static_cast<float>(brightestChannel) / 255.0f;
+            maxBrightness = (std::max)(maxBrightness, brightness);
+            if (maxBrightness > 0.05f)
+            {
+                lpDevice->UnlockRect(m_visualInactivityReadbackTexture, 0);
+                return true;
+            }
+        }
+    }
+
+    lpDevice->UnlockRect(m_visualInactivityReadbackTexture, 0);
+    return true;
+#endif
+}
+
+void CPlugin::UpdateVisualInactivityTracking()
+{
+    if (!m_bPlaybackActive || m_bFoobarIdlePresetActive || !m_pState || !m_szCurrentPresetFile[0] ||
+        m_nLoadingPreset != 0 || m_bPresetLockedByUser || m_bPresetLockedByCode)
+    {
+        m_bVisualInactivityTrackingArmed = false;
+        return;
+    }
+
+    if (m_bVisualInactivityRecorded)
+        return;
+
+    constexpr float kWarmupSeconds = 8.0f;
+    constexpr float kInactiveSeconds = 14.0f;
+    constexpr float kSignatureChangeThreshold = 0.0025f;
+    constexpr float kVisibleSignalThreshold = 0.035f;
+    constexpr float kOutputSampleIntervalSeconds = 1.25f;
+    constexpr float kBlackFrameBrightnessThreshold = 0.018f;
+    constexpr int kBlackFrameSampleThreshold = 3;
+
+    const float now = GetTime();
+    if (!std::isfinite(now) || now - m_fPresetStartTime < kWarmupSeconds)
+        return;
+
+    if (now >= m_fVisualInactivityNextSampleTime)
+    {
+        m_fVisualInactivityNextSampleTime = now + kOutputSampleIntervalSeconds;
+
+        float outputBrightness = 0.0f;
+        if (SampleVisualOutputBrightness(outputBrightness))
+        {
+            if (outputBrightness <= kBlackFrameBrightnessThreshold)
+            {
+                m_nVisualInactivityDarkSamples++;
+                if (m_nVisualInactivityDarkSamples >= kBlackFrameSampleThreshold)
+                {
+                    AutoBlacklistVisualInactivePreset();
+                    return;
+                }
+            }
+            else
+            {
+                m_nVisualInactivityDarkSamples = 0;
+                m_fVisualInactivityLastActivityTime = now;
+            }
+
+            return;
+        }
+    }
+
+    const float waveAlpha = std::abs(RuntimeSafetyReadFiniteDouble(m_pState->var_pf_wave_a));
+    const float waveColour =
+        std::abs(RuntimeSafetyReadFiniteDouble(m_pState->var_pf_wave_r)) +
+        std::abs(RuntimeSafetyReadFiniteDouble(m_pState->var_pf_wave_g)) +
+        std::abs(RuntimeSafetyReadFiniteDouble(m_pState->var_pf_wave_b));
+    const float borderSignal =
+        std::abs(RuntimeSafetyReadFiniteDouble(m_pState->var_pf_ob_a)) * std::abs(RuntimeSafetyReadFiniteDouble(m_pState->var_pf_ob_size)) +
+        std::abs(RuntimeSafetyReadFiniteDouble(m_pState->var_pf_ib_a)) * std::abs(RuntimeSafetyReadFiniteDouble(m_pState->var_pf_ib_size));
+    const float motionVectorSignal =
+        std::abs(RuntimeSafetyReadFiniteDouble(m_pState->var_pf_mv_a)) * std::max(0.0f, RuntimeSafetyReadFiniteDouble(m_pState->var_pf_mv_l));
+    const float echoSignal = std::abs(RuntimeSafetyReadFiniteDouble(m_pState->var_pf_echo_alpha));
+    const float visibleSignal = waveAlpha * std::min(waveColour, 3.0f) + borderSignal + motionVectorSignal + echoSignal;
+
+    float signature = 0.0f;
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_zoom, 0.011f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_zoomexp, 0.013f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_rot, 0.017f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_warp, 0.019f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_cx, 0.023f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_cy, 0.029f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_dx, 0.031f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_dy, 0.037f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_sx, 0.041f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_sy, 0.043f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_decay, 0.047f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_wave_a, 0.053f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_wave_r, 0.059f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_wave_g, 0.061f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_wave_b, 0.067f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_wave_x, 0.071f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_wave_y, 0.073f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_wave_mystery, 0.079f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_ob_size, 0.083f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_ob_a, 0.089f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_ib_size, 0.097f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_ib_a, 0.101f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_mv_x, 0.103f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_mv_y, 0.107f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_mv_dx, 0.109f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_mv_dy, 0.113f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_mv_l, 0.127f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_mv_a, 0.131f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_echo_zoom, 0.137f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_echo_alpha, 0.139f);
+    RuntimeSafetyAddSignal(signature, m_pState->var_pf_monitor, 0.149f);
+
+    for (int i = 0; i < NUM_Q_VAR; i++)
+        RuntimeSafetyAddSignal(signature, m_pState->var_pf_q[i], 0.151f + static_cast<float>(i) * 0.003f);
+
+    if (!std::isfinite(signature))
+    {
+        m_bVisualInactivityTrackingArmed = false;
+        return;
+    }
+
+    if (!m_bVisualInactivityTrackingArmed)
+    {
+        m_bVisualInactivityTrackingArmed = true;
+        m_fVisualInactivityLastActivityTime = now;
+        m_fVisualInactivityLastSignature = signature;
+        return;
+    }
+
+    const bool visibleControlsActive = visibleSignal > kVisibleSignalThreshold;
+    const bool signatureChanged = std::abs(signature - m_fVisualInactivityLastSignature) > kSignatureChangeThreshold;
+    if (visibleControlsActive || signatureChanged)
+    {
+        m_fVisualInactivityLastActivityTime = now;
+        m_fVisualInactivityLastSignature = signature;
+        return;
+    }
+
+    if (now - m_fVisualInactivityLastActivityTime >= kInactiveSeconds)
+    {
+        AutoBlacklistVisualInactivePreset();
+        return;
+    }
 }
 
 static const wchar_t* ShaderTypeName(int shaderType)
@@ -2125,7 +2448,7 @@ int CPlugin::AllocateMilkDropNonDX11()
     return true;
 }
 
-static void CancelThread(int max_wait_time_ms)
+static bool CancelThread(int max_wait_time_ms)
 {
     g_bThreadShouldQuit.store(true);
     int waited = 0;
@@ -2145,21 +2468,14 @@ static void CancelThread(int max_wait_time_ms)
         waited += 30;
     }
 
-    if (g_bThreadAlive.load())
+    if (thread && thread != INVALID_HANDLE_VALUE && WaitForSingleObject(thread, 0) == WAIT_OBJECT_0)
     {
-#ifdef TARGET_WINDOWS_DESKTOP
-        if (thread && thread != INVALID_HANDLE_VALUE)
-        {
-            TerminateThread(thread, 0);
-            WaitForSingleObject(thread, INFINITE);
-        }
-#endif
         g_bThreadAlive.store(false);
+        CloseHandle(thread);
+        g_hThread.store(INVALID_HANDLE_VALUE);
     }
 
-    if (thread && thread != INVALID_HANDLE_VALUE)
-        CloseHandle(thread);
-    g_hThread.store(INVALID_HANDLE_VALUE);
+    return !g_bThreadAlive.load();
 }
 
 static void CloseThreadHandleIfFinished()
@@ -2180,8 +2496,9 @@ static void CloseThreadHandleIfFinished()
 // created or initialized in `AllocateMilkDropNonDX11()`.
 void CPlugin::CleanUpMilkDropNonDX11()
 {
-    CancelThread(0);
-    DeleteCriticalSection(&g_cs);
+    const bool presetThreadStopped = CancelThread(30000);
+    if (presetThreadStopped)
+        DeleteCriticalSection(&g_cs);
 
     m_menuPreset.Finish();
     m_menuWave.Finish();
@@ -4659,6 +4976,10 @@ void CPlugin::CleanUpMilkDropDX11(int /* final_cleanup */)
     SafeRelease(m_lpVS[0]);
     SafeRelease(m_lpVS[1]);
     SafeRelease(m_lpDDSTitle);
+    SafeRelease(m_visualInactivityReadbackTexture);
+    m_visualInactivityReadbackWidth = 0;
+    m_visualInactivityReadbackHeight = 0;
+    m_visualInactivityReadbackFormat = DXGI_FORMAT_UNKNOWN;
     m_ddsTitle.ReleaseDeviceDependentResources();
 #ifdef _SUPERTEXT
     m_superTitle.reset();
@@ -6846,6 +7167,29 @@ void CPlugin::ConsoleMessage(const wchar_t* function_name, int message_id, int t
 
 void CPlugin::PrevPreset(float fBlendTime)
 {
+    if (!m_bSequentialPresetOrder)
+    {
+        std::wstring presetPath;
+
+        EnterCriticalSection(&g_cs);
+        {
+            const bool historyEmpty = (m_presetHistoryFwdFence == m_presetHistoryBackFence);
+            if (!historyEmpty && m_presetHistoryPos != m_presetHistoryBackFence)
+            {
+                m_presetHistoryPos = (m_presetHistoryPos + PRESET_HIST_LEN - 1) % PRESET_HIST_LEN;
+                presetPath = m_presetHistory[m_presetHistoryPos];
+            }
+        }
+        LeaveCriticalSection(&g_cs);
+
+        if (!presetPath.empty())
+        {
+            LoadPreset(presetPath.c_str(), fBlendTime);
+            SetPresetListPosition(presetPath);
+            return;
+        }
+    }
+
     LoadAdjacentPreset(fBlendTime, -1);
 }
 
@@ -6856,7 +7200,7 @@ void CPlugin::NextPreset(float fBlendTime)
 
 void CPlugin::LoadAdjacentPreset(float fBlendTime, int direction)
 {
-    const auto presetBlacklist = GetPresetBlacklist();
+    const auto presetBlacklist = BuildPresetBlacklistLookup(GetPresetBlacklist());
     std::wstring presetFilename;
     wchar_t presetDir[MAX_PATH] = {0};
 
@@ -6869,10 +7213,7 @@ void CPlugin::LoadAdjacentPreset(float fBlendTime, int direction)
 
         for (int i = dirCount; i < presetCount; i++)
         {
-            const bool blacklisted = std::any_of(presetBlacklist.begin(), presetBlacklist.end(), [this, i](const std::wstring& entry) {
-                return _wcsicmp(entry.c_str(), m_presets[i].szFilename.c_str()) == 0;
-            });
-            if (!blacklisted)
+            if (!PresetBlacklistLookupContains(presetBlacklist, m_presets[i].szFilename))
                 allowedPresetIndices.push_back(i);
         }
 
@@ -6939,13 +7280,19 @@ void CPlugin::LoadAdjacentPreset(float fBlendTime, int direction)
     wcscpy_s(szFile, presetDir); // note: m_szPresetDir always ends with '\'
     wcscat_s(szFile, presetFilename.c_str());
 
+    if (!m_bSequentialPresetOrder && m_presetHistoryFwdFence != m_presetHistoryBackFence)
+    {
+        m_presetHistoryPos = (m_presetHistoryPos + 1) % PRESET_HIST_LEN;
+        m_presetHistoryFwdFence = m_presetHistoryPos;
+    }
+
     LoadPreset(szFile, fBlendTime);
     SetPresetListPosition(szFile);
 }
 
 void CPlugin::LoadRandomPreset(float fBlendTime)
 {
-    const auto presetBlacklist = GetPresetBlacklist();
+    const auto presetBlacklist = BuildPresetBlacklistLookup(GetPresetBlacklist());
     bool bHistoryEmpty = (m_presetHistoryFwdFence == m_presetHistoryBackFence);
 
     // If we have history to march back forward through, do that first.
@@ -6991,10 +7338,7 @@ void CPlugin::LoadRandomPreset(float fBlendTime)
         allowedPresetIndices.reserve(std::max(0, presetCount - dirCount));
         for (int i = dirCount; i < presetCount; i++)
         {
-            bool blacklisted = std::any_of(presetBlacklist.begin(), presetBlacklist.end(), [this, i](const std::wstring& entry) {
-                return _wcsicmp(entry.c_str(), m_presets[i].szFilename.c_str()) == 0;
-            });
-            if (!blacklisted)
+            if (!PresetBlacklistLookupContains(presetBlacklist, m_presets[i].szFilename))
                 allowedPresetIndices.push_back(i);
         }
 
@@ -7131,7 +7475,10 @@ void CPlugin::LoadRandomPreset(float fBlendTime)
     wcscat_s(szFile, presetFilename.c_str());
 
     if (!bHistoryEmpty)
+    {
         m_presetHistoryPos = (m_presetHistoryPos + 1) % PRESET_HIST_LEN;
+        m_presetHistoryFwdFence = m_presetHistoryPos;
+    }
 
     LoadPreset(szFile, fBlendTime);
 }
@@ -7542,6 +7889,7 @@ void CPlugin::OnFinishedLoadingPreset()
 {
     SetMenusForPresetVersion(m_pState->m_nWarpPSVersion, m_pState->m_nCompPSVersion);
     m_nPresetsLoadedTotal++; // only increment this on COMPLETION of the load
+    ResetVisualInactivityTracking();
 
     for (int mash = 0; mash < MASH_SLOTS; mash++)
         m_nMashPreset[mash] = m_nCurrentPreset;
@@ -7925,6 +8273,7 @@ std::wstring CPlugin::GetPresetBlacklistPath() const
 bool CPlugin::LoadPresetBlacklist()
 {
     std::vector<std::wstring> blacklist;
+    std::unordered_set<std::wstring> seen;
 
     FILE* file = nullptr;
     errno_t err = _wfopen_s(&file, GetPresetBlacklistPath().c_str(), L"rt, ccs=UTF-8");
@@ -7942,14 +8291,15 @@ bool CPlugin::LoadPresetBlacklist()
         if (entry.empty())
             continue;
 
-        bool duplicate = std::any_of(blacklist.begin(), blacklist.end(), [&entry](const std::wstring& existing) {
-            return _wcsicmp(existing.c_str(), entry.c_str()) == 0;
-        });
-        if (!duplicate)
+        std::wstring key = MakeLowercaseCopy(entry);
+        if (seen.insert(std::move(key)).second)
             blacklist.push_back(entry);
     }
 
     fclose(file);
+    std::sort(blacklist.begin(), blacklist.end(), [](const std::wstring& a, const std::wstring& b) {
+        return _wcsicmp(a.c_str(), b.c_str()) < 0;
+    });
     m_presetBlacklist = std::move(blacklist);
     m_bPresetBlacklistLoaded = true;
     return true;
@@ -7957,30 +8307,69 @@ bool CPlugin::LoadPresetBlacklist()
 
 bool CPlugin::SavePresetBlacklist() const
 {
+    return SavePresetBlacklistEntries(m_presetBlacklist);
+}
+
+bool CPlugin::SavePresetBlacklistEntries(const std::vector<std::wstring>& entries) const
+{
     FILE* file = nullptr;
-    errno_t err = _wfopen_s(&file, GetPresetBlacklistPath().c_str(), L"wt, ccs=UTF-8");
+    const std::wstring path = GetPresetBlacklistPath();
+    wchar_t tempSuffix[64] = {};
+    swprintf_s(tempSuffix, L".%lu-%lu.tmp", GetCurrentProcessId(), GetTickCount());
+    const std::wstring tempPath = path + tempSuffix;
+    errno_t err = _wfopen_s(&file, tempPath.c_str(), L"wt, ccs=UTF-8");
     if (err != 0 || !file)
         return false;
 
-    for (const auto& preset : m_presetBlacklist)
+    bool ok = true;
+    for (const auto& preset : entries)
     {
         if (!preset.empty())
-            fwprintf(file, L"%ls\n", preset.c_str());
+            ok = fwprintf(file, L"%ls\n", preset.c_str()) >= 0 && ok;
     }
 
-    fclose(file);
+    ok = fclose(file) == 0 && ok;
+    if (!ok)
+    {
+        DeleteFileW(tempPath.c_str());
+        return false;
+    }
+
+    if (!MoveFileExW(tempPath.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+    {
+        DeleteFileW(tempPath.c_str());
+        return false;
+    }
+
     return true;
 }
 
 std::vector<std::wstring> CPlugin::GetPresetBlacklist() const
 {
     auto* self = const_cast<CPlugin*>(this);
+    AcquireSRWLockShared(&m_presetBlacklistLock);
+    if (self->m_bPresetBlacklistLoaded)
+    {
+        auto blacklist = self->m_presetBlacklist;
+        ReleaseSRWLockShared(&m_presetBlacklistLock);
+        return blacklist;
+    }
+    ReleaseSRWLockShared(&m_presetBlacklistLock);
+
     AcquireSRWLockExclusive(&m_presetBlacklistLock);
     if (!self->m_bPresetBlacklistLoaded)
         self->LoadPresetBlacklist();
     auto blacklist = self->m_presetBlacklist;
     ReleaseSRWLockExclusive(&m_presetBlacklistLock);
     return blacklist;
+}
+
+bool CPlugin::ReloadPresetBlacklist()
+{
+    AcquireSRWLockExclusive(&m_presetBlacklistLock);
+    bool loaded = LoadPresetBlacklist();
+    ReleaseSRWLockExclusive(&m_presetBlacklistLock);
+    return loaded;
 }
 
 bool CPlugin::IsPresetBlacklisted(const std::wstring& presetFilename) const
@@ -7990,6 +8379,17 @@ bool CPlugin::IsPresetBlacklisted(const std::wstring& presetFilename) const
         return false;
 
     auto* self = const_cast<CPlugin*>(this);
+    AcquireSRWLockShared(&m_presetBlacklistLock);
+    if (self->m_bPresetBlacklistLoaded)
+    {
+        const bool isBlacklisted = std::any_of(self->m_presetBlacklist.begin(), self->m_presetBlacklist.end(), [&normalized](const std::wstring& entry) {
+            return _wcsicmp(entry.c_str(), normalized.c_str()) == 0;
+        });
+        ReleaseSRWLockShared(&m_presetBlacklistLock);
+        return isBlacklisted;
+    }
+    ReleaseSRWLockShared(&m_presetBlacklistLock);
+
     AcquireSRWLockExclusive(&m_presetBlacklistLock);
     if (!self->m_bPresetBlacklistLoaded)
         self->LoadPresetBlacklist();
@@ -8018,12 +8418,17 @@ bool CPlugin::AddPresetToBlacklist(const std::wstring& presetFilename)
     });
     if (!exists)
     {
-        m_presetBlacklist.push_back(normalized);
-        std::sort(m_presetBlacklist.begin(), m_presetBlacklist.end(), [](const std::wstring& a, const std::wstring& b) {
+        auto updatedBlacklist = m_presetBlacklist;
+        updatedBlacklist.push_back(normalized);
+        std::sort(updatedBlacklist.begin(), updatedBlacklist.end(), [](const std::wstring& a, const std::wstring& b) {
             return _wcsicmp(a.c_str(), b.c_str()) < 0;
         });
-        added = true;
-        saved = SavePresetBlacklist();
+        saved = SavePresetBlacklistEntries(updatedBlacklist);
+        if (saved)
+        {
+            m_presetBlacklist = std::move(updatedBlacklist);
+            added = true;
+        }
     }
     ReleaseSRWLockExclusive(&m_presetBlacklistLock);
 
@@ -8042,14 +8447,17 @@ bool CPlugin::RemovePresetFromBlacklist(const std::wstring& presetFilename)
     if (!m_bPresetBlacklistLoaded)
         LoadPresetBlacklist();
 
-    auto oldEnd = std::remove_if(m_presetBlacklist.begin(), m_presetBlacklist.end(), [&normalized](const std::wstring& entry) {
+    auto updatedBlacklist = m_presetBlacklist;
+    auto oldEnd = std::remove_if(updatedBlacklist.begin(), updatedBlacklist.end(), [&normalized](const std::wstring& entry) {
         return _wcsicmp(entry.c_str(), normalized.c_str()) == 0;
     });
-    removed = oldEnd != m_presetBlacklist.end();
+    removed = oldEnd != updatedBlacklist.end();
     if (removed)
     {
-        m_presetBlacklist.erase(oldEnd, m_presetBlacklist.end());
-        saved = SavePresetBlacklist();
+        updatedBlacklist.erase(oldEnd, updatedBlacklist.end());
+        saved = SavePresetBlacklistEntries(updatedBlacklist);
+        if (saved)
+            m_presetBlacklist = std::move(updatedBlacklist);
     }
     ReleaseSRWLockExclusive(&m_presetBlacklistLock);
 
@@ -8060,16 +8468,17 @@ bool CPlugin::SetPresetBlacklist(const std::vector<std::wstring>& presetFilename
 {
     std::vector<std::wstring> normalizedEntries;
     normalizedEntries.reserve(presetFilenames.size());
+    std::unordered_set<std::wstring> seen;
+    seen.reserve(presetFilenames.size());
+
     for (const auto& entry : presetFilenames)
     {
         std::wstring normalized = NormalizePresetBlacklistEntry(entry);
         if (normalized.empty())
             continue;
 
-        bool duplicate = std::any_of(normalizedEntries.begin(), normalizedEntries.end(), [&normalized](const std::wstring& existing) {
-            return _wcsicmp(existing.c_str(), normalized.c_str()) == 0;
-        });
-        if (!duplicate)
+        std::wstring key = MakeLowercaseCopy(normalized);
+        if (seen.insert(std::move(key)).second)
             normalizedEntries.push_back(normalized);
     }
 
@@ -8078,9 +8487,14 @@ bool CPlugin::SetPresetBlacklist(const std::vector<std::wstring>& presetFilename
     });
 
     AcquireSRWLockExclusive(&m_presetBlacklistLock);
-    m_presetBlacklist = std::move(normalizedEntries);
-    m_bPresetBlacklistLoaded = true;
-    bool saved = SavePresetBlacklist();
+    if (!m_bPresetBlacklistLoaded)
+        LoadPresetBlacklist();
+    bool saved = SavePresetBlacklistEntries(normalizedEntries);
+    if (saved)
+    {
+        m_presetBlacklist = std::move(normalizedEntries);
+        m_bPresetBlacklistLoaded = true;
+    }
     ReleaseSRWLockExclusive(&m_presetBlacklistLock);
     return saved;
 }
@@ -8118,7 +8532,7 @@ retry:
         if (h && h != INVALID_HANDLE_VALUE)
             FindClose(h);
         h = INVALID_HANDLE_VALUE;
-        g_plugin.m_bPresetListReady = false;
+        g_plugin.m_bPresetListReady.store(false);
         wcscpy_s(g_plugin.m_szUpdatePresetMask, szMask);
         ZeroMemory(&fd, sizeof(fd));
 
@@ -8154,7 +8568,7 @@ retry:
         g_plugin.AddError(GetStringW(WASABI_API_LNG_HINST, g_plugin.GetInstance(), IDS_SCANNING_PRESETS), 4.0f, ERR_SCANNING_PRESETS, false);
     }
 
-    if (g_plugin.m_bPresetListReady)
+    if (g_plugin.m_bPresetListReady.load())
     {
         LeaveCriticalSection(&g_cs);
         g_bThreadAlive.store(false);
@@ -8290,6 +8704,11 @@ retry:
     if (g_bThreadShouldQuit.load())
     {
         // Just abort...either exiting the program or restarting the scan.
+        if (h && h != INVALID_HANDLE_VALUE)
+        {
+            FindClose(h);
+            h = INVALID_HANDLE_VALUE;
+        }
         g_bThreadAlive.store(false);
         _endthreadex(0);
         return 0;
@@ -8379,7 +8798,7 @@ retry:
         g_plugin.m_nCurrentPreset = -1;
     }
 
-    g_plugin.m_bPresetListReady = true;
+    g_plugin.m_bPresetListReady.store(true);
     LeaveCriticalSection(&g_cs);
 
     g_bThreadAlive.store(false);
@@ -8395,13 +8814,13 @@ void CPlugin::UpdatePresetList(bool bBackground, bool bForce, bool bTryReselectC
     if (bForce)
     {
         if (g_bThreadAlive.load())
-            CancelThread(3000); // flags it to exit; the param is the number of milliseconds to wait before forcefully killing it
+            CancelThread(3000); // flags it to exit and waits (best-effort) for termination
     }
     else
     {
-        if (bBackground && (g_bThreadAlive.load() || m_bPresetListReady))
+        if (bBackground && (g_bThreadAlive.load() || m_bPresetListReady.load()))
             return;
-        if (!bBackground && m_bPresetListReady)
+        if (!bBackground && m_bPresetListReady.load())
             return;
     }
 

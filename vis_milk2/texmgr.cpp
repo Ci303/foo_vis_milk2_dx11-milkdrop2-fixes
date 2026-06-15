@@ -47,6 +47,9 @@ texmgr::~texmgr()
 
 void texmgr::Finish()
 {
+    NSEEL_VMCTX freed_ctx[NUM_TEX];
+    int num_freed_ctx = 0;
+
     for (int i = 0; i < NUM_TEX; i++)
     {
         KillTex(i);
@@ -61,7 +64,20 @@ void texmgr::Finish()
         FreeCode(i);
         FreeVars(i);
         RegisterBuiltInVariables(i);
-        NSEEL_VM_free(m_tex[i].tex_eel_ctx);
+        bool bAlreadyFreed = false;
+        for (int j = 0; j < num_freed_ctx; j++)
+        {
+            if (freed_ctx[j] == m_tex[i].tex_eel_ctx)
+            {
+                bAlreadyFreed = true;
+                break;
+            }
+        }
+        if (!bAlreadyFreed)
+        {
+            NSEEL_VM_free(m_tex[i].tex_eel_ctx);
+            freed_ctx[num_freed_ctx++] = m_tex[i].tex_eel_ctx;
+        }
         m_tex[i].tex_eel_ctx = NULL;
     }
 
@@ -81,6 +97,17 @@ void texmgr::Init(D3D11Shim* lpDD)
         if (!m_tex[i].tex_eel_ctx)
             m_tex[i].tex_eel_ctx = NSEEL_VM_alloc();
     }
+}
+
+bool texmgr::EnsureContext(int iSlot)
+{
+    if (iSlot < 0 || iSlot >= NUM_TEX)
+        return false;
+
+    if (!m_tex[iSlot].tex_eel_ctx)
+        m_tex[iSlot].tex_eel_ctx = NSEEL_VM_alloc();
+
+    return m_tex[iSlot].tex_eel_ctx != NULL;
 }
 
 /*
@@ -681,6 +708,9 @@ void texmgr::StripLinefeedCharsAndComments(char* src, char* dest)
 
 bool texmgr::RunInitCode(int iSlot, char* szInitCode)
 {
+    if (!EnsureContext(iSlot))
+        return false;
+
     // Warning: Destroys contents of `m_tex[iSlot].m_szExpr`,
     //          so be sure to call `RunInitCode()` before writing or
     //          compiling that string!
@@ -785,6 +815,9 @@ void texmgr::FreeCode(int iSlot)
 void texmgr::RegisterBuiltInVariables(int iSlot)
 {
     NSEEL_VMCTX eel_ctx = m_tex[iSlot].tex_eel_ctx;
+    if (!eel_ctx)
+        return;
+
     NSEEL_VM_resetvars(eel_ctx);
 
     // Input variables.

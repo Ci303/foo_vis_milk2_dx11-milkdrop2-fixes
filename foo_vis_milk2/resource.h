@@ -633,6 +633,8 @@
 #define IDD_PREFS                       700
 #define IDD_PRESET_BLACKLIST            701
 #define IDD_FORMAT_INFO                 702
+#define IDD_PRESET_BLACKLIST_SCAN_RESULT 703
+#define IDD_THEMED_MESSAGE              704
 //#define IDC_CB_FOG                      1000
 //#define IDC_CB_SUPERTEX                 1001
 //#define IDC_CB_HELP_MSG                 1001
@@ -902,6 +904,7 @@
 #define IDC_BLACKLIST_REMOVE            1099
 #define IDC_BLACKLIST_OPEN              1100
 #define IDC_BLACKLIST_LABEL             1101
+#define IDC_BLACKLIST_SCAN               1102
 #define IDC_BLACKLIST_PRESET_DIR        1103
 #define IDC_BLACKLIST_IMPORT            1104
 #define IDC_BLACKLIST_EXPORT            1105
@@ -939,6 +942,9 @@
 #define IDC_OPEN_TEXTURES_FOLDER        1137
 #define IDC_PREFS_SCROLLBAR             1138
 #define IDC_CB_POPOUT_BORDERLESS        1139
+#define IDC_BLACKLIST_SCAN_RESULT_SUMMARY 1140
+#define IDC_BLACKLIST_SCAN_RESULT_DETAILS 1141
+#define IDC_THEMED_MESSAGE_TEXT         1142
 #define ID_SHOWHELP                     40007
 #define ID_SHOWPLAYLIST                 40008
 #define ID_QUIT                         40009
@@ -951,7 +957,7 @@
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        105
 #define _APS_NEXT_COMMAND_VALUE         40011
-#define _APS_NEXT_CONTROL_VALUE         1139
+#define _APS_NEXT_CONTROL_VALUE         1143
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

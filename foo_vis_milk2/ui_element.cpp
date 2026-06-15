@@ -2846,7 +2846,13 @@ void milk2_ui_element::StopTimer() noexcept
 
     if (m_framePacerThread != nullptr)
     {
-        WaitForSingleObject(m_framePacerThread, INFINITE);
+        const DWORD waitResult = WaitForSingleObject(m_framePacerThread, 5000);
+        if (waitResult != WAIT_OBJECT_0)
+        {
+            MILK2_CONSOLE_LOG("StopTimer frame pacer thread did not stop within 5 seconds; terminating")
+            TerminateThread(m_framePacerThread, 1);
+            WaitForSingleObject(m_framePacerThread, 1000);
+        }
         CloseHandle(m_framePacerThread);
         m_framePacerThread = nullptr;
     }

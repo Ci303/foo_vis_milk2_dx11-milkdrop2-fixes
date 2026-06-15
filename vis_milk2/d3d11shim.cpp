@@ -268,8 +268,17 @@ void D3D11Shim::DrawIndexedPrimitive(unsigned int primType, unsigned int uStartV
     if (numIndices <= 0 || iNumVertices == 0)
         return;
 
-    const unsigned int drawVertices = std::min(iNumVertices, MAX_VERTICES_COUNT);
-    const unsigned int drawIndices = std::min(static_cast<unsigned int>(numIndices), MAX_INDICES_COUNT);
+    const unsigned int drawVertices = iNumVertices;
+    const unsigned int drawIndices = static_cast<unsigned int>(numIndices);
+    if (drawVertices > MAX_VERTICES_COUNT || drawIndices > MAX_INDICES_COUNT)
+        return;
+
+    const auto* indices = static_cast<const uint16_t*>(pIData);
+    for (unsigned int i = 0; i < drawIndices; ++i)
+    {
+        if (static_cast<unsigned int>(indices[i]) + uStartVertex >= drawVertices)
+            return;
+    }
 
     if (m_bCBufferIsDirty)
     {

@@ -1,6 +1,15 @@
 # MilkDrop 2 Visualization Library Notes
 
 ## Release History
+### 0.2.1.46 - 2026-06-15
+
+Visual fallback and preset safety update.
+
+- Automatically records visually inactive presets, adds them to the blacklist, and loads a replacement random preset without manual intervention.
+- Treats visual-inactive runtime safety entries as one-strike skips so known black, static, or non-responsive presets are excluded on future preset scans.
+- Hardened blacklist and profile script writes with atomic replacement and safer script invocation from the preferences UI.
+- Fixed installer packaging to embed the versioned component package instead of a stale generic package file.
+
 ### 0.2.1.45 - 2026-06-09
 
 Threading stability update.

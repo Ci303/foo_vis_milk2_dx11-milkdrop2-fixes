@@ -15,7 +15,10 @@ param(
     [string] $Version = '',
 
     [Parameter(HelpMessage = 'Output directory for the installer EXE.')]
-    [string] $OutputPath = (Join-Path (Get-Location) 'dist')
+    [string] $OutputPath = (Join-Path (Get-Location) 'dist'),
+
+    [Parameter(HelpMessage = 'Path to the component package to embed. Defaults to foo_vis_milk2-$Version.fb2k-component.')]
+    [string] $PackagePath = ''
 )
 
 Set-StrictMode -Version Latest
@@ -69,9 +72,12 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
     $Version = "$major.$minor.$build.$revision"
 }
 
-$packagePath = Join-Path $repositoryRoot 'foo_vis_milk2.fb2k-component'
-if (-not (Test-Path -LiteralPath $packagePath -PathType Leaf)) {
-    throw "Build the component package first: $packagePath"
+if ([string]::IsNullOrWhiteSpace($PackagePath)) {
+    $PackagePath = Join-Path $repositoryRoot "foo_vis_milk2-$Version.fb2k-component"
+}
+
+if (-not (Test-Path -LiteralPath $PackagePath -PathType Leaf)) {
+    throw "Build the matching component package first: $PackagePath"
 }
 
 $stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('milkdrop-installer-staging-' + [System.Guid]::NewGuid().ToString('N'))
@@ -85,9 +91,12 @@ try {
     $null = New-Item -ItemType Directory -Path $payloadRoot -Force
     $null = New-Item -ItemType Directory -Path $OutputPath -Force
 
-    Copy-RequiredItem -SourcePath $packagePath -DestinationPath (Join-Path $payloadRoot 'foo_vis_milk2.fb2k-component')
+    Copy-RequiredItem -SourcePath $PackagePath -DestinationPath (Join-Path $payloadRoot 'foo_vis_milk2.fb2k-component')
     Copy-RequiredItem -SourcePath (Join-Path $repositoryRoot 'tools\install-milkdrop-bundle.ps1') -DestinationPath (Join-Path $payloadRoot 'tools\install-milkdrop-bundle.ps1')
     Copy-RequiredItem -SourcePath (Join-Path $repositoryRoot 'tools\install-milkdrop-resources.ps1') -DestinationPath (Join-Path $payloadRoot 'tools\install-milkdrop-resources.ps1')
+    Copy-RequiredItem -SourcePath (Join-Path $repositoryRoot 'tools\refresh_milkdrop2_blacklist.ps1') -DestinationPath (Join-Path $payloadRoot 'tools\refresh_milkdrop2_blacklist.ps1')
+    Copy-RequiredItem -SourcePath (Join-Path $repositoryRoot 'tools\refresh_milkdrop2_blacklist.cmd') -DestinationPath (Join-Path $payloadRoot 'tools\refresh_milkdrop2_blacklist.cmd')
+    Copy-RequiredItem -SourcePath (Join-Path $repositoryRoot 'tools\switch_milkdrop_profile.ps1') -DestinationPath (Join-Path $payloadRoot 'tools\switch_milkdrop_profile.ps1')
     Copy-RequiredItem -SourcePath (Join-Path $repositoryRoot 'presets\fixed-blacklisted') -DestinationPath (Join-Path $payloadRoot 'presets\fixed-blacklisted')
     Copy-RequiredItem -SourcePath (Join-Path $repositoryRoot 'third_party\milkdrop-resources') -DestinationPath (Join-Path $payloadRoot 'third_party\milkdrop-resources')
     Copy-RequiredItem -SourcePath (Join-Path $repositoryRoot 'templates') -DestinationPath (Join-Path $payloadRoot 'templates')

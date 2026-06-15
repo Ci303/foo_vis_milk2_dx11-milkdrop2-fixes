@@ -31,6 +31,7 @@
 #ifndef __NULLSOFT_DX_PLUGIN_H__
 #define __NULLSOFT_DX_PLUGIN_H__
 
+#include <atomic>
 #include <list>
 #include <vector>
 #include "md_defines.h"
@@ -501,13 +502,19 @@ class CPlugin : public CPluginShell
     wchar_t m_szCurrentPresetFile[512]; // w/o path.  this is always valid (unless no presets were found)
     wchar_t m_szRememberedPreset[512];
     bool m_lastPresetUsedFallback;
+    bool m_bVisualInactivityTrackingArmed = false;
+    bool m_bVisualInactivityRecorded = false;
+    float m_fVisualInactivityLastActivityTime = 0.0f;
+    float m_fVisualInactivityLastSignature = 0.0f;
+    float m_fVisualInactivityNextSampleTime = 0.0f;
+    int m_nVisualInactivityDarkSamples = 0;
     PresetList m_presets;
     std::vector<std::wstring> m_presetBlacklist;
     bool m_bPresetBlacklistLoaded;
     mutable SRWLOCK m_presetBlacklistLock = SRWLOCK_INIT;
     void UpdatePresetList(bool bBackground = false, bool bForce = false, bool bTryReselectCurrentPreset = true) const;
     wchar_t m_szUpdatePresetMask[MAX_PATH];
-    volatile bool m_bPresetListReady;
+    std::atomic<bool> m_bPresetListReady = false;
     std::wstring m_presetSearchText;
     float m_fPresetSearchLastInputTime;
     //void UpdatePresetRatings();
@@ -523,6 +530,10 @@ class CPlugin : public CPluginShell
     void NextPreset(float fBlendTime);
     void LoadAdjacentPreset(float fBlendTime, int direction);
     void OnFinishedLoadingPreset();
+    void ResetVisualInactivityTracking();
+    void UpdateVisualInactivityTracking();
+    void AutoBlacklistVisualInactivePreset();
+    bool SampleVisualOutputBrightness(float& maxBrightness);
 
     FFT mdfft{NUM_AUDIO_BUFFER_SAMPLES, NUM_FFT_SAMPLES, true, 1.0f};
     td_mdsounddata mdsound;
@@ -578,6 +589,10 @@ class CPlugin : public CPluginShell
 #endif
     int m_nHighestBlurTexUsedThisFrame;
     ID3D11Texture2D* m_lpDDSTitle;
+    ID3D11Texture2D* m_visualInactivityReadbackTexture = nullptr;
+    UINT m_visualInactivityReadbackWidth = 0;
+    UINT m_visualInactivityReadbackHeight = 0;
+    DXGI_FORMAT m_visualInactivityReadbackFormat = DXGI_FORMAT_UNKNOWN;
     int m_nTitleTexSizeX, m_nTitleTexSizeY;
     MDVERTEX* m_verts;
     MDVERTEX* m_verts_temp;
@@ -656,6 +671,7 @@ class CPlugin : public CPluginShell
     std::wstring GetCurrentPresetPath() const;
     std::wstring GetPresetBlacklistPath() const;
     std::vector<std::wstring> GetPresetBlacklist() const;
+    bool ReloadPresetBlacklist();
     bool IsPresetBlacklisted(const std::wstring& presetFilename) const;
     bool AddPresetToBlacklist(const std::wstring& presetFilename);
     bool RemovePresetFromBlacklist(const std::wstring& presetFilename);
@@ -695,6 +711,7 @@ class CPlugin : public CPluginShell
 
     bool LoadPresetBlacklist();
     bool SavePresetBlacklist() const;
+    bool SavePresetBlacklistEntries(const std::vector<std::wstring>& entries) const;
     static std::wstring NormalizePresetBlacklistEntry(const std::wstring& presetFilename);
     void RunPerFrameEquations(int code);
     void DrawUserSprites();

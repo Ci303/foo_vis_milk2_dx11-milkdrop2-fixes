@@ -274,21 +274,39 @@ CState::~CState()
 
 void CState::Finish()
 {
+    NSEEL_VMCTX freed_ctx[1 + 1 + MAX_CUSTOM_WAVES * 2 + MAX_CUSTOM_SHAPES];
+    int num_freed_ctx = 0;
+
+    auto free_ctx_once = [&](NSEEL_VMCTX ctx)
+    {
+        if (!ctx)
+            return;
+
+        for (int i = 0; i < num_freed_ctx; i++)
+        {
+            if (freed_ctx[i] == ctx)
+                return;
+        }
+
+        NSEEL_VM_free(ctx);
+        freed_ctx[num_freed_ctx++] = ctx;
+    };
+
     FreeVarsAndCode();
-    NSEEL_VM_free(m_pf_eel);
-    NSEEL_VM_free(m_pv_eel);
+    free_ctx_once(m_pf_eel);
+    free_ctx_once(m_pv_eel);
     m_pf_eel = NULL;
     m_pv_eel = NULL;
     for (int i = 0; i < MAX_CUSTOM_WAVES; i++)
     {
-        NSEEL_VM_free(m_wave[i].m_pf_eel);
-        NSEEL_VM_free(m_wave[i].m_pp_eel);
+        free_ctx_once(m_wave[i].m_pf_eel);
+        free_ctx_once(m_wave[i].m_pp_eel);
         m_wave[i].m_pf_eel = NULL;
         m_wave[i].m_pp_eel = NULL;
     }
     for (int i = 0; i < MAX_CUSTOM_SHAPES; i++)
     {
-        NSEEL_VM_free(m_shape[i].m_pf_eel);
+        free_ctx_once(m_shape[i].m_pf_eel);
         m_shape[i].m_pf_eel = NULL;
     }
 }

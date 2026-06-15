@@ -24,7 +24,7 @@ git.exe init
 git.exe add foobar2000\ libppui\ pfc\
 git.exe commit -m 'Initial commit'
 git.exe apply --ignore-whitespace --whitespace=nowarn --verbose "$(Get-Location)\fb2ksdk.patch"
-Remove-Item -Path "$(Get-Location)\.git" -Recurse -Force
+Remove-Item -LiteralPath "C:\path\to\copied\sdk\.git" -Recurse -Force  # Only inside a disposable SDK copy
 ```
 
 3. Clone the projectm-eval repo into the `external\` directory and patch it in a similar manner to the SDK:

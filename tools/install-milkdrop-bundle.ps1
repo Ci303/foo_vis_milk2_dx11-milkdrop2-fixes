@@ -252,6 +252,28 @@ function Install-StarterTemplates {
     Write-Host "INFO: Starter foobar2000 template copied to $templateDestination"
 }
 
+function Install-BlacklistScannerScripts {
+    param(
+        [Parameter(Mandatory)]
+        [string] $RepositoryRoot,
+
+        [Parameter(Mandatory)]
+        [string] $ProfilePath
+    )
+
+    $scriptDestination = Join-Path $ProfilePath 'milkdrop2'
+    [System.IO.Directory]::CreateDirectory((ConvertTo-ExtendedPath $scriptDestination)) | Out-Null
+
+    foreach ($scriptName in @('refresh_milkdrop2_blacklist.ps1', 'refresh_milkdrop2_blacklist.cmd', 'switch_milkdrop_profile.ps1')) {
+        $sourcePath = Join-Path (Join-Path $RepositoryRoot 'tools') $scriptName
+        if (Test-Path -LiteralPath $sourcePath -PathType Leaf) {
+            Copy-Item -LiteralPath $sourcePath -Destination (Join-Path $scriptDestination $scriptName) -Force
+        }
+    }
+
+    Write-Host "INFO: Preset blacklist scanner scripts copied to $scriptDestination"
+}
+
 function Stop-WithMessage {
     param(
         [Parameter(Mandatory)]
@@ -307,11 +329,13 @@ if (-not $PSCmdlet.ShouldProcess($ProfilePath, 'Install MilkDrop component, pres
 Install-ComponentPackage -PackagePath $packagePath -ProfilePath $ProfilePath
 & $resourceInstallerPath -ProfilePath $ProfilePath -Force:$Force.IsPresent
 Install-StarterTemplates -RepositoryRoot $repositoryRoot -ProfilePath $ProfilePath
+Install-BlacklistScannerScripts -RepositoryRoot $repositoryRoot -ProfilePath $ProfilePath
 
 Write-Host ''
 Write-Host 'MilkDrop bundle install complete.'
 Write-Host 'Restart foobar2000, then add or open the MilkDrop visualisation.'
 Write-Host 'Optional starter template: import milkdrop2\templates\foobar2000-milkdrop-starter.fth from the foobar2000 profile folder.'
+Write-Host 'Preset blacklist scanner: use Preferences > MilkDrop 2 > Preset Blacklist > Scan.'
 
 if ((-not $NoPause.IsPresent) -and $Host.Name -eq 'ConsoleHost') {
     Read-Host 'Press Enter to exit' | Out-Null

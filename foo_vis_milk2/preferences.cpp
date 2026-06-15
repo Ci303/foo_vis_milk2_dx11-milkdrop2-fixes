@@ -16,6 +16,8 @@
 #include <algorithm>
 #include <fstream>
 #include <limits>
+#include <sstream>
+#include <string_view>
 
 extern HWND g_hWindow;
 
@@ -162,6 +164,499 @@ std::wstring get_window_text(HWND wnd)
     ::GetWindowText(wnd, text.data(), length + 1);
     text.resize(static_cast<size_t>(length));
     return text;
+}
+
+std::wstring QuoteArg(std::wstring_view arg)
+{
+    std::wstring quoted;
+    quoted.reserve(arg.size() + 2);
+    quoted.push_back(L'"');
+    for (const wchar_t c : arg)
+    {
+        if (c == L'"')
+            quoted.push_back(L'\\');
+        quoted.push_back(c);
+    }
+    quoted.push_back(L'"');
+    return quoted;
+}
+
+std::filesystem::path LocatePresetBlacklistScannerScript()
+{
+    std::vector<std::filesystem::path> candidates;
+
+    wchar_t* appData = nullptr;
+    size_t appDataLen = 0;
+    if (_wdupenv_s(&appData, &appDataLen, L"APPDATA") == 0 && appData != nullptr)
+    {
+        const auto appDataRoot = std::filesystem::path(appData) / L"foobar2000-v2" / L"milkdrop2";
+        candidates.push_back(appDataRoot / L"refresh_milkdrop2_blacklist.ps1");
+        candidates.push_back(appDataRoot / L"refresh_milkdrop2_blacklist.cmd");
+        free(appData);
+    }
+
+    const std::filesystem::path presetDir = std::filesystem::path(g_plugin.GetPresetDir());
+    const auto presetRoot = presetDir.parent_path();
+    if (!presetRoot.empty())
+    {
+        candidates.push_back(presetRoot / L"refresh_milkdrop2_blacklist.ps1");
+        candidates.push_back(presetRoot / L"refresh_milkdrop2_blacklist.cmd");
+    }
+
+    for (const auto& candidate : candidates)
+    {
+        try
+        {
+            if (!candidate.empty() && std::filesystem::exists(candidate) && std::filesystem::is_regular_file(candidate))
+                return candidate;
+        }
+        catch (...)
+        {
+        }
+    }
+
+    return {};
+}
+
+bool IsPresetBlacklistScannerAvailable()
+{
+    return !LocatePresetBlacklistScannerScript().empty();
+}
+
+struct PresetBlacklistScannerRun
+{
+    bool started = false;
+    bool timedOut = false;
+    DWORD exitCode = 0;
+    std::wstring output;
+};
+
+struct PresetBlacklistScannerSummary
+{
+    int detected = -1;
+    int alreadyPresent = -1;
+    int wouldAdd = -1;
+    int wouldRemove = -1;
+    std::vector<std::wstring> newEntries;
+    std::vector<std::wstring> staleEntries;
+};
+
+struct PresetBlacklistScannerCommand
+{
+    std::wstring application;
+    std::wstring commandLine;
+};
+
+std::wstring GetSystemExecutablePath(std::wstring_view executableName)
+{
+    wchar_t systemDir[MAX_PATH] = {};
+    if (GetSystemDirectoryW(systemDir, static_cast<UINT>(std::size(systemDir))) == 0)
+        return std::wstring(executableName);
+
+    std::filesystem::path path(systemDir);
+    path /= executableName;
+    return path.wstring();
+}
+
+std::wstring GetPowerShellExecutablePath()
+{
+    wchar_t systemDir[MAX_PATH] = {};
+    if (GetSystemDirectoryW(systemDir, static_cast<UINT>(std::size(systemDir))) == 0)
+        return L"powershell.exe";
+
+    std::filesystem::path path(systemDir);
+    path /= L"WindowsPowerShell";
+    path /= L"v1.0";
+    path /= L"powershell.exe";
+
+    try
+    {
+        if (std::filesystem::exists(path))
+            return path.wstring();
+    }
+    catch (...)
+    {
+    }
+
+    return L"powershell.exe";
+}
+
+PresetBlacklistScannerCommand BuildPresetBlacklistScannerCommand(const std::filesystem::path& scriptPath, bool dryRun)
+{
+    const auto& extension = scriptPath.extension();
+    const bool isPowerShellScript = _wcsicmp(extension.c_str(), L".ps1") == 0;
+
+    PresetBlacklistScannerCommand command;
+    if (isPowerShellScript)
+    {
+        command.application = GetPowerShellExecutablePath();
+        command.commandLine = QuoteArg(command.application);
+        command.commandLine += L" -NoProfile -ExecutionPolicy Bypass -File ";
+        command.commandLine += QuoteArg(scriptPath.wstring());
+        command.commandLine += L" -Profile auto -NoProfileSwitch";
+        command.commandLine += L" -PruneStaleBlacklist";
+        if (dryRun)
+            command.commandLine += L" -DryRun -FullDryRun";
+    }
+    else
+    {
+        command.application = GetSystemExecutablePath(L"cmd.exe");
+        command.commandLine = QuoteArg(command.application);
+        command.commandLine += L" /S /C \"";
+        command.commandLine += QuoteArg(scriptPath.wstring());
+        command.commandLine += L" -Profile auto -NoProfileSwitch";
+        command.commandLine += L" -PruneStaleBlacklist";
+        if (dryRun)
+            command.commandLine += L" -DryRun -FullDryRun";
+        command.commandLine += L"\"";
+    }
+
+    return command;
+}
+
+std::wstring ReadProcessOutputFile(const wchar_t* path)
+{
+    HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE)
+        return {};
+
+    LARGE_INTEGER size{};
+    if (!GetFileSizeEx(file, &size) || size.QuadPart <= 0 || size.QuadPart > 1024 * 1024)
+    {
+        CloseHandle(file);
+        return {};
+    }
+
+    std::string bytes(static_cast<size_t>(size.QuadPart), '\0');
+    DWORD read = 0;
+    if (!ReadFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &read, nullptr))
+    {
+        CloseHandle(file);
+        return {};
+    }
+    CloseHandle(file);
+    bytes.resize(read);
+
+    if (bytes.size() >= 2 && static_cast<unsigned char>(bytes[0]) == 0xff && static_cast<unsigned char>(bytes[1]) == 0xfe)
+    {
+        const size_t chars = (bytes.size() - 2) / sizeof(wchar_t);
+        return std::wstring(reinterpret_cast<const wchar_t*>(bytes.data() + 2), chars);
+    }
+
+    if (bytes.size() >= 4)
+    {
+        size_t zeroOddBytes = 0;
+        for (size_t i = 1; i < bytes.size(); i += 2)
+        {
+            if (bytes[i] == '\0')
+                zeroOddBytes++;
+        }
+        if (zeroOddBytes > bytes.size() / 4)
+        {
+            return std::wstring(reinterpret_cast<const wchar_t*>(bytes.data()), bytes.size() / sizeof(wchar_t));
+        }
+    }
+
+    int chars = MultiByteToWideChar(CP_UTF8, 0, bytes.data(), static_cast<int>(bytes.size()), nullptr, 0);
+    if (chars <= 0)
+        chars = MultiByteToWideChar(CP_ACP, 0, bytes.data(), static_cast<int>(bytes.size()), nullptr, 0);
+    if (chars <= 0)
+        return {};
+
+    std::wstring output(static_cast<size_t>(chars), L'\0');
+    if (!MultiByteToWideChar(CP_UTF8, 0, bytes.data(), static_cast<int>(bytes.size()), output.data(), chars))
+        MultiByteToWideChar(CP_ACP, 0, bytes.data(), static_cast<int>(bytes.size()), output.data(), chars);
+    return output;
+}
+
+PresetBlacklistScannerRun RunPresetBlacklistScanner(const std::filesystem::path& scriptPath, bool dryRun)
+{
+    PresetBlacklistScannerRun result{};
+
+    wchar_t tempDir[MAX_PATH] = {};
+    wchar_t tempPath[MAX_PATH] = {};
+    if (!GetTempPathW(static_cast<DWORD>(std::size(tempDir)), tempDir) ||
+        !GetTempFileNameW(tempDir, L"md2", 0, tempPath))
+    {
+        return result;
+    }
+
+    SECURITY_ATTRIBUTES securityAttributes{};
+    securityAttributes.nLength = sizeof(securityAttributes);
+    securityAttributes.bInheritHandle = TRUE;
+    HANDLE outputFile = CreateFileW(tempPath, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &securityAttributes, CREATE_ALWAYS,
+        FILE_ATTRIBUTE_TEMPORARY, nullptr);
+    if (outputFile == INVALID_HANDLE_VALUE)
+    {
+        DeleteFileW(tempPath);
+        return result;
+    }
+
+    STARTUPINFOW startupInfo{};
+    startupInfo.cb = sizeof(startupInfo);
+    startupInfo.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
+    startupInfo.wShowWindow = SW_HIDE;
+    startupInfo.hStdOutput = outputFile;
+    startupInfo.hStdError = outputFile;
+    startupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+
+    PROCESS_INFORMATION processInfo{};
+    HANDLE job = CreateJobObjectW(nullptr, nullptr);
+    if (job)
+    {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION jobInfo{};
+        jobInfo.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation, &jobInfo, sizeof(jobInfo)))
+        {
+            CloseHandle(job);
+            job = nullptr;
+        }
+    }
+
+    PresetBlacklistScannerCommand command = BuildPresetBlacklistScannerCommand(scriptPath, dryRun);
+    result.started = CreateProcessW(command.application.c_str(), command.commandLine.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW | CREATE_SUSPENDED,
+        nullptr, nullptr, &startupInfo, &processInfo) != FALSE;
+    CloseHandle(outputFile);
+
+    if (!result.started)
+    {
+        if (job)
+            CloseHandle(job);
+        DeleteFileW(tempPath);
+        return result;
+    }
+
+    const bool assignedJob = job && AssignProcessToJobObject(job, processInfo.hProcess) != FALSE;
+    ResumeThread(processInfo.hThread);
+
+    constexpr DWORD kScannerTimeoutMs = 120000;
+    const DWORD waitResult = WaitForSingleObject(processInfo.hProcess, kScannerTimeoutMs);
+    if (waitResult == WAIT_TIMEOUT)
+    {
+        result.timedOut = true;
+        if (assignedJob)
+        {
+            CloseHandle(job);
+            job = nullptr;
+        }
+        else
+        {
+            TerminateProcess(processInfo.hProcess, 1);
+        }
+        WaitForSingleObject(processInfo.hProcess, 5000);
+    }
+    else if (waitResult == WAIT_OBJECT_0)
+    {
+        GetExitCodeProcess(processInfo.hProcess, &result.exitCode);
+    }
+    else
+    {
+        result.exitCode = 1;
+    }
+
+    CloseHandle(processInfo.hThread);
+    CloseHandle(processInfo.hProcess);
+    if (job)
+        CloseHandle(job);
+    result.output = ReadProcessOutputFile(tempPath);
+    DeleteFileW(tempPath);
+    return result;
+}
+
+bool PresetBlacklistScannerSucceeded(const PresetBlacklistScannerRun& run)
+{
+    return run.started && !run.timedOut && run.exitCode == 0;
+}
+
+int ParseScannerCount(const std::wstring& output, std::wstring_view prefix)
+{
+    const size_t position = output.find(prefix);
+    if (position == std::wstring::npos)
+        return -1;
+
+    size_t cursor = position + prefix.size();
+    while (cursor < output.size() && output[cursor] == L' ')
+        cursor++;
+
+    int value = 0;
+    bool foundDigit = false;
+    while (cursor < output.size() && output[cursor] >= L'0' && output[cursor] <= L'9')
+    {
+        foundDigit = true;
+        value = value * 10 + (output[cursor] - L'0');
+        cursor++;
+    }
+
+    return foundDigit ? value : -1;
+}
+
+std::wstring TrimScannerLine(std::wstring line)
+{
+    while (!line.empty() && (line.back() == L'\r' || line.back() == L'\n' || line.back() == L' ' || line.back() == L'\t'))
+        line.pop_back();
+    size_t start = 0;
+    while (start < line.size() && (line[start] == L' ' || line[start] == L'\t'))
+        start++;
+    return line.substr(start);
+}
+
+PresetBlacklistScannerSummary ParsePresetBlacklistScannerSummary(const std::wstring& output)
+{
+    PresetBlacklistScannerSummary summary{};
+    summary.detected = ParseScannerCount(output, L"Detected this run:");
+    summary.alreadyPresent = ParseScannerCount(output, L"Already in blacklist:");
+    summary.wouldAdd = ParseScannerCount(output, L"Dry-run: would add ");
+    if (summary.wouldAdd < 0 && output.find(L"Dry-run: no new entries to add.") != std::wstring::npos)
+        summary.wouldAdd = 0;
+    summary.wouldRemove = ParseScannerCount(output, L"Dry-run: would remove ");
+    if (summary.wouldRemove < 0 && output.find(L"Dry-run: no stale scanner-managed entries to remove.") != std::wstring::npos)
+        summary.wouldRemove = 0;
+
+    enum class ScannerList
+    {
+        None,
+        NewEntries,
+        StaleEntries,
+    };
+
+    ScannerList activeList = ScannerList::None;
+    std::wistringstream stream(output);
+    std::wstring line;
+    while (std::getline(stream, line))
+    {
+        if (line.find(L"Dry-run full list:") == 0)
+        {
+            activeList = ScannerList::NewEntries;
+            continue;
+        }
+
+        if (line.find(L"Dry-run stale removal list:") == 0)
+        {
+            activeList = ScannerList::StaleEntries;
+            continue;
+        }
+
+        if (activeList == ScannerList::None)
+            continue;
+
+        if (line.size() >= 2 && line[0] == L' ' && line[1] == L' ')
+        {
+            std::wstring entry = TrimScannerLine(line);
+            if (!entry.empty())
+            {
+                if (activeList == ScannerList::NewEntries)
+                    summary.newEntries.push_back(std::move(entry));
+                else
+                    summary.staleEntries.push_back(std::move(entry));
+            }
+            continue;
+        }
+
+        if (!TrimScannerLine(line).empty())
+            activeList = ScannerList::None;
+    }
+
+    return summary;
+}
+
+std::wstring FormatCount(int value, const wchar_t* unknownText)
+{
+    if (value < 0)
+        return unknownText;
+    return std::to_wstring(value);
+}
+
+std::wstring BuildPresetBlacklistScannerSummaryText(const PresetBlacklistScannerSummary& summary)
+{
+    std::wstring text;
+    text += L"Found ";
+    text += FormatCount(summary.detected, L"an unknown number of");
+    text += L" flagged preset";
+    if (summary.detected != 1)
+        text += L"s";
+    text += L"; ";
+    text += FormatCount(summary.wouldAdd, L"some");
+    text += L" new ";
+    text += summary.wouldAdd == 1 ? L"entry" : L"entries";
+    text += L" can be added; ";
+    text += FormatCount(summary.wouldRemove, L"some");
+    text += L" stale ";
+    text += summary.wouldRemove == 1 ? L"entry" : L"entries";
+    text += L" can be removed.";
+    return text;
+}
+
+std::wstring BuildPresetBlacklistScannerDetailsText(const PresetBlacklistScannerSummary& summary)
+{
+    std::wstring message;
+    message += FormatCount(summary.wouldAdd, L"Some");
+    message += L" new preset";
+    if (summary.wouldAdd != 1)
+        message += L"s";
+    message += L" can be added to the blacklist.";
+
+    message += L"\r\n\r\n";
+    message += FormatCount(summary.wouldRemove, L"Some");
+    message += L" stale scanner-managed preset";
+    if (summary.wouldRemove != 1)
+        message += L"s";
+    message += L" can be removed from the blacklist.";
+
+    if (summary.alreadyPresent >= 0)
+    {
+        message += L"\r\n\r\n";
+        message += std::to_wstring(summary.alreadyPresent);
+        message += L" flagged preset";
+        if (summary.alreadyPresent != 1)
+            message += L"s are";
+        else
+            message += L" is";
+        message += L" already in the blacklist.";
+    }
+
+    message += L"\r\n\r\nReasons checked:\r\n";
+    message += L"- preset scan cache marked the preset as failed\r\n";
+    message += L"- runtime safety cache recorded repeated slow-load, shader fallback, or visual inactivity events\r\n";
+    message += L"- shader debug log recorded repeated fallback or compile failures";
+
+    if (!summary.newEntries.empty())
+    {
+        message += L"\r\n\r\nNew entries:";
+        const size_t previewCount = std::min<size_t>(summary.newEntries.size(), 10);
+        for (size_t i = 0; i < previewCount; i++)
+        {
+            message += L"\r\n- ";
+            message += summary.newEntries[i];
+        }
+        if (summary.newEntries.size() > previewCount)
+        {
+            message += L"\r\n- ... and ";
+            message += std::to_wstring(summary.newEntries.size() - previewCount);
+            message += L" more";
+        }
+    }
+
+    if (!summary.staleEntries.empty())
+    {
+        message += L"\r\n\r\nStale entries to remove:";
+        const size_t previewCount = std::min<size_t>(summary.staleEntries.size(), 10);
+        for (size_t i = 0; i < previewCount; i++)
+        {
+            message += L"\r\n- ";
+            message += summary.staleEntries[i];
+        }
+        if (summary.staleEntries.size() > previewCount)
+        {
+            message += L"\r\n- ... and ";
+            message += std::to_wstring(summary.staleEntries.size() - previewCount);
+            message += L" more";
+        }
+    }
+
+    if (summary.wouldAdd > 0 || summary.wouldRemove > 0)
+        message += L"\r\n\r\nChoose Apply Changes to update the blacklist.";
+
+    return message;
 }
 
 constexpr int g_hidden_pref_controls[] = {
@@ -1129,9 +1624,75 @@ void FormatInfoDlg::OnCloseCmd(UINT, int nID, CWindow)
     EndDialog(nID);
 }
 
+BOOL ThemedMessageDlg::OnInitDialog(CWindow, LPARAM)
+{
+    m_dark.AddDialogWithControls(*this);
+    SetWindowText(m_title.c_str());
+    SetDlgItemText(IDC_THEMED_MESSAGE_TEXT, m_message.c_str());
+    CenterWindow(GetParent());
+    GetDlgItem(IDOK).SetFocus();
+    return FALSE;
+}
+
+void ThemedMessageDlg::OnDestroy()
+{
+    m_dark.clear();
+}
+
+void ThemedMessageDlg::OnCloseCmd(UINT, int nID, CWindow)
+{
+    EndDialog(nID);
+}
+
+void ShowThemedMessage(HWND parent, const wchar_t* title, const wchar_t* message)
+{
+    ThemedMessageDlg dlg(title && title[0] ? title : L"MilkDrop", message ? message : L"");
+    dlg.DoModal(parent ? parent : core_api::get_main_window());
+}
+
+BOOL PresetBlacklistScanResultDlg::OnInitDialog(CWindow, LPARAM)
+{
+    m_dark.AddDialogWithControls(*this);
+    SetDlgItemText(IDC_BLACKLIST_SCAN_RESULT_SUMMARY, m_summary.c_str());
+    SetDlgItemText(IDC_BLACKLIST_SCAN_RESULT_DETAILS, m_details.c_str());
+
+    CWindow details = GetDlgItem(IDC_BLACKLIST_SCAN_RESULT_DETAILS);
+    if (details)
+    {
+        details.SendMessage(EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELPARAM(3, 3));
+        details.SendMessage(EM_SETSEL, 0, 0);
+    }
+
+    if (!m_can_apply)
+    {
+        SetDlgItemText(IDOK, L"OK");
+        GetDlgItem(IDCANCEL).ShowWindow(SW_HIDE);
+    }
+    else
+    {
+        SetDlgItemText(IDOK, L"Apply Changes");
+    }
+
+    CenterWindow(GetParent());
+    return TRUE;
+}
+
+void PresetBlacklistScanResultDlg::OnDestroy()
+{
+    m_dark.clear();
+}
+
+void PresetBlacklistScanResultDlg::OnCloseCmd(UINT, int nID, CWindow)
+{
+    EndDialog(nID);
+}
+
+static constexpr UINT_PTR preset_blacklist_list_subclass_id = 1;
+
 BOOL PresetBlacklistDlg::OnInitDialog(CWindow, LPARAM)
 {
     m_dark.AddDialogWithControls(*this);
+    SetWindowSubclass(GetDlgItem(IDC_BLACKLIST_LIST), PresetListSubclassProc, preset_blacklist_list_subclass_id, reinterpret_cast<DWORD_PTR>(this));
     ApplyEntryPlaceholder();
     RefreshList();
     UpdateButtons();
@@ -1141,12 +1702,28 @@ BOOL PresetBlacklistDlg::OnInitDialog(CWindow, LPARAM)
 
 void PresetBlacklistDlg::OnDestroy()
 {
+    RemoveWindowSubclass(GetDlgItem(IDC_BLACKLIST_LIST), PresetListSubclassProc, preset_blacklist_list_subclass_id);
     if (m_entry_placeholder_font)
     {
         DeleteObject(m_entry_placeholder_font);
         m_entry_placeholder_font = nullptr;
     }
     m_dark.clear();
+}
+
+LRESULT CALLBACK PresetBlacklistDlg::PresetListSubclassProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR subclassId, DWORD_PTR refData)
+{
+    UNREFERENCED_PARAMETER(subclassId);
+
+    if (message == WM_KEYDOWN && wParam == L'A' && (GetKeyState(VK_CONTROL) & 0x8000) != 0)
+    {
+        SendMessage(hWnd, LB_SETSEL, TRUE, -1);
+        if (auto* dialog = reinterpret_cast<PresetBlacklistDlg*>(refData))
+            dialog->UpdateButtons();
+        return 0;
+    }
+
+    return DefSubclassProc(hWnd, message, wParam, lParam);
 }
 
 LRESULT PresetBlacklistDlg::OnCtlColorEdit(UINT, WPARAM wParam, LPARAM lParam)
@@ -1231,7 +1808,7 @@ void PresetBlacklistDlg::OnAdd(UINT, int, CWindow)
 
         if (!g_plugin.SetPresetBlacklist(merged))
         {
-            MessageBox(L"Could not save the updated blacklist.", L"Preset Blacklist", MB_ICONERROR);
+            ShowThemedMessage(*this, L"Preset Blacklist", L"Could not save the updated blacklist.");
             return;
         }
 
@@ -1296,7 +1873,7 @@ void PresetBlacklistDlg::OnRemove(UINT, int, CWindow)
 
     if (!g_plugin.SetPresetBlacklist(blacklist))
     {
-        MessageBox(L"Could not save the updated blacklist.", L"Preset Blacklist", MB_ICONERROR);
+        ShowThemedMessage(*this, L"Preset Blacklist", L"Could not save the updated blacklist.");
         return;
     }
 
@@ -1309,7 +1886,7 @@ void PresetBlacklistDlg::OnOpenLocation(UINT, int, CWindow)
 {
     int index = LB_ERR;
     const int selectionCount = static_cast<int>(SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETSELCOUNT, 0, 0));
-    if (selectionCount > 0)
+    if (selectionCount == 1)
     {
         std::vector<int> selectedIndices(selectionCount);
         const int selectedItems = static_cast<int>(
@@ -1353,7 +1930,7 @@ void PresetBlacklistDlg::OnImport(UINT, int, CWindow)
     errno_t err = _wfopen_s(&file, selectedPath, L"rt, ccs=UTF-8");
     if (err != 0 || !file)
     {
-        MessageBox(L"Could not open the selected blacklist file.", L"Import Blacklist", MB_ICONERROR);
+        ShowThemedMessage(*this, L"Import Blacklist", L"Could not open the selected blacklist file.");
         return;
     }
 
@@ -1379,13 +1956,13 @@ void PresetBlacklistDlg::OnImport(UINT, int, CWindow)
 
     if (imported == 0)
     {
-        MessageBox(L"No new preset names were found in the selected file.", L"Import Blacklist", MB_ICONINFORMATION);
+        ShowThemedMessage(*this, L"Import Blacklist", L"No new preset names were found in the selected file.");
         return;
     }
 
     if (!g_plugin.SetPresetBlacklist(merged))
     {
-        MessageBox(L"Could not save the updated blacklist.", L"Import Blacklist", MB_ICONERROR);
+        ShowThemedMessage(*this, L"Import Blacklist", L"Could not save the updated blacklist.");
         return;
     }
 
@@ -1413,7 +1990,7 @@ void PresetBlacklistDlg::OnExport(UINT, int, CWindow)
     errno_t err = _wfopen_s(&file, selectedPath, L"wt, ccs=UTF-8");
     if (err != 0 || !file)
     {
-        MessageBox(L"Could not create the selected blacklist file.", L"Export Blacklist", MB_ICONERROR);
+        ShowThemedMessage(*this, L"Export Blacklist", L"Could not create the selected blacklist file.");
         return;
     }
 
@@ -1424,6 +2001,61 @@ void PresetBlacklistDlg::OnExport(UINT, int, CWindow)
             fwprintf(file, L"%ls\n", entry.c_str());
     }
     fclose(file);
+}
+
+void PresetBlacklistDlg::OnScanPresets(UINT, int, CWindow)
+{
+    const std::filesystem::path scriptPath = LocatePresetBlacklistScannerScript();
+    if (scriptPath.empty())
+    {
+        ShowThemedMessage(*this, L"Preset Blacklist", L"Could not find the scanner script (refresh_milkdrop2_blacklist.ps1/cmd) in your MilkDrop profile folder.");
+        return;
+    }
+
+    const PresetBlacklistScannerRun dryRun = RunPresetBlacklistScanner(scriptPath, true);
+    if (!PresetBlacklistScannerSucceeded(dryRun))
+    {
+        if (dryRun.timedOut)
+            ShowThemedMessage(*this, L"Preset Blacklist", L"The scanner did not finish within 2 minutes.");
+        else
+            ShowThemedMessage(*this, L"Preset Blacklist", L"The preset scanner dry-run did not complete successfully. No changes were applied.");
+        return;
+    }
+
+    const PresetBlacklistScannerSummary summary = ParsePresetBlacklistScannerSummary(dryRun.output);
+    if (summary.wouldAdd < 0 || summary.wouldRemove < 0)
+    {
+        ShowThemedMessage(*this, L"Preset Blacklist", L"The scanner completed, but its dry-run output could not be understood. No changes were applied.");
+        return;
+    }
+
+    const bool hasChanges = summary.wouldAdd > 0 || summary.wouldRemove > 0;
+    if (!hasChanges)
+    {
+        PresetBlacklistScanResultDlg resultDlg(BuildPresetBlacklistScannerSummaryText(summary),
+            BuildPresetBlacklistScannerDetailsText(summary), false);
+        resultDlg.DoModal(*this);
+        return;
+    }
+
+    PresetBlacklistScanResultDlg resultDlg(BuildPresetBlacklistScannerSummaryText(summary),
+        BuildPresetBlacklistScannerDetailsText(summary), true);
+    if (resultDlg.DoModal(*this) != IDOK)
+        return;
+
+    const PresetBlacklistScannerRun applyRun = RunPresetBlacklistScanner(scriptPath, false);
+    if (!PresetBlacklistScannerSucceeded(applyRun))
+    {
+        if (applyRun.timedOut)
+            ShowThemedMessage(*this, L"Preset Blacklist", L"The scanner did not finish within 2 minutes.");
+        else
+            ShowThemedMessage(*this, L"Preset Blacklist", L"The preset scanner did not complete successfully. No changes may have been applied.");
+        return;
+    }
+
+    RefreshList();
+    UpdateButtons();
+    ShowThemedMessage(*this, L"Preset Blacklist", L"Preset blacklist scan completed and changes were applied.");
 }
 
 void PresetBlacklistDlg::OnEntryChanged(UINT, int, CWindow)
@@ -1487,6 +2119,7 @@ void PresetBlacklistDlg::OnListSelectionChanged(UINT, int, CWindow)
 
 void PresetBlacklistDlg::RefreshList()
 {
+    g_plugin.ReloadPresetBlacklist();
     const auto blacklist = g_plugin.GetPresetBlacklist();
     SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_RESETCONTENT, 0, 0);
     for (const auto& entry : blacklist)
@@ -1495,10 +2128,13 @@ void PresetBlacklistDlg::RefreshList()
 
 void PresetBlacklistDlg::UpdateButtons()
 {
-    const bool hasSelection = static_cast<int>(SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETSELCOUNT, 0, 0)) > 0;
+    const int selectionCount = static_cast<int>(SendDlgItemMessage(IDC_BLACKLIST_LIST, LB_GETSELCOUNT, 0, 0));
+    const bool hasSelection = selectionCount > 0;
     ::EnableWindow(GetDlgItem(IDC_BLACKLIST_ADD), TRUE);
     ::EnableWindow(GetDlgItem(IDC_BLACKLIST_REMOVE), static_cast<BOOL>(hasSelection));
-    ::EnableWindow(GetDlgItem(IDC_BLACKLIST_OPEN), static_cast<BOOL>(hasSelection));
+    ::EnableWindow(GetDlgItem(IDC_BLACKLIST_OPEN), static_cast<BOOL>(selectionCount == 1));
+    const BOOL scannerAvailable = static_cast<BOOL>(IsPresetBlacklistScannerAvailable());
+    ::EnableWindow(GetDlgItem(IDC_BLACKLIST_SCAN), scannerAvailable);
 }
 
 void milk2_preferences_page::OnEditNotification(UINT uNotifyCode, int nID, CWindow wndCtl)
@@ -2203,7 +2839,7 @@ void milk2_preferences_page::OpenToEdit(LPWSTR szDefault, LPCWSTR szFilename)
     {
         wchar_t title[MAX_PATH] = {0};
         swprintf_s(title, L"Error Creating \"%ls\"", szFilename);
-        MessageBox(L"MilkDrop could not create the starter configuration file in your profile folder.", title, MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST | MB_TASKMODAL);
+        ShowThemedMessage(get_wnd(), title, L"MilkDrop could not create the starter configuration file in your profile folder.");
         return;
     }
     wchar_t szPath[MAX_PATH]{}, szFile[MAX_PATH]{};
@@ -2219,7 +2855,7 @@ void milk2_preferences_page::OpenToEdit(LPWSTR szDefault, LPCWSTR szFilename)
         {
             swprintf_s(szPath, L"Error Opening \"%ls\"", szFilename);
             wchar_t* str = WASABI_API_LNGSTRINGW(IDS_ERROR_IN_SHELLEXECUTE);
-            MessageBox(str, szPath, MB_OK | MB_SETFOREGROUND | MB_TOPMOST | MB_TASKMODAL);
+            ShowThemedMessage(get_wnd(), szPath, str);
         }
     }
 }
@@ -2235,9 +2871,7 @@ void milk2_preferences_page::OpenDirectory(LPCWSTR directory, LPCWSTR title)
     {
         wchar_t caption[MAX_PATH] = {0};
         swprintf_s(caption, L"Error Creating \"%ls\"", title);
-        MessageBox(L"MilkDrop could not create the requested folder in your profile directory.",
-                   caption,
-                   MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST | MB_TASKMODAL);
+        ShowThemedMessage(get_wnd(), caption, L"MilkDrop could not create the requested folder in your profile directory.");
         return;
     }
 
@@ -2247,7 +2881,7 @@ void milk2_preferences_page::OpenDirectory(LPCWSTR directory, LPCWSTR title)
         wchar_t caption[MAX_PATH] = {0};
         swprintf_s(caption, L"Error Opening \"%ls\"", title);
         wchar_t* str = WASABI_API_LNGSTRINGW(IDS_ERROR_IN_SHELLEXECUTE);
-        MessageBox(str, caption, MB_OK | MB_SETFOREGROUND | MB_TOPMOST | MB_TASKMODAL);
+        ShowThemedMessage(get_wnd(), caption, str);
     }
 }
 

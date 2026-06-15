@@ -1046,6 +1046,7 @@ void CPlugin::RenderFrame(int bRedraw)
                (bNewPresetUsesCompShader ? 1 : 0);
 
     RunPerFrameEquations(code);
+    UpdateVisualInactivityTracking();
 
     // Restore any lost surfaces.
     //m_lpDD->RestoreAllSurfaces();

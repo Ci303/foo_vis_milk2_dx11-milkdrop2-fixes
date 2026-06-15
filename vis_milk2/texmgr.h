@@ -106,6 +106,7 @@ class texmgr
 
   protected:
     //bool TryCreateDDrawSurface(int iSlot, int w, int h);
+    bool EnsureContext(int iSlot);
     void FreeVars(int iSlot);
     void FreeCode(int iSlot);
     void RegisterBuiltInVariables(int iSlot);
