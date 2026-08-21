@@ -29,13 +29,13 @@ jobs:
       SDK_SHA256: 4e2051430dce273029e3e349ec3fbd2bbe222f388b21541762f06a3abcf15990
     steps:
       - name: Clone foo_vis_milk2 repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v3
         with:
           msbuild-architecture: ${{ matrix.platform }}
       - name: Cache foobar2000 SDK
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: sdk
         with:
           path: |
@@ -72,11 +72,12 @@ jobs:
           }
           Remove-Item -Path "$(Get-Location)\.git" -Recurse -Force
       - name: Clone projectm-eval repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: projectM-visualizer/projectm-eval
           path: external/projectm-eval
-          ref: master
+          # Keep the downstream patch reproducible when upstream changes.
+          ref: 22fb0cfd8f2dfbcd2b68f2443e7f44e19b32c09a
       - name: Patch projectm-eval repository
         run: |
           Set-Location -Path "$(Get-Location)\external\projectm-eval"
@@ -87,7 +88,7 @@ jobs:
               Set-Content -LiteralPath $_.FullName -NoNewline
           }
       - name: Cache NuGet packages (DirectXTK and WTL)
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: nuget
         continue-on-error: true
         with:
@@ -151,7 +152,7 @@ jobs:
     runs-on: windows-2025-vs2026
     steps:
       - name: Clone foo_vis_milk2 repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Download x86 DLL
         uses: actions/download-artifact@v8
         with:
