@@ -13,8 +13,12 @@ See [BUILDING](BUILDING.md) for a sample `foo_vis_milk2/foo_vis_milk2.vcxproj.us
 ### Using VSTest in CLI
 
 ```powershell
-VSTest.Console.exe /Platform:x64 "$(Get-Location)\test\test.dll"
+.\tools\Test-Native.ps1
 ```
+
+The runner builds the x64 Release component, the foobar2000 shared runtime and
+the native test assembly before invoking VSTest. Its generated files remain in
+ignored build directories.
 
 The test binary also requires `foo_vis_milk2.dll` and foobar2000's `shared.dll`
 to be present beside `test.dll` at runtime.
