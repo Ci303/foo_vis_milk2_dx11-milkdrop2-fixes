@@ -187,7 +187,7 @@
       <SubSystem>Windows</SubSystem>
     </Link>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y /d "$(ProjectDir)..\foo_vis_milk2\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
+      <Command>echo F | xcopy /y /d "$(ProjectDir)..\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -216,7 +216,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
     </Link>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y /d "$(ProjectDir)..\foo_vis_milk2\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
+      <Command>echo F | xcopy /y /d "$(ProjectDir)..\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -240,7 +240,7 @@
       <SubSystem>Windows</SubSystem>
     </Link>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y /d "$(ProjectDir)..\foo_vis_milk2\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
+      <Command>echo F | xcopy /y /d "$(ProjectDir)..\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -269,7 +269,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
     </Link>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y /d "$(ProjectDir)..\foo_vis_milk2\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
+      <Command>echo F | xcopy /y /d "$(ProjectDir)..\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
@@ -293,7 +293,7 @@
       <SubSystem>Windows</SubSystem>
     </Link>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y /d "$(ProjectDir)..\foo_vis_milk2\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
+      <Command>echo F | xcopy /y /d "$(ProjectDir)..\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
@@ -322,7 +322,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
     </Link>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y /d "$(ProjectDir)..\foo_vis_milk2\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
+      <Command>echo F | xcopy /y /d "$(ProjectDir)..\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64EC'">
@@ -346,7 +346,7 @@
       <SubSystem>Windows</SubSystem>
     </Link>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y /d "$(ProjectDir)..\foo_vis_milk2\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
+      <Command>echo F | xcopy /y /d "$(ProjectDir)..\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64EC'">
@@ -375,7 +375,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
     </Link>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y /d "$(ProjectDir)..\foo_vis_milk2\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
+      <Command>echo F | xcopy /y /d "$(ProjectDir)..\Bin\$(Platform)\$(Configuration)\foo_vis_milk2.dll" "$(OutDir)foo_vis_milk2.dll"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
